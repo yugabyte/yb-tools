@@ -1,7 +1,7 @@
 # ycrc
 
 
-ycrc (YCql Row Count) allows counting rows in a large YCQL keyspace by executing parallel queries accross smaller partition sizes.
+ycrc (YCql Row Count) allows counting rows in a large YCQL keyspace by executing parallel queries across smaller partition sizes.
 
 
 
@@ -19,9 +19,9 @@ The important flags for optimal performance and to ensure success for sizable da
 ```
 Parallelism - the number of concurrent queries in flight at one time. To a point, increasing this value will decrease the run time of ycrc, in exchange for increased CPU and disk usage on the target cluster.
 
-The default value of 16 is relatively performant for small datasets on small clusters. It's worth experimenting with different parallism values while tracking CPU usage on a node running tablet server leaders.
+The default value of 16 is relatively performant for small datasets on small clusters. It's worth experimenting with different parallelism values while tracking CPU usage on a node running tablet server leaders.
 
-In testing, increased parallelism is the number one impactor of ycrc performance, up to CPU saturation, assuming scale is set appropriately, after which queries generally fail due to timeouts. That is to say, if CPU usage on a tablet server leader is 20% with a parallelism of `8`, doubling parallelism to `16` will generally half the time ycrc takes to run, at the expense of increasing CPU usage to 40%. This means that one may be able to tune the run of ycrc to enable counting rows while other database activity is occuring, again at a higher time cost, or if increased CPU usage is not too impactful, reduce the runtime by increasing paralelism.
+In testing, increased parallelism is the number one influence on ycrc performance, up to CPU saturation, assuming scale is set appropriately, after which queries generally fail due to timeouts. That is to say, if CPU usage on a tablet server leader is 20% with a parallelism of `8`, doubling parallelism to `16` will generally half the time ycrc takes to run, at the expense of increasing CPU usage to 40%. This means that one may be able to tune the run of ycrc to enable counting rows while other database activity is occurring, again at a higher time cost, or if increased CPU usage is not too impactful, reduce the runtime by increasing parallelism.
 
 
 

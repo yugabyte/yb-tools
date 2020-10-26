@@ -50,7 +50,8 @@ var (
 	rootCmd = &cobra.Command{
 		Use:   "ycrc <keyspace>",
 		Args:  cobra.ExactArgs(1),
-		Short: "A tool to parallelize counting number of rows in a table for YugabyteDB CSQL",
+		Short: "YCql Row Count",
+		Long:  "YCql Row Count (ycrc) parallelizes counting the number of rows in a table for YugabyteDB CQL, allowing count(*) on tables that otherwise would fail with query timeouts",
 		Run: func(cmd *cobra.Command, args []string) {
 			rowCount(args[0])
 		},
@@ -76,8 +77,8 @@ func init() {
 	// SSL certs
 	rootCmd.Flags().StringVar(&certPath, "sslcert", "", "SSL cert path")
 	rootCmd.Flags().StringVar(&keyPath, "sslkey", "", "SSL key path")
-	rootCmd.Flags().StringVar(&caPath, "sslca", "", "ssl root ca path")
-	rootCmd.Flags().BoolVar(&enableHostVerification, "verify", false, "Strictly verify ssl host (off by default)")
+	rootCmd.Flags().StringVar(&caPath, "sslca", "", "SSL root ca path")
+	rootCmd.Flags().BoolVar(&enableHostVerification, "verify", false, "Strictly verify SSL host (off by default)")
 
 	// auth
 	rootCmd.Flags().StringVarP(&user, "user", "u", "cassandra", "database user")
@@ -153,7 +154,7 @@ func checkTableRowCounts(table string, session *gocql.Session) error {
 
 	}
 	if err := rows.Close(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error on gettings partition collumns in of table: %s.%s\n", cluster.Keyspace, table)
+		fmt.Fprintf(os.Stderr, "Error on getting partition columns in of table: %s.%s\n", cluster.Keyspace, table)
 		fmt.Fprintln(os.Stderr, err)
 		errored = true
 	}
@@ -241,7 +242,7 @@ func checkKeyspaceTableRowCounts(session *gocql.Session) error {
 	}
 
 	if err := rows.Close(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error on gettings tables in keyspace: %s, cannot continue\n", cluster.Keyspace)
+		fmt.Fprintf(os.Stderr, "Error on getting tables in keyspace: %s, cannot continue\n", cluster.Keyspace)
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
