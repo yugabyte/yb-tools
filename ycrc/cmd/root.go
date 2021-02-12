@@ -33,6 +33,7 @@ var (
 
 	cluster       *gocql.ClusterConfig
 	hosts         []string
+	tables        []string
 	tasksPerTable int
 
 	// Scaling factor of tasks per table
@@ -74,6 +75,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&debug, "debug", "d", false, "Verbose logging")
 
 	rootCmd.Flags().StringSliceVarP(&hosts, "hosts", "c", []string{"127.0.0.1"}, "Cluster to connect to")
+	rootCmd.Flags().StringSliceVar(&tables, "tables", []string{}, "List of tables inside of the keyspace - default to all")
 	rootCmd.Flags().IntVarP(&scaleFactor, "scale", "s", ScaleFactor, "Scaling factor of tasks per table, an int between 1 and 10")
 	rootCmd.Flags().IntVarP(&parallelTasks, "parallel", "p", ParallelTasks, "Number of concurrent tasks")
 	rootCmd.Flags().IntVarP(&timeout, "timeout", "t", Timeout, "Timeout of a single query, in ms")
@@ -232,7 +234,7 @@ func checkTableRowCounts(table string, session *gocql.Session) error {
 
 	fmt.Printf("==========\nTotal time: %d ms\n==========\n", elapsed)
 
-	fmt.Printf("Total Row Count %s.%s = %d\n", cluster.Keyspace, table, count)
+	fmt.Printf("Total Row Count %s.%s = %d\n\n", cluster.Keyspace, table, count)
 	if errored {
 		return errors.New("Error during parallel execution: row counts may be inaccurate")
 	}
@@ -242,18 +244,39 @@ func checkTableRowCounts(table string, session *gocql.Session) error {
 func checkKeyspaceTableRowCounts(session *gocql.Session) error {
 	fmt.Printf("Checking table row counts for keyspace: %s\n", cluster.Keyspace)
 
-	var tables []string
-
-	rows := session.Query(`SELECT table_name FROM system_schema.tables where keyspace_name = ?`, cluster.Keyspace).Iter()
-	var table string
-	for rows.Scan(&table) {
-		tables = append(tables, table)
+	//	var tables []string
+	if len(tables) == 0 {
+		rows := session.Query(`SELECT table_name FROM system_schema.tables where keyspace_name = ?`, cluster.Keyspace).Iter()
+		var table string
+		for rows.Scan(&table) {
+			tables = append(tables, table)
+		}
+		if err := rows.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error on getting tables in keyspace: %s, cannot continue\n", cluster.Keyspace)
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+	} else {
+		var verifiedTables []string
+		for _, table := range tables {
+			rows := session.Query(`SELECT table_name FROM system_schema.tables where keyspace_name = ? and table_name = ?`, cluster.Keyspace, table).Iter()
+			if rows.NumRows() == 0 {
+				fmt.Fprintf(os.Stderr, "Could not find table %s in keyspace: %s, skipping\n", table, cluster.Keyspace)
+				continue
+			}
+			if err := rows.Close(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error on validating tables in keyspace: %s, cannot continue\n", cluster.Keyspace)
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(2)
+			}
+			verifiedTables = append(verifiedTables, table)
+		}
+		tables = verifiedTables
 	}
 
-	if err := rows.Close(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error on getting tables in keyspace: %s, cannot continue\n", cluster.Keyspace)
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
+	if len(tables) == 0 {
+		fmt.Fprintf(os.Stdout, "No tables selected in keyspace %s, exiting\n", cluster.Keyspace)
+		os.Exit(0)
 	}
 
 	for _, table := range tables {
