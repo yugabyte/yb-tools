@@ -21,11 +21,15 @@ const (
 	ParallelTasks = 16
 	// Timeout is the default timeout, in ms. Higher than gocql default, because scan queries generally take longer
 	Timeout = 1500
+
+	// ErrCountMax is the maximum number of errors we report on a single table scan
+	ErrCountMax = 5
 )
 
 var (
-	debug   bool
-	errored bool
+	debug    bool
+	errored  bool
+	errCount int
 
 	cluster       *gocql.ClusterConfig
 	hosts         []string
@@ -117,17 +121,22 @@ func checkPartitionRowCount(pMap partitionMap, session *gocql.Session) (int, err
 	err := session.Query(statement, pMap.lbound, pMap.ubound).Scan(&rows)
 
 	if err != nil {
-		// TODO: this gets incredibly ugly if large numbers of queries start failing. We're already capturing that row-counts will be inaccurate - maybe set a print limit here?
-		fmt.Fprintf(os.Stderr, "Unable to get row count from: %s.%s partition hash: %s between %d and %d\n", cluster.Keyspace, pMap.table, pMap.pColumns, pMap.lbound, pMap.ubound)
-		fmt.Fprintln(os.Stderr, err)
-		fmt.Fprintf(os.Stderr, "--------\nWARNING: Program will continue but rowcount is inaccurate\n--------\n")
-		errored = true
+		if errCount < ErrCountMax {
+			fmt.Fprintf(os.Stderr, "Unable to get row count from: %s.%s partition hash: %s between %d and %d\n", cluster.Keyspace, pMap.table, pMap.pColumns, pMap.lbound, pMap.ubound)
+			fmt.Fprintln(os.Stderr, err)
+			fmt.Fprintf(os.Stderr, "--------\nWARNING: Program will continue but rowcount is inaccurate for this table\n--------\n")
+			errCount = errCount + 1
+			errored = true
+		}
 	}
 
 	return rows, err
 }
 
 func checkTableRowCounts(table string, session *gocql.Session) error {
+	// new table, new err count
+	errCount = 0
+
 	fmt.Printf("Checking row counts for: %s.%s\n", cluster.Keyspace, table)
 
 	rows := session.Query(`SELECT column_name, position FROM system_schema.columns WHERE keyspace_name = ? AND table_name = ? AND kind='partition_key'`, cluster.Keyspace, table).Iter()
