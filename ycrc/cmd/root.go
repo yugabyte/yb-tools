@@ -8,10 +8,12 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gocql/gocql"
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 const (
@@ -326,6 +328,20 @@ func rowCount(keyspace string) {
 		cluster.Authenticator = gocql.PasswordAuthenticator{
 			Username: user,
 			Password: password,
+		}
+	} else {
+		fmt.Print("Enter Password: \n")
+		bytePassword, err := terminal.ReadPassword(int(syscall.Stdin))
+		if err != nil {
+			os.Exit(1)
+		}
+		if string(bytePassword) != "" {
+			cluster.Authenticator = gocql.PasswordAuthenticator{
+				Username: user,
+				Password: string(bytePassword),
+			}
+		} else {
+			os.Exit(1)
 		}
 	}
 
