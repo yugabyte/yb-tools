@@ -9,7 +9,7 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/spf13/cobra v1.1.3
 	github.com/stretchr/testify v1.7.0 // indirect
-	golang.org/x/crypto v0.0.0-20210314154223-e6e6c4f2bb5b
+	golang.org/x/crypto v0.0.0-20210317152858-513c2a44f670
 	golang.org/x/sys v0.0.0-20210316164454-77fc1eacc6aa // indirect
 	golang.org/x/term v0.0.0-20210220032956-6a3ed077a48d // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
