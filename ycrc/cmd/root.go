@@ -27,6 +27,8 @@ const (
 )
 
 var (
+	Version  = "DEV"
+
 	debug    bool
 	errored  bool
 	errCount int
@@ -57,6 +59,7 @@ var (
 		Args:  cobra.ExactArgs(1),
 		Short: "YCql Row Count",
 		Long:  "YCql Row Count (ycrc) parallelizes counting the number of rows in a table for YugabyteDB CQL, allowing count(*) on tables that otherwise would fail with query timeouts",
+		Version: Version,
 		Run: func(cmd *cobra.Command, args []string) {
 			rowCount(args[0])
 		},

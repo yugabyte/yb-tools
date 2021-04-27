@@ -1,7 +1,7 @@
 # ycrc
 
 
-ycrc (YCql Row Count) allows counting rows in a large YCQL keyspace by executing parallel queries across smaller partition sizes.
+`ycrc` (YCql Row Count) allows counting rows in a large YCQL keyspace by executing parallel queries across smaller partition sizes.
 
 
 
@@ -17,11 +17,11 @@ The important flags for optimal performance and to ensure success for sizable da
 ```
 -p --parallel
 ```
-Parallelism - the number of concurrent queries in flight at one time. To a point, increasing this value will decrease the run time of ycrc, in exchange for increased CPU and disk usage on the target cluster.
+Parallelism - the number of concurrent queries in flight at one time. To a point, increasing this value will decrease the run time of `ycrc`, in exchange for increased CPU and disk usage on the target cluster.
 
 The default value of 16 is relatively performant for small datasets on small clusters. It's worth experimenting with different parallelism values while tracking CPU usage on a node running tablet server leaders.
 
-In testing, increased parallelism is the number one influence on ycrc performance, up to CPU saturation, assuming scale is set appropriately, after which queries generally fail due to timeouts. That is to say, if CPU usage on a tablet server leader is 20% with a parallelism of `8`, doubling parallelism to `16` will generally half the time ycrc takes to run, at the expense of increasing CPU usage to 40%. This means that one may be able to tune the run of ycrc to enable counting rows while other database activity is occurring, again at a higher time cost, or if increased CPU usage is not too impactful, reduce the runtime by increasing parallelism.
+In testing, increased parallelism is the number one influence on `ycrc` performance, up to CPU saturation, assuming scale is set appropriately, after which queries generally fail due to timeouts. That is to say, if CPU usage on a tablet server leader is 20% with a parallelism of `8`, doubling parallelism to `16` will generally half the time `ycrc` takes to run, at the expense of increasing CPU usage to 40%. This means that one may be able to tune the run of `ycrc` to enable counting rows while other database activity is occurring, again at a higher time cost, or if increased CPU usage is not too impactful, reduce the runtime by increasing parallelism.
 
 
 
@@ -38,7 +38,7 @@ It is recommended to leave this value at the default of 6, unless you get server
 -t --timeout
 ```
 
-This is the value, in milliseconds, that the ycrc client allows for a query to respond. The default value of 1500 should be sufficient for most use cases, but increasing to a higher value may be necessary if client side timeouts are noted.
+This is the value, in milliseconds, that the `ycrc` client allows for a query to respond. The default value of 1500 should be sufficient for most use cases, but increasing to a higher value may be necessary if client side timeouts are noted.
 
 
 
@@ -48,21 +48,49 @@ This is the value, in milliseconds, that the ycrc client allows for a query to r
 go build
 ```
 
+Note that this will leave the version string set to the default
+
+```
+./ycrc -v
+ycrc version DEV
+```
+
+You can override this like so - recommended before shipping, so you get better error reports back.
+
+```
+go tool nm ./ycrc | grep -i cmd.Version
+  a0a0b0 D github.com/yugabyte/yb-tools/ycrc/cmd.Version
+go build -ldflags=" -X 'github.com/yugabyte/yb-tools/ycrc/cmd.Version=$(git rev-parse HEAD)'"
+./ycrc -v
+ycrc version 842fdc078334ee6a38ea0bb77653fb2d7b5a702f
+```
+
+If you need to build for windows,
+
+```
+env GOOS=windows GOARCH=amd64 go build -ldflags=" -X 'github.com/yugabyte/yb-tools/ycrc/cmd.Version=$(git rev-parse HEAD)'"
+```
+
+Consider renaming the file, while compressing, before you ship like
+
+```
+zip ./ycrc-windows-amd64-$(git rev-parse --short HEAD)-$(date -Iminutes).zip ./ycrc.exe
+zip ./ycrc-linux-amd64-$(git rev-parse --short HEAD)-$(date -Iminutes).zip ./ycrc
+```
+
 Probably required go 1.15, but might not. I don't know, I haven't tested it.
 
 Makefile contribution would be welcome
 
-
-
-
 ## Behind the scenes
+
 A query using ycql shell would fail due a timeout after the query runs for too long.
 
 ```
 select count(*) from mykeyspace.mytable
 ```
 
-ycrc, however, will instead only execute the count(*) on a slice of the partition:
+`ycrc`, however, will instead only execute the `count(*)` on a slice of the partition:
 
 ```
 SELECT count(*) as rows from mykeyspace.mytable WHERE partition_hash(id) >= 46608 and partition_hash(id) <= 46623
