@@ -60,7 +60,7 @@ You can override this like so - recommended before shipping, so you get better e
 ```
 go tool nm ./ycrc | grep -i cmd.Version
   a0a0b0 D github.com/yugabyte/yb-tools/ycrc/cmd.Version
-go build -ldflags=" -X 'github.com/yugabyte/yb-tools/ycrc/cmd.Version=$(git rev-parse HEAD)'"
+env CGO_ENABLED=0 go build -ldflags=" -X 'github.com/yugabyte/yb-tools/ycrc/cmd.Version=$(git rev-parse HEAD)'"
 ./ycrc -v
 ycrc version 842fdc078334ee6a38ea0bb77653fb2d7b5a702f
 ```
@@ -68,7 +68,7 @@ ycrc version 842fdc078334ee6a38ea0bb77653fb2d7b5a702f
 If you need to build for windows,
 
 ```
-env GOOS=windows GOARCH=amd64 go build -ldflags=" -X 'github.com/yugabyte/yb-tools/ycrc/cmd.Version=$(git rev-parse HEAD)'"
+env CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags=" -X 'github.com/yugabyte/yb-tools/ycrc/cmd.Version=$(git rev-parse HEAD)'"
 ```
 
 Consider renaming the file, while compressing, before you ship like
