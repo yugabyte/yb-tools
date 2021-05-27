@@ -8,10 +8,12 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gocql/gocql"
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 const (
@@ -331,6 +333,21 @@ func rowCount(keyspace string) {
 			Password: password,
 		}
 	}
+	// else {
+	// 	fmt.Print("Enter Password: \n")
+	// 	bytePassword, err := terminal.ReadPassword(int(syscall.Stdin))
+	// 	if err != nil {
+	// 		os.Exit(1)
+	// 	}
+	// 	if string(bytePassword) != "" {
+	// 		cluster.Authenticator = gocql.PasswordAuthenticator{
+	// 			Username: user,
+	// 			Password: string(bytePassword),
+	// 		}
+	// 	} else {
+	// 		os.Exit(1)
+	// 	}
+	// }
 
 	cluster.Timeout = time.Duration(timeout) * time.Millisecond
 
@@ -344,11 +361,33 @@ func rowCount(keyspace string) {
 	}
 	cluster.Keyspace = keyspace
 	session, err := cluster.CreateSession()
+	//need to try connect once user provide password
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating cluster session, cannot continue\n%v\n", err)
-		os.Exit(2)
+		//if error authenication , authenticating prompt password
+		if strings.Contains(err.Error(), "authentication required") {
+			fmt.Print("Auth required: Please Type Password\n")
+			bytePassword, err := terminal.ReadPassword(int(syscall.Stdin))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, " Unexpected Error, cannot continue\n%v\n", err)
+				os.Exit(2)
+			}
+			if string(bytePassword) != "" {
+				cluster.Authenticator = gocql.PasswordAuthenticator{
+					Username: user,
+					Password: string(bytePassword),
+				}
+
+			} else {
+				fmt.Fprintf(os.Stderr, "Password Required, cannot continue\n%v\n", err)
+				os.Exit(2)
+			}
+
+		}
+		// else {
+		//    fmt.Fprintf(os.Stderr, "Error creating cluster session, cannot continue\n%v\n", err)
+		// os.Exit(2)
+		//  }
 	}
-	defer session.Close()
 
 	err = checkKeyspaceTableRowCounts(session)
 	if err != nil {
