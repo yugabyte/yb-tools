@@ -1,0 +1,255 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+//
+// The following only applies to changes made to this file as part of YugaByte development.
+//
+// Portions Copyright (c) YugaByte, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+// in compliance with the License.  You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software distributed under the License
+// is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+// or implied.  See the License for the specific language governing permissions and limitations
+// under the License.
+//
+syntax = "proto2";
+
+package yb.tablet;
+
+option java_package = "org.yb.tablet";
+
+import "yb/common/common.proto";
+import "yb/util/opid.proto";
+
+// ============================================================================
+//  Tablet Metadata
+// ============================================================================
+
+// State flags indicating whether the tablet is in the middle of being copied
+// and is therefore not possible to bring up, whether it has been deleted, or
+// whether the data is in a usable state.
+enum TabletDataState {
+  TABLET_DATA_UNKNOWN = 999;
+
+  // The tablet is set to TABLET_DATA_COPYING state when in the middle of
+  // remote bootstrap while copying data files from a remote peer. If a tablet
+  // server crashes with a tablet in this state, the tablet must be deleted and
+  // the remote bootstrap process must be restarted for that tablet.
+  TABLET_DATA_COPYING = 0;
+
+  // Fresh empty tablets and successfully copied tablets are set to the
+  // TABLET_DATA_READY state.
+  TABLET_DATA_READY = 1;
+
+  // This tablet is in the process of being deleted.
+  // The tablet server should "roll forward" the deletion during boot,
+  // rather than trying to load the tablet.
+  TABLET_DATA_DELETED = 2;
+
+  // The tablet has been deleted, and now just consists of a "tombstone".
+  TABLET_DATA_TOMBSTONED = 3;
+
+  // This tablet split has been completed. In this state tablet could only be used as a remote
+  // bootstrap source for some time (follower_unavailable_considered_failed_sec) and then will be
+  // shutdown.
+  // TODO(tsplit): After https://github.com/yugabyte/yugabyte-db/issues/1461:
+  // - implement deleting tablet in state TABLET_DATA_SPLIT_COMPLETED after
+  //   follower_unavailable_considered_failed_sec.
+  // - add integration test for remote bootstrap from source split tablet before/after
+  // follower_unavailable_considered_failed_sec.
+  TABLET_DATA_SPLIT_COMPLETED = 4;
+}
+
+// Table information.
+message TableInfoPB {
+  // Table id, name, and type.
+  optional bytes table_id = 1;
+  optional string namespace_name = 10;
+  optional string table_name = 2;
+  optional TableType table_type = 3 [ default = DEFAULT_TABLE_TYPE ];
+
+  // Table schema and version.
+  optional SchemaPB schema = 4;
+  optional uint32 schema_version = 5;
+
+  // Table's partitioning schema.
+  optional PartitionSchemaPB partition_schema = 6;
+
+  // Secondary indexes of the table.
+  repeated IndexInfoPB indexes = 7;
+
+  // For index table: information about this index.
+  optional IndexInfoPB index_info = 8;
+
+  // Deleted column IDs with timestamps so that memory can be cleaned up.
+  repeated DeletedColumnPB deleted_cols = 9;
+}
+
+// KV-store meta data. Single KV-store is backed by one or two RocksDB instances, depending on
+// whether distributed transactions are enabled for the table. KV-store for sys catalog could
+// contain multiple tables.
+message KvStoreInfoPB {
+  // KV-store id. For more convenient logs browsing and investigation, by default set to
+  // raft_group_id for the KV-store which was created first in the Raft group.
+  required bytes kv_store_id = 1;
+
+  // The RocksDB directory for this KV-store.
+  optional string rocksdb_dir = 2;
+
+  // List of RocksDB SST files.
+  repeated FilePB rocksdb_files = 3;
+
+  // List of Snapshot files.
+  repeated SnapshotFilePB snapshot_files = 4;
+
+  // List of tables sharing this KV-store. Primary table always goes first.
+  repeated TableInfoPB tables = 5;
+
+  // Optional inclusive lower bound and exclusive upper bound for keys served by this KV-store.
+  // See docdb::KeyBounds.
+  optional bytes lower_bound_key = 6;
+  optional bytes upper_bound_key = 7;
+
+  // Whether KV-store regular DB has been fully compacted since creation.
+  // We don't split not yet fully compacted post-split tablets as of 2020-06-23, since
+  // detecting effective middle key and tablet size for such tablets is not yet implemented.
+  optional bool has_been_fully_compacted = 8;
+}
+
+// The super-block keeps track of the Raft group.
+message RaftGroupReplicaSuperBlockPB {
+  // Table ID of the primary table in this Raft group. For now we can only have more than one
+  // tables in master Raft group and sys catalog table is the primary table in this case.
+  required bytes primary_table_id = 1;
+
+  required bytes raft_group_id = 2;
+
+  // deprecated MemRowSet id.
+  reserved 3;
+
+  // Reserved for deprecated start_key, end_key, orphaned_blocks.
+  reserved 4, 5, 11;
+
+  // The partition of the table.
+  optional PartitionPB partition = 13;
+
+  // The latest schema
+  // TODO: maybe this should be TableSchemaPB? Need to actually put those attributes
+  // into use throughout the code. Using the simpler one for now.
+  optional string OBSOLETE_table_name = 7;
+  optional TableType OBSOLETE_table_type = 15 [ default = DEFAULT_TABLE_TYPE ];
+  optional SchemaPB OBSOLETE_schema = 8;
+  optional uint32 OBSOLETE_schema_version = 9;
+
+  // The partition schema of the table.
+  optional PartitionSchemaPB OBSOLETE_partition_schema = 14;
+
+  // The current state of the Raft group's data.
+  optional TabletDataState tablet_data_state = 10 [ default = TABLET_DATA_UNKNOWN ];
+
+  // The write-ahead log directory for this Raft group.
+  optional string wal_dir = 18;
+
+  // For tablets that have been tombstoned, stores the last OpId stored in the
+  // WAL before tombstoning.
+  // Only relevant for TOMBSTONED tablets.
+  optional OpIdPB tombstone_last_logged_opid = 12;
+
+  // KV-store for this Raft group.
+  optional KvStoreInfoPB kv_store = 24;
+
+  // ----------------------------------------------------------------------------------------------
+  // Deprecated fields, only for backward compatibility during load, shouldn't be used during save:
+
+  // The RocksDB directory for this tablet.
+  optional string OBSOLETE_rocksdb_dir = 16;
+
+  // List of RocksDB SST files.
+  repeated FilePB OBSOLETE_rocksdb_files = 17;
+
+  // List of Snapshot files.
+  repeated SnapshotFilePB OBSOLETE_snapshot_files = 20;
+
+  // Deleted column IDs with timestamps so that memory can be cleaned up.
+  repeated DeletedColumnPB OBSOLETE_deleted_cols = 19;
+
+  // Secondary indexes of the table.
+  repeated IndexInfoPB OBSOLETE_indexes = 21;
+
+  // For index table: information about this index.
+  optional IndexInfoPB OBSOLETE_index_info = 22;
+
+  // Tables co-located in this tablet.
+  repeated TableInfoPB OBSOLETE_tables = 23;
+
+  // True if the raft group is for a colocated tablet.
+  optional bool colocated = 25 [ default = false ];
+
+  // Minimum replicated op id index for cdc streams. This value is used to retain log files
+  // that contain any entries with indices larger than this one. By default max int64 to avoid
+  // retaining any log files unnecessarily.
+  optional int64 cdc_min_replicated_index = 26 [ default = 9223372036854775807 ];
+
+  // Is this tablet currently a consumer tablet for 2dc replication.
+  optional bool is_under_twodc_replication = 27;
+}
+
+message FilePB {
+  // Required. File name (no path).
+  optional string name = 1;
+
+  // Required.
+  optional uint64 size_bytes = 2;
+
+  // Used to avoid copying same files over network, so we could hardlink them.
+  optional uint64 inode = 3;
+}
+
+message SnapshotFilePB {
+  optional FilePB file = 1;
+
+  optional bytes snapshot_id = 2;
+}
+
+// The enum of Raft group states.
+// Raft group states are sent in TabletReports and kept in TabletPeer.
+enum RaftGroupStatePB {
+  UNKNOWN = 999;
+
+  // Raft group has not yet started.
+  NOT_STARTED = 5;
+
+  // Indicates the Raft group is bootstrapping, i.e. that the Raft group is not available for RPC.
+  BOOTSTRAPPING = 0;
+
+  // Once the configuration phase is over Peers are in RUNNING state. In this state Peers are
+  // available for client RPCs.
+  RUNNING = 1;
+
+  // The Raft group failed to for some reason. TabletPeer::error() will return the reason for the
+  // failure.
+  FAILED = 2;
+
+  // The Raft group is shutting down, and will not accept further requests.
+  QUIESCING = 3;
+
+  // The Raft group has been stopped.
+  SHUTDOWN = 4;
+}

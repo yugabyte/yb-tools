@@ -21,7 +21,7 @@ vet:
 	go vet ./...
 
 .PHONY: tools
-tools: ${GOBIN}/ginkgo ${GOBIN}/golangci-lint ${GOBIN}/cobra
+tools: ${GOBIN}/ginkgo ${GOBIN}/golangci-lint ${GOBIN}/cobra ${GOBIN}/protoc-gen-go
 
 ${GOBIN}/ginkgo:
 	go install github.com/onsi/ginkgo/ginkgo
@@ -31,6 +31,9 @@ ${GOBIN}/golangci-lint:
 
 ${GOBIN}/cobra:
 	go install github.com/spf13/cobra/cobra
+
+${GOBIN}/protoc-gen-go:
+	go install google.golang.org/protobuf/cmd/protoc-gen-go
 
 clean:
 	rm -rf bin
