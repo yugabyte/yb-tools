@@ -1,9 +1,13 @@
-.PHONEY: all yugatool
+.PHONEY: all protobuf yugatool
 
-all: test yugatool
+all: protobuf test yugatool
 
 yugatool:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o ./bin/yugatool main.go
+
+# Generate protobufs
+protobuf: tools
+	make -C protobuf/
 
 # Run tests
 test: fmt vet lint
@@ -21,7 +25,7 @@ vet:
 	go vet ./...
 
 .PHONY: tools
-tools: ${GOBIN}/ginkgo ${GOBIN}/golangci-lint ${GOBIN}/cobra ${GOBIN}/protoc-gen-go
+tools: ${GOBIN}/ginkgo ${GOBIN}/golangci-lint ${GOBIN}/cobra ${GOBIN}/protoc-gen-go ${GOBIN}/protoc-gen-ybrpc
 
 ${GOBIN}/ginkgo:
 	go install github.com/onsi/ginkgo/ginkgo
@@ -34,6 +38,9 @@ ${GOBIN}/cobra:
 
 ${GOBIN}/protoc-gen-go:
 	go install google.golang.org/protobuf/cmd/protoc-gen-go
+
+${GOBIN}/protoc-gen-ybrpc:
+	go install github.com/yugabyte/yb-tools/protoc-gen-ybrpc
 
 clean:
 	rm -rf bin
