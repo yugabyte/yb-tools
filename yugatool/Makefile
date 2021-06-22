@@ -10,7 +10,7 @@ test: fmt vet lint
 	go test ./... -coverprofile cover.out
 
 lint: tools
-	golangci-lint run --enable revive,gofmt
+	golangci-lint run
 
 # Run go fmt against code
 fmt:
