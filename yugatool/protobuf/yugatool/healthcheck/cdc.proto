@@ -1,0 +1,66 @@
+/*
+Copyright © 2021 Yugabyte Support
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+syntax = "proto2";
+
+package yugatool.healthcheck;
+
+option java_package = "org.yugatool.healthcheck";
+
+import "yb/master/master.proto";
+import "yb/common/common.proto";
+import "yb/util/opid.proto";
+
+message CDCProducerStreamReportPB {
+  required yb.master.TableIdentifierPB table = 1;
+  required string consumer_table_id = 2;
+  required string producer_table_id = 3;
+  required string stream_id = 4;
+  required uint32 consumer_tablet_count = 5;
+  required uint32 producer_tablet_count = 6;
+
+  // TODO: should reimplemented to be a list of app status errors
+  message errorlist {
+    optional yb.master.MasterErrorPB consumer_schema_error = 1;
+    optional yb.master.MasterErrorPB producer_schema_error = 2;
+    repeated string missing_tablets_consumer = 3;
+    repeated string missing_tablets_producer = 4;
+    required CDCReplicatedIndexListPB tablets_with_replication_lag = 7;
+  }
+  optional errorlist errors = 7;
+}
+
+message CDCProducerReportPB {
+  required string producer_id = 1;
+  repeated yb.HostPortPB producer_master_addresses = 2;
+
+  // TODO: should reimplemented to be a list of app status errors
+  message errorlist {
+    optional bool masters_reference_self = 1;
+    repeated CDCProducerStreamReportPB stream_reports = 2;
+  }
+
+  optional errorlist errors = 3;
+}
+
+message CDCReplicatedIndexPB {
+  required string tablet = 1;
+  required yb.OpIdPB latest_opid = 2;
+  required yb.OpIdPB checkpoint_location = 3;
+}
+
+message CDCReplicatedIndexListPB {
+  repeated CDCReplicatedIndexPB replicated_index_list = 1;
+}
