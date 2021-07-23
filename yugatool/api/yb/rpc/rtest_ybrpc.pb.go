@@ -35,7 +35,10 @@
 
 package rpc
 
-import "github.com/yugabyte/yb-tools/protoc-gen-ybrpc/pkg/message"
+import (
+	"github.com/go-logr/logr"
+	"github.com/yugabyte/yb-tools/protoc-gen-ybrpc/pkg/message"
+)
 
 // service: yb.rpc_test.CalculatorService
 // service: CalculatorService
@@ -52,10 +55,12 @@ type CalculatorService interface {
 }
 
 type CalculatorServiceImpl struct {
+	Log       logr.Logger
 	Messenger message.Messenger
 }
 
 func (s *CalculatorServiceImpl) Add(request *AddRequestPB) (*AddResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.rpc_test.CalculatorService", "method", "Add", "message", request)
 	response := &AddResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "Add", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -63,10 +68,13 @@ func (s *CalculatorServiceImpl) Add(request *AddRequestPB) (*AddResponsePB, erro
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Add", "message", response)
+
 	return response, nil
 }
 
 func (s *CalculatorServiceImpl) Sleep(request *SleepRequestPB) (*SleepResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.rpc_test.CalculatorService", "method", "Sleep", "message", request)
 	response := &SleepResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "Sleep", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -74,10 +82,13 @@ func (s *CalculatorServiceImpl) Sleep(request *SleepRequestPB) (*SleepResponsePB
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Sleep", "message", response)
+
 	return response, nil
 }
 
 func (s *CalculatorServiceImpl) Echo(request *EchoRequestPB) (*EchoResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.rpc_test.CalculatorService", "method", "Echo", "message", request)
 	response := &EchoResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "Echo", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -85,10 +96,13 @@ func (s *CalculatorServiceImpl) Echo(request *EchoRequestPB) (*EchoResponsePB, e
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Echo", "message", response)
+
 	return response, nil
 }
 
 func (s *CalculatorServiceImpl) WhoAmI(request *WhoAmIRequestPB) (*WhoAmIResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.rpc_test.CalculatorService", "method", "WhoAmI", "message", request)
 	response := &WhoAmIResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "WhoAmI", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -96,10 +110,13 @@ func (s *CalculatorServiceImpl) WhoAmI(request *WhoAmIRequestPB) (*WhoAmIRespons
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "WhoAmI", "message", response)
+
 	return response, nil
 }
 
 func (s *CalculatorServiceImpl) TestArgumentsInDiffPackage(request *ReqDiffPackagePB) (*RespDiffPackagePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.rpc_test.CalculatorService", "method", "TestArgumentsInDiffPackage", "message", request)
 	response := &RespDiffPackagePB{}
 
 	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "TestArgumentsInDiffPackage", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -107,10 +124,13 @@ func (s *CalculatorServiceImpl) TestArgumentsInDiffPackage(request *ReqDiffPacka
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "TestArgumentsInDiffPackage", "message", response)
+
 	return response, nil
 }
 
 func (s *CalculatorServiceImpl) Panic(request *PanicRequestPB) (*PanicResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.rpc_test.CalculatorService", "method", "Panic", "message", request)
 	response := &PanicResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "Panic", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -118,10 +138,13 @@ func (s *CalculatorServiceImpl) Panic(request *PanicRequestPB) (*PanicResponsePB
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Panic", "message", response)
+
 	return response, nil
 }
 
 func (s *CalculatorServiceImpl) Ping(request *PingRequestPB) (*PingResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.rpc_test.CalculatorService", "method", "Ping", "message", request)
 	response := &PingResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "Ping", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -129,10 +152,13 @@ func (s *CalculatorServiceImpl) Ping(request *PingRequestPB) (*PingResponsePB, e
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Ping", "message", response)
+
 	return response, nil
 }
 
 func (s *CalculatorServiceImpl) Disconnect(request *DisconnectRequestPB) (*DisconnectResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.rpc_test.CalculatorService", "method", "Disconnect", "message", request)
 	response := &DisconnectResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "Disconnect", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -140,16 +166,21 @@ func (s *CalculatorServiceImpl) Disconnect(request *DisconnectRequestPB) (*Disco
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Disconnect", "message", response)
+
 	return response, nil
 }
 
 func (s *CalculatorServiceImpl) Forward(request *ForwardRequestPB) (*ForwardResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.rpc_test.CalculatorService", "method", "Forward", "message", request)
 	response := &ForwardResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "Forward", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
 	if err != nil {
 		return nil, err
 	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Forward", "message", response)
 
 	return response, nil
 }

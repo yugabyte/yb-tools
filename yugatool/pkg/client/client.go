@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	. "github.com/icza/gox/gox"
 	"github.com/pkg/errors"
@@ -12,6 +13,7 @@ import (
 )
 
 type YBClient struct {
+	Log     logr.Logger
 	Context context.Context
 	Config  *config.UniverseConfig
 
@@ -23,6 +25,7 @@ type YBClient struct {
 
 func Connect(config *config.UniverseConfig) (*YBClient, error) {
 	c := &YBClient{
+		Log:    config.Log,
 		Config: config,
 		Master: nil,
 
@@ -40,6 +43,7 @@ func Connect(config *config.UniverseConfig) (*YBClient, error) {
 			if hostState != nil {
 				_ = hostState.Close()
 			}
+			c.Log.V(1).Info("could not connect", "host", m, "error", err)
 			continue
 		}
 		tabletServers, err := hostState.MasterService.ListTabletServers(&master.ListTabletServersRequestPB{PrimaryOnly: NewBool(false)})

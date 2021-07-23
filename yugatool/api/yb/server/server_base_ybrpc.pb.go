@@ -34,7 +34,10 @@
 
 package server
 
-import "github.com/yugabyte/yb-tools/protoc-gen-ybrpc/pkg/message"
+import (
+	"github.com/go-logr/logr"
+	"github.com/yugabyte/yb-tools/protoc-gen-ybrpc/pkg/message"
+)
 
 // service: yb.server.GenericService
 // service: GenericService
@@ -49,10 +52,12 @@ type GenericService interface {
 }
 
 type GenericServiceImpl struct {
+	Log       logr.Logger
 	Messenger message.Messenger
 }
 
 func (s *GenericServiceImpl) SetFlag(request *SetFlagRequestPB) (*SetFlagResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.server.GenericService", "method", "SetFlag", "message", request)
 	response := &SetFlagResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.server.GenericService", "SetFlag", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -60,10 +65,13 @@ func (s *GenericServiceImpl) SetFlag(request *SetFlagRequestPB) (*SetFlagRespons
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "SetFlag", "message", response)
+
 	return response, nil
 }
 
 func (s *GenericServiceImpl) GetFlag(request *GetFlagRequestPB) (*GetFlagResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.server.GenericService", "method", "GetFlag", "message", request)
 	response := &GetFlagResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.server.GenericService", "GetFlag", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -71,10 +79,13 @@ func (s *GenericServiceImpl) GetFlag(request *GetFlagRequestPB) (*GetFlagRespons
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "GetFlag", "message", response)
+
 	return response, nil
 }
 
 func (s *GenericServiceImpl) RefreshFlags(request *RefreshFlagsRequestPB) (*RefreshFlagsResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.server.GenericService", "method", "RefreshFlags", "message", request)
 	response := &RefreshFlagsResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.server.GenericService", "RefreshFlags", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -82,10 +93,13 @@ func (s *GenericServiceImpl) RefreshFlags(request *RefreshFlagsRequestPB) (*Refr
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "RefreshFlags", "message", response)
+
 	return response, nil
 }
 
 func (s *GenericServiceImpl) FlushCoverage(request *FlushCoverageRequestPB) (*FlushCoverageResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.server.GenericService", "method", "FlushCoverage", "message", request)
 	response := &FlushCoverageResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.server.GenericService", "FlushCoverage", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -93,10 +107,13 @@ func (s *GenericServiceImpl) FlushCoverage(request *FlushCoverageRequestPB) (*Fl
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "FlushCoverage", "message", response)
+
 	return response, nil
 }
 
 func (s *GenericServiceImpl) ServerClock(request *ServerClockRequestPB) (*ServerClockResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.server.GenericService", "method", "ServerClock", "message", request)
 	response := &ServerClockResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.server.GenericService", "ServerClock", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -104,10 +121,13 @@ func (s *GenericServiceImpl) ServerClock(request *ServerClockRequestPB) (*Server
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "ServerClock", "message", response)
+
 	return response, nil
 }
 
 func (s *GenericServiceImpl) GetStatus(request *GetStatusRequestPB) (*GetStatusResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.server.GenericService", "method", "GetStatus", "message", request)
 	response := &GetStatusResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.server.GenericService", "GetStatus", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -115,16 +135,21 @@ func (s *GenericServiceImpl) GetStatus(request *GetStatusRequestPB) (*GetStatusR
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "GetStatus", "message", response)
+
 	return response, nil
 }
 
 func (s *GenericServiceImpl) Ping(request *PingRequestPB) (*PingResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.server.GenericService", "method", "Ping", "message", request)
 	response := &PingResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.server.GenericService", "Ping", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
 	if err != nil {
 		return nil, err
 	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "Ping", "message", response)
 
 	return response, nil
 }

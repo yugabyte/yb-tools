@@ -34,7 +34,10 @@
 
 package master
 
-import "github.com/yugabyte/yb-tools/protoc-gen-ybrpc/pkg/message"
+import (
+	"github.com/go-logr/logr"
+	"github.com/yugabyte/yb-tools/protoc-gen-ybrpc/pkg/message"
+)
 
 // service: yb.master.MasterService
 // service: MasterService
@@ -118,12 +121,14 @@ type MasterService interface {
 }
 
 type MasterServiceImpl struct {
+	Log       logr.Logger
 	Messenger message.Messenger
 }
 
 // TS->Master RPCs
 
 func (s *MasterServiceImpl) TSHeartbeat(request *TSHeartbeatRequestPB) (*TSHeartbeatResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "TSHeartbeat", "message", request)
 	response := &TSHeartbeatResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "TSHeartbeat", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -131,12 +136,15 @@ func (s *MasterServiceImpl) TSHeartbeat(request *TSHeartbeatRequestPB) (*TSHeart
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "TSHeartbeat", "message", response)
+
 	return response, nil
 }
 
 // Client->Master RPCs
 
 func (s *MasterServiceImpl) GetTabletLocations(request *GetTabletLocationsRequestPB) (*GetTabletLocationsResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "GetTabletLocations", "message", request)
 	response := &GetTabletLocationsResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "GetTabletLocations", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -144,10 +152,13 @@ func (s *MasterServiceImpl) GetTabletLocations(request *GetTabletLocationsReques
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GetTabletLocations", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) CreateTable(request *CreateTableRequestPB) (*CreateTableResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "CreateTable", "message", request)
 	response := &CreateTableResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "CreateTable", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -155,10 +166,13 @@ func (s *MasterServiceImpl) CreateTable(request *CreateTableRequestPB) (*CreateT
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "CreateTable", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) IsCreateTableDone(request *IsCreateTableDoneRequestPB) (*IsCreateTableDoneResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "IsCreateTableDone", "message", request)
 	response := &IsCreateTableDoneResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "IsCreateTableDone", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -166,10 +180,13 @@ func (s *MasterServiceImpl) IsCreateTableDone(request *IsCreateTableDoneRequestP
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "IsCreateTableDone", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) TruncateTable(request *TruncateTableRequestPB) (*TruncateTableResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "TruncateTable", "message", request)
 	response := &TruncateTableResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "TruncateTable", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -177,10 +194,13 @@ func (s *MasterServiceImpl) TruncateTable(request *TruncateTableRequestPB) (*Tru
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "TruncateTable", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) IsTruncateTableDone(request *IsTruncateTableDoneRequestPB) (*IsTruncateTableDoneResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "IsTruncateTableDone", "message", request)
 	response := &IsTruncateTableDoneResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "IsTruncateTableDone", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -188,10 +208,13 @@ func (s *MasterServiceImpl) IsTruncateTableDone(request *IsTruncateTableDoneRequ
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "IsTruncateTableDone", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) BackfillIndex(request *BackfillIndexRequestPB) (*BackfillIndexResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "BackfillIndex", "message", request)
 	response := &BackfillIndexResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "BackfillIndex", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -199,10 +222,13 @@ func (s *MasterServiceImpl) BackfillIndex(request *BackfillIndexRequestPB) (*Bac
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "BackfillIndex", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) LaunchBackfillIndexForTable(request *LaunchBackfillIndexForTableRequestPB) (*LaunchBackfillIndexForTableResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "LaunchBackfillIndexForTable", "message", request)
 	response := &LaunchBackfillIndexForTableResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "LaunchBackfillIndexForTable", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -210,10 +236,13 @@ func (s *MasterServiceImpl) LaunchBackfillIndexForTable(request *LaunchBackfillI
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "LaunchBackfillIndexForTable", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) DeleteTable(request *DeleteTableRequestPB) (*DeleteTableResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "DeleteTable", "message", request)
 	response := &DeleteTableResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "DeleteTable", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -221,10 +250,13 @@ func (s *MasterServiceImpl) DeleteTable(request *DeleteTableRequestPB) (*DeleteT
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "DeleteTable", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) IsDeleteTableDone(request *IsDeleteTableDoneRequestPB) (*IsDeleteTableDoneResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "IsDeleteTableDone", "message", request)
 	response := &IsDeleteTableDoneResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "IsDeleteTableDone", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -232,10 +264,13 @@ func (s *MasterServiceImpl) IsDeleteTableDone(request *IsDeleteTableDoneRequestP
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "IsDeleteTableDone", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) AlterTable(request *AlterTableRequestPB) (*AlterTableResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "AlterTable", "message", request)
 	response := &AlterTableResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "AlterTable", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -243,10 +278,13 @@ func (s *MasterServiceImpl) AlterTable(request *AlterTableRequestPB) (*AlterTabl
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "AlterTable", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) IsAlterTableDone(request *IsAlterTableDoneRequestPB) (*IsAlterTableDoneResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "IsAlterTableDone", "message", request)
 	response := &IsAlterTableDoneResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "IsAlterTableDone", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -254,10 +292,13 @@ func (s *MasterServiceImpl) IsAlterTableDone(request *IsAlterTableDoneRequestPB)
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "IsAlterTableDone", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) ListTables(request *ListTablesRequestPB) (*ListTablesResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "ListTables", "message", request)
 	response := &ListTablesResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "ListTables", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -265,10 +306,13 @@ func (s *MasterServiceImpl) ListTables(request *ListTablesRequestPB) (*ListTable
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "ListTables", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) GetTableLocations(request *GetTableLocationsRequestPB) (*GetTableLocationsResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "GetTableLocations", "message", request)
 	response := &GetTableLocationsResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "GetTableLocations", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -276,10 +320,13 @@ func (s *MasterServiceImpl) GetTableLocations(request *GetTableLocationsRequestP
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GetTableLocations", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) GetTableSchema(request *GetTableSchemaRequestPB) (*GetTableSchemaResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "GetTableSchema", "message", request)
 	response := &GetTableSchemaResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "GetTableSchema", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -287,10 +334,13 @@ func (s *MasterServiceImpl) GetTableSchema(request *GetTableSchemaRequestPB) (*G
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GetTableSchema", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) GetColocatedTabletSchema(request *GetColocatedTabletSchemaRequestPB) (*GetColocatedTabletSchemaResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "GetColocatedTabletSchema", "message", request)
 	response := &GetColocatedTabletSchemaResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "GetColocatedTabletSchema", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -298,10 +348,13 @@ func (s *MasterServiceImpl) GetColocatedTabletSchema(request *GetColocatedTablet
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GetColocatedTabletSchema", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) CreateNamespace(request *CreateNamespaceRequestPB) (*CreateNamespaceResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "CreateNamespace", "message", request)
 	response := &CreateNamespaceResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "CreateNamespace", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -309,10 +362,13 @@ func (s *MasterServiceImpl) CreateNamespace(request *CreateNamespaceRequestPB) (
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "CreateNamespace", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) IsCreateNamespaceDone(request *IsCreateNamespaceDoneRequestPB) (*IsCreateNamespaceDoneResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "IsCreateNamespaceDone", "message", request)
 	response := &IsCreateNamespaceDoneResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "IsCreateNamespaceDone", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -320,10 +376,13 @@ func (s *MasterServiceImpl) IsCreateNamespaceDone(request *IsCreateNamespaceDone
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "IsCreateNamespaceDone", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) DeleteNamespace(request *DeleteNamespaceRequestPB) (*DeleteNamespaceResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "DeleteNamespace", "message", request)
 	response := &DeleteNamespaceResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "DeleteNamespace", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -331,10 +390,13 @@ func (s *MasterServiceImpl) DeleteNamespace(request *DeleteNamespaceRequestPB) (
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "DeleteNamespace", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) IsDeleteNamespaceDone(request *IsDeleteNamespaceDoneRequestPB) (*IsDeleteNamespaceDoneResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "IsDeleteNamespaceDone", "message", request)
 	response := &IsDeleteNamespaceDoneResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "IsDeleteNamespaceDone", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -342,10 +404,13 @@ func (s *MasterServiceImpl) IsDeleteNamespaceDone(request *IsDeleteNamespaceDone
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "IsDeleteNamespaceDone", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) AlterNamespace(request *AlterNamespaceRequestPB) (*AlterNamespaceResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "AlterNamespace", "message", request)
 	response := &AlterNamespaceResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "AlterNamespace", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -353,10 +418,13 @@ func (s *MasterServiceImpl) AlterNamespace(request *AlterNamespaceRequestPB) (*A
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "AlterNamespace", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) ListNamespaces(request *ListNamespacesRequestPB) (*ListNamespacesResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "ListNamespaces", "message", request)
 	response := &ListNamespacesResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "ListNamespaces", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -364,10 +432,13 @@ func (s *MasterServiceImpl) ListNamespaces(request *ListNamespacesRequestPB) (*L
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "ListNamespaces", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) GetNamespaceInfo(request *GetNamespaceInfoRequestPB) (*GetNamespaceInfoResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "GetNamespaceInfo", "message", request)
 	response := &GetNamespaceInfoResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "GetNamespaceInfo", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -375,12 +446,15 @@ func (s *MasterServiceImpl) GetNamespaceInfo(request *GetNamespaceInfoRequestPB)
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GetNamespaceInfo", "message", response)
+
 	return response, nil
 }
 
 // For Tablegroup:
 
 func (s *MasterServiceImpl) CreateTablegroup(request *CreateTablegroupRequestPB) (*CreateTablegroupResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "CreateTablegroup", "message", request)
 	response := &CreateTablegroupResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "CreateTablegroup", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -388,10 +462,13 @@ func (s *MasterServiceImpl) CreateTablegroup(request *CreateTablegroupRequestPB)
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "CreateTablegroup", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) DeleteTablegroup(request *DeleteTablegroupRequestPB) (*DeleteTablegroupResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "DeleteTablegroup", "message", request)
 	response := &DeleteTablegroupResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "DeleteTablegroup", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -399,10 +476,13 @@ func (s *MasterServiceImpl) DeleteTablegroup(request *DeleteTablegroupRequestPB)
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "DeleteTablegroup", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) ListTablegroups(request *ListTablegroupsRequestPB) (*ListTablegroupsResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "ListTablegroups", "message", request)
 	response := &ListTablegroupsResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "ListTablegroups", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -410,12 +490,15 @@ func (s *MasterServiceImpl) ListTablegroups(request *ListTablegroupsRequestPB) (
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "ListTablegroups", "message", response)
+
 	return response, nil
 }
 
 // For Postgres:
 
 func (s *MasterServiceImpl) ReservePgsqlOids(request *ReservePgsqlOidsRequestPB) (*ReservePgsqlOidsResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "ReservePgsqlOids", "message", request)
 	response := &ReservePgsqlOidsResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "ReservePgsqlOids", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -423,10 +506,13 @@ func (s *MasterServiceImpl) ReservePgsqlOids(request *ReservePgsqlOidsRequestPB)
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "ReservePgsqlOids", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) GetYsqlCatalogConfig(request *GetYsqlCatalogConfigRequestPB) (*GetYsqlCatalogConfigResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "GetYsqlCatalogConfig", "message", request)
 	response := &GetYsqlCatalogConfigResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "GetYsqlCatalogConfig", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -434,12 +520,15 @@ func (s *MasterServiceImpl) GetYsqlCatalogConfig(request *GetYsqlCatalogConfigRe
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GetYsqlCatalogConfig", "message", response)
+
 	return response, nil
 }
 
 //  Authentication and Authorization.
 
 func (s *MasterServiceImpl) CreateRole(request *CreateRoleRequestPB) (*CreateRoleResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "CreateRole", "message", request)
 	response := &CreateRoleResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "CreateRole", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -447,10 +536,13 @@ func (s *MasterServiceImpl) CreateRole(request *CreateRoleRequestPB) (*CreateRol
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "CreateRole", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) AlterRole(request *AlterRoleRequestPB) (*AlterRoleResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "AlterRole", "message", request)
 	response := &AlterRoleResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "AlterRole", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -458,10 +550,13 @@ func (s *MasterServiceImpl) AlterRole(request *AlterRoleRequestPB) (*AlterRoleRe
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "AlterRole", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) DeleteRole(request *DeleteRoleRequestPB) (*DeleteRoleResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "DeleteRole", "message", request)
 	response := &DeleteRoleResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "DeleteRole", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -469,10 +564,13 @@ func (s *MasterServiceImpl) DeleteRole(request *DeleteRoleRequestPB) (*DeleteRol
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "DeleteRole", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) GrantRevokeRole(request *GrantRevokeRoleRequestPB) (*GrantRevokeRoleResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "GrantRevokeRole", "message", request)
 	response := &GrantRevokeRoleResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "GrantRevokeRole", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -480,10 +578,13 @@ func (s *MasterServiceImpl) GrantRevokeRole(request *GrantRevokeRoleRequestPB) (
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GrantRevokeRole", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) GrantRevokePermission(request *GrantRevokePermissionRequestPB) (*GrantRevokePermissionResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "GrantRevokePermission", "message", request)
 	response := &GrantRevokePermissionResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "GrantRevokePermission", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -491,10 +592,13 @@ func (s *MasterServiceImpl) GrantRevokePermission(request *GrantRevokePermission
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GrantRevokePermission", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) GetPermissions(request *GetPermissionsRequestPB) (*GetPermissionsResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "GetPermissions", "message", request)
 	response := &GetPermissionsResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "GetPermissions", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -502,10 +606,13 @@ func (s *MasterServiceImpl) GetPermissions(request *GetPermissionsRequestPB) (*G
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GetPermissions", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) CreateUDType(request *CreateUDTypeRequestPB) (*CreateUDTypeResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "CreateUDType", "message", request)
 	response := &CreateUDTypeResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "CreateUDType", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -513,10 +620,13 @@ func (s *MasterServiceImpl) CreateUDType(request *CreateUDTypeRequestPB) (*Creat
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "CreateUDType", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) DeleteUDType(request *DeleteUDTypeRequestPB) (*DeleteUDTypeResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "DeleteUDType", "message", request)
 	response := &DeleteUDTypeResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "DeleteUDType", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -524,10 +634,13 @@ func (s *MasterServiceImpl) DeleteUDType(request *DeleteUDTypeRequestPB) (*Delet
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "DeleteUDType", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) ListUDTypes(request *ListUDTypesRequestPB) (*ListUDTypesResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "ListUDTypes", "message", request)
 	response := &ListUDTypesResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "ListUDTypes", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -535,10 +648,13 @@ func (s *MasterServiceImpl) ListUDTypes(request *ListUDTypesRequestPB) (*ListUDT
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "ListUDTypes", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) GetUDTypeInfo(request *GetUDTypeInfoRequestPB) (*GetUDTypeInfoResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "GetUDTypeInfo", "message", request)
 	response := &GetUDTypeInfoResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "GetUDTypeInfo", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -546,12 +662,15 @@ func (s *MasterServiceImpl) GetUDTypeInfo(request *GetUDTypeInfoRequestPB) (*Get
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GetUDTypeInfo", "message", response)
+
 	return response, nil
 }
 
 // CDC stream RPCs.
 
 func (s *MasterServiceImpl) CreateCDCStream(request *CreateCDCStreamRequestPB) (*CreateCDCStreamResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "CreateCDCStream", "message", request)
 	response := &CreateCDCStreamResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "CreateCDCStream", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -559,10 +678,13 @@ func (s *MasterServiceImpl) CreateCDCStream(request *CreateCDCStreamRequestPB) (
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "CreateCDCStream", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) DeleteCDCStream(request *DeleteCDCStreamRequestPB) (*DeleteCDCStreamResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "DeleteCDCStream", "message", request)
 	response := &DeleteCDCStreamResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "DeleteCDCStream", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -570,10 +692,13 @@ func (s *MasterServiceImpl) DeleteCDCStream(request *DeleteCDCStreamRequestPB) (
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "DeleteCDCStream", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) ListCDCStreams(request *ListCDCStreamsRequestPB) (*ListCDCStreamsResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "ListCDCStreams", "message", request)
 	response := &ListCDCStreamsResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "ListCDCStreams", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -581,10 +706,13 @@ func (s *MasterServiceImpl) ListCDCStreams(request *ListCDCStreamsRequestPB) (*L
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "ListCDCStreams", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) GetCDCStream(request *GetCDCStreamRequestPB) (*GetCDCStreamResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "GetCDCStream", "message", request)
 	response := &GetCDCStreamResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "GetCDCStream", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -592,12 +720,15 @@ func (s *MasterServiceImpl) GetCDCStream(request *GetCDCStreamRequestPB) (*GetCD
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GetCDCStream", "message", response)
+
 	return response, nil
 }
 
 // Redis Config
 
 func (s *MasterServiceImpl) RedisConfigSet(request *RedisConfigSetRequestPB) (*RedisConfigSetResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "RedisConfigSet", "message", request)
 	response := &RedisConfigSetResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "RedisConfigSet", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -605,10 +736,13 @@ func (s *MasterServiceImpl) RedisConfigSet(request *RedisConfigSetRequestPB) (*R
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "RedisConfigSet", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) RedisConfigGet(request *RedisConfigGetRequestPB) (*RedisConfigGetResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "RedisConfigGet", "message", request)
 	response := &RedisConfigGetResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "RedisConfigGet", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -616,12 +750,15 @@ func (s *MasterServiceImpl) RedisConfigGet(request *RedisConfigGetRequestPB) (*R
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "RedisConfigGet", "message", response)
+
 	return response, nil
 }
 
 // Administrative/monitoring RPCs
 
 func (s *MasterServiceImpl) ListTabletServers(request *ListTabletServersRequestPB) (*ListTabletServersResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "ListTabletServers", "message", request)
 	response := &ListTabletServersResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "ListTabletServers", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -629,10 +766,13 @@ func (s *MasterServiceImpl) ListTabletServers(request *ListTabletServersRequestP
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "ListTabletServers", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) ListMasters(request *ListMastersRequestPB) (*ListMastersResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "ListMasters", "message", request)
 	response := &ListMastersResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "ListMasters", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -640,10 +780,13 @@ func (s *MasterServiceImpl) ListMasters(request *ListMastersRequestPB) (*ListMas
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "ListMasters", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) ListMasterRaftPeers(request *ListMasterRaftPeersRequestPB) (*ListMasterRaftPeersResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "ListMasterRaftPeers", "message", request)
 	response := &ListMasterRaftPeersResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "ListMasterRaftPeers", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -651,16 +794,21 @@ func (s *MasterServiceImpl) ListMasterRaftPeers(request *ListMasterRaftPeersRequ
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "ListMasterRaftPeers", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) GetMasterRegistration(request *GetMasterRegistrationRequestPB) (*GetMasterRegistrationResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "GetMasterRegistration", "message", request)
 	response := &GetMasterRegistrationResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "GetMasterRegistration", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
 	if err != nil {
 		return nil, err
 	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GetMasterRegistration", "message", response)
 
 	return response, nil
 }
@@ -669,6 +817,7 @@ func (s *MasterServiceImpl) GetMasterRegistration(request *GetMasterRegistration
 // NOTE: Should be used only for unit testing purposes.
 
 func (s *MasterServiceImpl) IsMasterLeaderServiceReady(request *IsMasterLeaderReadyRequestPB) (*IsMasterLeaderReadyResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "IsMasterLeaderServiceReady", "message", request)
 	response := &IsMasterLeaderReadyResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "IsMasterLeaderServiceReady", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -676,12 +825,15 @@ func (s *MasterServiceImpl) IsMasterLeaderServiceReady(request *IsMasterLeaderRe
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "IsMasterLeaderServiceReady", "message", response)
+
 	return response, nil
 }
 
 // Dump master state from all the peers in the current master's quorum
 
 func (s *MasterServiceImpl) DumpState(request *DumpMasterStateRequestPB) (*DumpMasterStateResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "DumpState", "message", request)
 	response := &DumpMasterStateResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "DumpState", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -689,10 +841,13 @@ func (s *MasterServiceImpl) DumpState(request *DumpMasterStateRequestPB) (*DumpM
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "DumpState", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) ChangeLoadBalancerState(request *ChangeLoadBalancerStateRequestPB) (*ChangeLoadBalancerStateResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "ChangeLoadBalancerState", "message", request)
 	response := &ChangeLoadBalancerStateResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "ChangeLoadBalancerState", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -700,10 +855,13 @@ func (s *MasterServiceImpl) ChangeLoadBalancerState(request *ChangeLoadBalancerS
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "ChangeLoadBalancerState", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) GetLoadBalancerState(request *GetLoadBalancerStateRequestPB) (*GetLoadBalancerStateResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "GetLoadBalancerState", "message", request)
 	response := &GetLoadBalancerStateResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "GetLoadBalancerState", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -711,10 +869,13 @@ func (s *MasterServiceImpl) GetLoadBalancerState(request *GetLoadBalancerStateRe
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GetLoadBalancerState", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) RemovedMasterUpdate(request *RemovedMasterUpdateRequestPB) (*RemovedMasterUpdateResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "RemovedMasterUpdate", "message", request)
 	response := &RemovedMasterUpdateResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "RemovedMasterUpdate", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -722,10 +883,13 @@ func (s *MasterServiceImpl) RemovedMasterUpdate(request *RemovedMasterUpdateRequ
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "RemovedMasterUpdate", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) SetPreferredZones(request *SetPreferredZonesRequestPB) (*SetPreferredZonesResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "SetPreferredZones", "message", request)
 	response := &SetPreferredZonesResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "SetPreferredZones", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -733,10 +897,13 @@ func (s *MasterServiceImpl) SetPreferredZones(request *SetPreferredZonesRequestP
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "SetPreferredZones", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) GetMasterClusterConfig(request *GetMasterClusterConfigRequestPB) (*GetMasterClusterConfigResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "GetMasterClusterConfig", "message", request)
 	response := &GetMasterClusterConfigResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "GetMasterClusterConfig", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -744,10 +911,13 @@ func (s *MasterServiceImpl) GetMasterClusterConfig(request *GetMasterClusterConf
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GetMasterClusterConfig", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) ChangeMasterClusterConfig(request *ChangeMasterClusterConfigRequestPB) (*ChangeMasterClusterConfigResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "ChangeMasterClusterConfig", "message", request)
 	response := &ChangeMasterClusterConfigResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "ChangeMasterClusterConfig", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -755,10 +925,13 @@ func (s *MasterServiceImpl) ChangeMasterClusterConfig(request *ChangeMasterClust
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "ChangeMasterClusterConfig", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) GetLoadMoveCompletion(request *GetLoadMovePercentRequestPB) (*GetLoadMovePercentResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "GetLoadMoveCompletion", "message", request)
 	response := &GetLoadMovePercentResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "GetLoadMoveCompletion", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -766,10 +939,13 @@ func (s *MasterServiceImpl) GetLoadMoveCompletion(request *GetLoadMovePercentReq
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GetLoadMoveCompletion", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) GetLeaderBlacklistCompletion(request *GetLeaderBlacklistPercentRequestPB) (*GetLoadMovePercentResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "GetLeaderBlacklistCompletion", "message", request)
 	response := &GetLoadMovePercentResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "GetLeaderBlacklistCompletion", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -777,10 +953,13 @@ func (s *MasterServiceImpl) GetLeaderBlacklistCompletion(request *GetLeaderBlack
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GetLeaderBlacklistCompletion", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) IsLoadBalanced(request *IsLoadBalancedRequestPB) (*IsLoadBalancedResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "IsLoadBalanced", "message", request)
 	response := &IsLoadBalancedResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "IsLoadBalanced", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -788,10 +967,13 @@ func (s *MasterServiceImpl) IsLoadBalanced(request *IsLoadBalancedRequestPB) (*I
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "IsLoadBalanced", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) IsLoadBalancerIdle(request *IsLoadBalancerIdleRequestPB) (*IsLoadBalancerIdleResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "IsLoadBalancerIdle", "message", request)
 	response := &IsLoadBalancerIdleResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "IsLoadBalancerIdle", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -799,10 +981,13 @@ func (s *MasterServiceImpl) IsLoadBalancerIdle(request *IsLoadBalancerIdleReques
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "IsLoadBalancerIdle", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) AreLeadersOnPreferredOnly(request *AreLeadersOnPreferredOnlyRequestPB) (*AreLeadersOnPreferredOnlyResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "AreLeadersOnPreferredOnly", "message", request)
 	response := &AreLeadersOnPreferredOnlyResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "AreLeadersOnPreferredOnly", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -810,10 +995,13 @@ func (s *MasterServiceImpl) AreLeadersOnPreferredOnly(request *AreLeadersOnPrefe
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "AreLeadersOnPreferredOnly", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) FlushTables(request *FlushTablesRequestPB) (*FlushTablesResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "FlushTables", "message", request)
 	response := &FlushTablesResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "FlushTables", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -821,10 +1009,13 @@ func (s *MasterServiceImpl) FlushTables(request *FlushTablesRequestPB) (*FlushTa
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "FlushTables", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) IsFlushTablesDone(request *IsFlushTablesDoneRequestPB) (*IsFlushTablesDoneResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "IsFlushTablesDone", "message", request)
 	response := &IsFlushTablesDoneResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "IsFlushTablesDone", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -832,10 +1023,13 @@ func (s *MasterServiceImpl) IsFlushTablesDone(request *IsFlushTablesDoneRequestP
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "IsFlushTablesDone", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) IsInitDbDone(request *IsInitDbDoneRequestPB) (*IsInitDbDoneResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "IsInitDbDone", "message", request)
 	response := &IsInitDbDoneResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "IsInitDbDone", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -843,10 +1037,13 @@ func (s *MasterServiceImpl) IsInitDbDone(request *IsInitDbDoneRequestPB) (*IsIni
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "IsInitDbDone", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) ChangeEncryptionInfo(request *ChangeEncryptionInfoRequestPB) (*ChangeEncryptionInfoResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "ChangeEncryptionInfo", "message", request)
 	response := &ChangeEncryptionInfoResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "ChangeEncryptionInfo", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -854,10 +1051,13 @@ func (s *MasterServiceImpl) ChangeEncryptionInfo(request *ChangeEncryptionInfoRe
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "ChangeEncryptionInfo", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) IsEncryptionEnabled(request *IsEncryptionEnabledRequestPB) (*IsEncryptionEnabledResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "IsEncryptionEnabled", "message", request)
 	response := &IsEncryptionEnabledResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "IsEncryptionEnabled", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -865,10 +1065,13 @@ func (s *MasterServiceImpl) IsEncryptionEnabled(request *IsEncryptionEnabledRequ
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "IsEncryptionEnabled", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) SetupUniverseReplication(request *SetupUniverseReplicationRequestPB) (*SetupUniverseReplicationResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "SetupUniverseReplication", "message", request)
 	response := &SetupUniverseReplicationResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "SetupUniverseReplication", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -876,10 +1079,13 @@ func (s *MasterServiceImpl) SetupUniverseReplication(request *SetupUniverseRepli
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "SetupUniverseReplication", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) DeleteUniverseReplication(request *DeleteUniverseReplicationRequestPB) (*DeleteUniverseReplicationResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "DeleteUniverseReplication", "message", request)
 	response := &DeleteUniverseReplicationResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "DeleteUniverseReplication", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -887,10 +1093,13 @@ func (s *MasterServiceImpl) DeleteUniverseReplication(request *DeleteUniverseRep
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "DeleteUniverseReplication", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) AlterUniverseReplication(request *AlterUniverseReplicationRequestPB) (*AlterUniverseReplicationResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "AlterUniverseReplication", "message", request)
 	response := &AlterUniverseReplicationResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "AlterUniverseReplication", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -898,10 +1107,13 @@ func (s *MasterServiceImpl) AlterUniverseReplication(request *AlterUniverseRepli
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "AlterUniverseReplication", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) SetUniverseReplicationEnabled(request *SetUniverseReplicationEnabledRequestPB) (*SetUniverseReplicationEnabledResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "SetUniverseReplicationEnabled", "message", request)
 	response := &SetUniverseReplicationEnabledResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "SetUniverseReplicationEnabled", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -909,10 +1121,13 @@ func (s *MasterServiceImpl) SetUniverseReplicationEnabled(request *SetUniverseRe
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "SetUniverseReplicationEnabled", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) GetUniverseReplication(request *GetUniverseReplicationRequestPB) (*GetUniverseReplicationResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "GetUniverseReplication", "message", request)
 	response := &GetUniverseReplicationResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "GetUniverseReplication", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -920,10 +1135,13 @@ func (s *MasterServiceImpl) GetUniverseReplication(request *GetUniverseReplicati
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GetUniverseReplication", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) AddUniverseKeys(request *AddUniverseKeysRequestPB) (*AddUniverseKeysResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "AddUniverseKeys", "message", request)
 	response := &AddUniverseKeysResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "AddUniverseKeys", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -931,10 +1149,13 @@ func (s *MasterServiceImpl) AddUniverseKeys(request *AddUniverseKeysRequestPB) (
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "AddUniverseKeys", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) GetUniverseKeyRegistry(request *GetUniverseKeyRegistryRequestPB) (*GetUniverseKeyRegistryResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "GetUniverseKeyRegistry", "message", request)
 	response := &GetUniverseKeyRegistryResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "GetUniverseKeyRegistry", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -942,10 +1163,13 @@ func (s *MasterServiceImpl) GetUniverseKeyRegistry(request *GetUniverseKeyRegist
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GetUniverseKeyRegistry", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) HasUniverseKeyInMemory(request *HasUniverseKeyInMemoryRequestPB) (*HasUniverseKeyInMemoryResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "HasUniverseKeyInMemory", "message", request)
 	response := &HasUniverseKeyInMemoryResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "HasUniverseKeyInMemory", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -953,10 +1177,13 @@ func (s *MasterServiceImpl) HasUniverseKeyInMemory(request *HasUniverseKeyInMemo
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "HasUniverseKeyInMemory", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) SplitTablet(request *SplitTabletRequestPB) (*SplitTabletResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "SplitTablet", "message", request)
 	response := &SplitTabletResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "SplitTablet", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -964,16 +1191,21 @@ func (s *MasterServiceImpl) SplitTablet(request *SplitTabletRequestPB) (*SplitTa
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "SplitTablet", "message", response)
+
 	return response, nil
 }
 
 func (s *MasterServiceImpl) DeleteTablet(request *DeleteTabletRequestPB) (*DeleteTabletResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.master.MasterService", "method", "DeleteTablet", "message", request)
 	response := &DeleteTabletResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.master.MasterService", "DeleteTablet", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
 	if err != nil {
 		return nil, err
 	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "DeleteTablet", "message", response)
 
 	return response, nil
 }

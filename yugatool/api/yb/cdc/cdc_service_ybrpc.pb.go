@@ -33,7 +33,10 @@
 
 package cdc
 
-import "github.com/yugabyte/yb-tools/protoc-gen-ybrpc/pkg/message"
+import (
+	"github.com/go-logr/logr"
+	"github.com/yugabyte/yb-tools/protoc-gen-ybrpc/pkg/message"
+)
 
 // service: yb.cdc.CDCService
 // service: CDCService
@@ -49,10 +52,12 @@ type CDCService interface {
 }
 
 type CDCServiceImpl struct {
+	Log       logr.Logger
 	Messenger message.Messenger
 }
 
 func (s *CDCServiceImpl) CreateCDCStream(request *CreateCDCStreamRequestPB) (*CreateCDCStreamResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.cdc.CDCService", "method", "CreateCDCStream", "message", request)
 	response := &CreateCDCStreamResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.cdc.CDCService", "CreateCDCStream", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -60,10 +65,13 @@ func (s *CDCServiceImpl) CreateCDCStream(request *CreateCDCStreamRequestPB) (*Cr
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "CreateCDCStream", "message", response)
+
 	return response, nil
 }
 
 func (s *CDCServiceImpl) DeleteCDCStream(request *DeleteCDCStreamRequestPB) (*DeleteCDCStreamResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.cdc.CDCService", "method", "DeleteCDCStream", "message", request)
 	response := &DeleteCDCStreamResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.cdc.CDCService", "DeleteCDCStream", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -71,10 +79,13 @@ func (s *CDCServiceImpl) DeleteCDCStream(request *DeleteCDCStreamRequestPB) (*De
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "DeleteCDCStream", "message", response)
+
 	return response, nil
 }
 
 func (s *CDCServiceImpl) ListTablets(request *ListTabletsRequestPB) (*ListTabletsResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.cdc.CDCService", "method", "ListTablets", "message", request)
 	response := &ListTabletsResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.cdc.CDCService", "ListTablets", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -82,10 +93,13 @@ func (s *CDCServiceImpl) ListTablets(request *ListTabletsRequestPB) (*ListTablet
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "ListTablets", "message", response)
+
 	return response, nil
 }
 
 func (s *CDCServiceImpl) GetChanges(request *GetChangesRequestPB) (*GetChangesResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.cdc.CDCService", "method", "GetChanges", "message", request)
 	response := &GetChangesResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.cdc.CDCService", "GetChanges", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -93,10 +107,13 @@ func (s *CDCServiceImpl) GetChanges(request *GetChangesRequestPB) (*GetChangesRe
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "GetChanges", "message", response)
+
 	return response, nil
 }
 
 func (s *CDCServiceImpl) GetCheckpoint(request *GetCheckpointRequestPB) (*GetCheckpointResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.cdc.CDCService", "method", "GetCheckpoint", "message", request)
 	response := &GetCheckpointResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.cdc.CDCService", "GetCheckpoint", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -104,10 +121,13 @@ func (s *CDCServiceImpl) GetCheckpoint(request *GetCheckpointRequestPB) (*GetChe
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "GetCheckpoint", "message", response)
+
 	return response, nil
 }
 
 func (s *CDCServiceImpl) UpdateCdcReplicatedIndex(request *UpdateCdcReplicatedIndexRequestPB) (*UpdateCdcReplicatedIndexResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.cdc.CDCService", "method", "UpdateCdcReplicatedIndex", "message", request)
 	response := &UpdateCdcReplicatedIndexResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.cdc.CDCService", "UpdateCdcReplicatedIndex", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -115,10 +135,13 @@ func (s *CDCServiceImpl) UpdateCdcReplicatedIndex(request *UpdateCdcReplicatedIn
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "UpdateCdcReplicatedIndex", "message", response)
+
 	return response, nil
 }
 
 func (s *CDCServiceImpl) BootstrapProducer(request *BootstrapProducerRequestPB) (*BootstrapProducerResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.cdc.CDCService", "method", "BootstrapProducer", "message", request)
 	response := &BootstrapProducerResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.cdc.CDCService", "BootstrapProducer", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -126,16 +149,21 @@ func (s *CDCServiceImpl) BootstrapProducer(request *BootstrapProducerRequestPB) 
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "BootstrapProducer", "message", response)
+
 	return response, nil
 }
 
 func (s *CDCServiceImpl) GetLatestEntryOpId(request *GetLatestEntryOpIdRequestPB) (*GetLatestEntryOpIdResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.cdc.CDCService", "method", "GetLatestEntryOpId", "message", request)
 	response := &GetLatestEntryOpIdResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.cdc.CDCService", "GetLatestEntryOpId", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
 	if err != nil {
 		return nil, err
 	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "GetLatestEntryOpId", "message", response)
 
 	return response, nil
 }
