@@ -34,7 +34,10 @@
 
 package tserver
 
-import "github.com/yugabyte/yb-tools/protoc-gen-ybrpc/pkg/message"
+import (
+	"github.com/go-logr/logr"
+	"github.com/yugabyte/yb-tools/protoc-gen-ybrpc/pkg/message"
+)
 
 // service: yb.tserver.TabletServerAdminService
 // service: TabletServerAdminService
@@ -54,6 +57,7 @@ type TabletServerAdminService interface {
 }
 
 type TabletServerAdminServiceImpl struct {
+	Log       logr.Logger
 	Messenger message.Messenger
 }
 
@@ -61,6 +65,7 @@ type TabletServerAdminServiceImpl struct {
 // brand-new tablets, not for "moves".
 
 func (s *TabletServerAdminServiceImpl) CreateTablet(request *CreateTabletRequestPB) (*CreateTabletResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerAdminService", "method", "CreateTablet", "message", request)
 	response := &CreateTabletResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "CreateTablet", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -68,12 +73,15 @@ func (s *TabletServerAdminServiceImpl) CreateTablet(request *CreateTabletRequest
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "CreateTablet", "message", response)
+
 	return response, nil
 }
 
 // Delete a tablet replica.
 
 func (s *TabletServerAdminServiceImpl) DeleteTablet(request *DeleteTabletRequestPB) (*DeleteTabletResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerAdminService", "method", "DeleteTablet", "message", request)
 	response := &DeleteTabletResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "DeleteTablet", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -81,12 +89,15 @@ func (s *TabletServerAdminServiceImpl) DeleteTablet(request *DeleteTabletRequest
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "DeleteTablet", "message", response)
+
 	return response, nil
 }
 
 // Alter a tablet's schema.
 
 func (s *TabletServerAdminServiceImpl) AlterSchema(request *ChangeMetadataRequestPB) (*ChangeMetadataResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerAdminService", "method", "AlterSchema", "message", request)
 	response := &ChangeMetadataResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "AlterSchema", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -94,18 +105,23 @@ func (s *TabletServerAdminServiceImpl) AlterSchema(request *ChangeMetadataReques
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "AlterSchema", "message", response)
+
 	return response, nil
 }
 
 // GetSafeTime API to get the current safe time.
 
 func (s *TabletServerAdminServiceImpl) GetSafeTime(request *GetSafeTimeRequestPB) (*GetSafeTimeResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerAdminService", "method", "GetSafeTime", "message", request)
 	response := &GetSafeTimeResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "GetSafeTime", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
 	if err != nil {
 		return nil, err
 	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "GetSafeTime", "message", response)
 
 	return response, nil
 }
@@ -114,6 +130,7 @@ func (s *TabletServerAdminServiceImpl) GetSafeTime(request *GetSafeTimeRequestPB
 // table.
 
 func (s *TabletServerAdminServiceImpl) BackfillIndex(request *BackfillIndexRequestPB) (*BackfillIndexResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerAdminService", "method", "BackfillIndex", "message", request)
 	response := &BackfillIndexResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "BackfillIndex", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -121,12 +138,15 @@ func (s *TabletServerAdminServiceImpl) BackfillIndex(request *BackfillIndexReque
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "BackfillIndex", "message", response)
+
 	return response, nil
 }
 
 // Marks an index table as having completed backfilling.
 
 func (s *TabletServerAdminServiceImpl) BackfillDone(request *ChangeMetadataRequestPB) (*ChangeMetadataResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerAdminService", "method", "BackfillDone", "message", request)
 	response := &ChangeMetadataResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "BackfillDone", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -134,12 +154,15 @@ func (s *TabletServerAdminServiceImpl) BackfillDone(request *ChangeMetadataReque
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "BackfillDone", "message", response)
+
 	return response, nil
 }
 
 // Create a co-partitioned table in an existing tablet
 
 func (s *TabletServerAdminServiceImpl) CopartitionTable(request *CopartitionTableRequestPB) (*CopartitionTableResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerAdminService", "method", "CopartitionTable", "message", request)
 	response := &CopartitionTableResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "CopartitionTable", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -147,10 +170,13 @@ func (s *TabletServerAdminServiceImpl) CopartitionTable(request *CopartitionTabl
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "CopartitionTable", "message", response)
+
 	return response, nil
 }
 
 func (s *TabletServerAdminServiceImpl) FlushTablets(request *FlushTabletsRequestPB) (*FlushTabletsResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerAdminService", "method", "FlushTablets", "message", request)
 	response := &FlushTabletsResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "FlushTablets", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -158,10 +184,13 @@ func (s *TabletServerAdminServiceImpl) FlushTablets(request *FlushTabletsRequest
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "FlushTablets", "message", response)
+
 	return response, nil
 }
 
 func (s *TabletServerAdminServiceImpl) CountIntents(request *CountIntentsRequestPB) (*CountIntentsResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerAdminService", "method", "CountIntents", "message", request)
 	response := &CountIntentsResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "CountIntents", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -169,10 +198,13 @@ func (s *TabletServerAdminServiceImpl) CountIntents(request *CountIntentsRequest
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "CountIntents", "message", response)
+
 	return response, nil
 }
 
 func (s *TabletServerAdminServiceImpl) AddTableToTablet(request *AddTableToTabletRequestPB) (*AddTableToTabletResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerAdminService", "method", "AddTableToTablet", "message", request)
 	response := &AddTableToTabletResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "AddTableToTablet", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -180,10 +212,13 @@ func (s *TabletServerAdminServiceImpl) AddTableToTablet(request *AddTableToTable
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "AddTableToTablet", "message", response)
+
 	return response, nil
 }
 
 func (s *TabletServerAdminServiceImpl) RemoveTableFromTablet(request *RemoveTableFromTabletRequestPB) (*RemoveTableFromTabletResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerAdminService", "method", "RemoveTableFromTablet", "message", request)
 	response := &RemoveTableFromTabletResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "RemoveTableFromTablet", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -191,16 +226,21 @@ func (s *TabletServerAdminServiceImpl) RemoveTableFromTablet(request *RemoveTabl
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "RemoveTableFromTablet", "message", response)
+
 	return response, nil
 }
 
 func (s *TabletServerAdminServiceImpl) SplitTablet(request *SplitTabletRequestPB) (*SplitTabletResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerAdminService", "method", "SplitTablet", "message", request)
 	response := &SplitTabletResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "SplitTablet", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
 	if err != nil {
 		return nil, err
 	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "SplitTablet", "message", response)
 
 	return response, nil
 }

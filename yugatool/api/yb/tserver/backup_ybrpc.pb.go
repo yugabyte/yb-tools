@@ -15,7 +15,10 @@
 
 package tserver
 
-import "github.com/yugabyte/yb-tools/protoc-gen-ybrpc/pkg/message"
+import (
+	"github.com/go-logr/logr"
+	"github.com/yugabyte/yb-tools/protoc-gen-ybrpc/pkg/message"
+)
 
 // service: yb.tserver.TabletServerBackupService
 // service: TabletServerBackupService
@@ -24,16 +27,20 @@ type TabletServerBackupService interface {
 }
 
 type TabletServerBackupServiceImpl struct {
+	Log       logr.Logger
 	Messenger message.Messenger
 }
 
 func (s *TabletServerBackupServiceImpl) TabletSnapshotOp(request *TabletSnapshotOpRequestPB) (*TabletSnapshotOpResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerBackupService", "method", "TabletSnapshotOp", "message", request)
 	response := &TabletSnapshotOpResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerBackupService", "TabletSnapshotOp", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
 	if err != nil {
 		return nil, err
 	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerBackupService", "method", "TabletSnapshotOp", "message", response)
 
 	return response, nil
 }

@@ -79,7 +79,10 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) *protogen.Generated
 // TODO: This statically outputs imports- how is this _actually_ supposed to be implemened?
 func generateImports(g *protogen.GeneratedFile) {
 	g.P()
-	g.P(`import "github.com/yugabyte/yb-tools/protoc-gen-ybrpc/pkg/message"`)
+	g.P(`import (`)
+	g.P(`    "github.com/go-logr/logr"`)
+	g.P(`    "github.com/yugabyte/yb-tools/protoc-gen-ybrpc/pkg/message"`)
+	g.P(`)`)
 	g.P()
 }
 
@@ -102,6 +105,7 @@ func generateMethodSigniture(g *protogen.GeneratedFile, method *protogen.Method)
 
 func generateServiceImpl(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("type ", service.GoName, "Impl struct {")
+	g.P("    Log logr.Logger")
 	g.P("    Messenger message.Messenger")
 	g.P("}")
 	g.P()
@@ -110,12 +114,15 @@ func generateServiceImpl(g *protogen.GeneratedFile, service *protogen.Service) {
 func generateServiceMethod(g *protogen.GeneratedFile, service *protogen.Service, method *protogen.Method) {
 	generateComments(g, method.Comments, method.Desc.Options().(*descriptorpb.MethodOptions).GetDeprecated())
 	g.P("func (s *" + service.GoName + "Impl)" + method.GoName + "(request *" + method.Input.GoIdent.GoName + ")" + "(*" + method.Output.GoIdent.GoName + ", error) {")
+	g.P(`    s.Log.V(1).Info("sending RPC message", "service", "`, string(service.Desc.FullName()), `", "method", "`, string(method.Desc.Name()), `", "message", request)`)
 	g.P("    response := &" + method.Output.GoIdent.GoName + "{}")
 	g.P()
 	g.P(`    err := s.Messenger.SendMessage("`, string(service.Desc.FullName()), `", "`, string(method.Desc.Name()), `", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())`)
 	g.P("    if err != nil {")
 	g.P("        return nil, err")
 	g.P("    }")
+	g.P()
+	g.P(`    s.Log.V(1).Info("received RPC response", "service", "`, string(service.Desc.FullName()), `", "method", "`, string(method.Desc.Name()), `", "message", response)`)
 	g.P()
 	g.P("    return response, nil")
 	g.P("}")

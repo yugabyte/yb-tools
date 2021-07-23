@@ -8,12 +8,14 @@ import (
 	"time"
 
 	"github.com/blang/vfs"
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client/dial"
 )
 
 type UniverseConfig struct {
 	dialer dial.Dialer
+	Log    logr.Logger
 	Fs     vfs.Filesystem
 
 	Masters []string // Masters to get initial connection information from

@@ -35,7 +35,10 @@
 
 package consensus
 
-import "github.com/yugabyte/yb-tools/protoc-gen-ybrpc/pkg/message"
+import (
+	"github.com/go-logr/logr"
+	"github.com/yugabyte/yb-tools/protoc-gen-ybrpc/pkg/message"
+)
 
 // service: yb.consensus.ConsensusService
 // service: ConsensusService
@@ -55,12 +58,14 @@ type ConsensusService interface {
 }
 
 type ConsensusServiceImpl struct {
+	Log       logr.Logger
 	Messenger message.Messenger
 }
 
 // Analogous to AppendEntries in Raft, but only used for followers.
 
 func (s *ConsensusServiceImpl) UpdateConsensus(request *ConsensusRequestPB) (*ConsensusResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.consensus.ConsensusService", "method", "UpdateConsensus", "message", request)
 	response := &ConsensusResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.consensus.ConsensusService", "UpdateConsensus", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -68,18 +73,23 @@ func (s *ConsensusServiceImpl) UpdateConsensus(request *ConsensusRequestPB) (*Co
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.consensus.ConsensusService", "method", "UpdateConsensus", "message", response)
+
 	return response, nil
 }
 
 // RequestVote() from Raft.
 
 func (s *ConsensusServiceImpl) RequestConsensusVote(request *VoteRequestPB) (*VoteResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.consensus.ConsensusService", "method", "RequestConsensusVote", "message", request)
 	response := &VoteResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.consensus.ConsensusService", "RequestConsensusVote", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
 	if err != nil {
 		return nil, err
 	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.consensus.ConsensusService", "method", "RequestConsensusVote", "message", response)
 
 	return response, nil
 }
@@ -90,6 +100,7 @@ func (s *ConsensusServiceImpl) RequestConsensusVote(request *VoteRequestPB) (*Vo
 // An OK response means the operation was successful.
 
 func (s *ConsensusServiceImpl) ChangeConfig(request *ChangeConfigRequestPB) (*ChangeConfigResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.consensus.ConsensusService", "method", "ChangeConfig", "message", request)
 	response := &ChangeConfigResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.consensus.ConsensusService", "ChangeConfig", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -97,10 +108,13 @@ func (s *ConsensusServiceImpl) ChangeConfig(request *ChangeConfigRequestPB) (*Ch
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.consensus.ConsensusService", "method", "ChangeConfig", "message", response)
+
 	return response, nil
 }
 
 func (s *ConsensusServiceImpl) GetNodeInstance(request *GetNodeInstanceRequestPB) (*GetNodeInstanceResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.consensus.ConsensusService", "method", "GetNodeInstance", "message", request)
 	response := &GetNodeInstanceResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.consensus.ConsensusService", "GetNodeInstance", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -108,12 +122,15 @@ func (s *ConsensusServiceImpl) GetNodeInstance(request *GetNodeInstanceRequestPB
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.consensus.ConsensusService", "method", "GetNodeInstance", "message", response)
+
 	return response, nil
 }
 
 // Force this node to run a leader election.
 
 func (s *ConsensusServiceImpl) RunLeaderElection(request *RunLeaderElectionRequestPB) (*RunLeaderElectionResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.consensus.ConsensusService", "method", "RunLeaderElection", "message", request)
 	response := &RunLeaderElectionResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.consensus.ConsensusService", "RunLeaderElection", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -121,12 +138,15 @@ func (s *ConsensusServiceImpl) RunLeaderElection(request *RunLeaderElectionReque
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.consensus.ConsensusService", "method", "RunLeaderElection", "message", response)
+
 	return response, nil
 }
 
 // Notify originator about lost election, so it could reset its timeout.
 
 func (s *ConsensusServiceImpl) LeaderElectionLost(request *LeaderElectionLostRequestPB) (*LeaderElectionLostResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.consensus.ConsensusService", "method", "LeaderElectionLost", "message", request)
 	response := &LeaderElectionLostResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.consensus.ConsensusService", "LeaderElectionLost", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -134,12 +154,15 @@ func (s *ConsensusServiceImpl) LeaderElectionLost(request *LeaderElectionLostReq
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.consensus.ConsensusService", "method", "LeaderElectionLost", "message", response)
+
 	return response, nil
 }
 
 // Force this node to step down as leader.
 
 func (s *ConsensusServiceImpl) LeaderStepDown(request *LeaderStepDownRequestPB) (*LeaderStepDownResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.consensus.ConsensusService", "method", "LeaderStepDown", "message", request)
 	response := &LeaderStepDownResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.consensus.ConsensusService", "LeaderStepDown", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -147,12 +170,15 @@ func (s *ConsensusServiceImpl) LeaderStepDown(request *LeaderStepDownRequestPB) 
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.consensus.ConsensusService", "method", "LeaderStepDown", "message", response)
+
 	return response, nil
 }
 
 // Get the latest committed or received opid on the server.
 
 func (s *ConsensusServiceImpl) GetLastOpId(request *GetLastOpIdRequestPB) (*GetLastOpIdResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.consensus.ConsensusService", "method", "GetLastOpId", "message", request)
 	response := &GetLastOpIdResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.consensus.ConsensusService", "GetLastOpId", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -160,12 +186,15 @@ func (s *ConsensusServiceImpl) GetLastOpId(request *GetLastOpIdRequestPB) (*GetL
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.consensus.ConsensusService", "method", "GetLastOpId", "message", response)
+
 	return response, nil
 }
 
 // Returns the committed Consensus state.
 
 func (s *ConsensusServiceImpl) GetConsensusState(request *GetConsensusStateRequestPB) (*GetConsensusStateResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.consensus.ConsensusService", "method", "GetConsensusState", "message", request)
 	response := &GetConsensusStateResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.consensus.ConsensusService", "GetConsensusState", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -173,18 +202,23 @@ func (s *ConsensusServiceImpl) GetConsensusState(request *GetConsensusStateReque
 		return nil, err
 	}
 
+	s.Log.V(1).Info("received RPC response", "service", "yb.consensus.ConsensusService", "method", "GetConsensusState", "message", response)
+
 	return response, nil
 }
 
 // Instruct this server to remotely bootstrap a tablet from another host.
 
 func (s *ConsensusServiceImpl) StartRemoteBootstrap(request *StartRemoteBootstrapRequestPB) (*StartRemoteBootstrapResponsePB, error) {
+	s.Log.V(1).Info("sending RPC message", "service", "yb.consensus.ConsensusService", "method", "StartRemoteBootstrap", "message", request)
 	response := &StartRemoteBootstrapResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.consensus.ConsensusService", "StartRemoteBootstrap", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
 	if err != nil {
 		return nil, err
 	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.consensus.ConsensusService", "method", "StartRemoteBootstrap", "message", response)
 
 	return response, nil
 }

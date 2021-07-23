@@ -46,12 +46,18 @@ func init() {
 // TODO: right now this is just a dumping ground for running random RPC calls... Getting cluster info should be
 //       a real command at some point
 func clusterInfo(cmd *cobra.Command, args []string) error {
+	log, err := util.GetLogger("cluster_info", debug)
+	if err != nil {
+		return err
+	}
+
 	hosts, err := util.ValidateMastersFlag(masterAddresses)
 	if err != nil {
 		return err
 	}
 
 	c, err := client.Connect(&config.UniverseConfig{
+		Log:     log.WithName("client"),
 		Fs:      vfs.OS(),
 		Masters: hosts,
 		Timeout: time.Duration(dialTimeout) * time.Second,

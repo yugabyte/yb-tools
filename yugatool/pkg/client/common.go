@@ -35,26 +35,32 @@ func NewHostState(host string, universeConfig *config.UniverseConfig) (*HostStat
 		config:  config.UniverseConfig{},
 	}
 	hostState.GenericService = &server.GenericServiceImpl{
+		Log:       universeConfig.Log,
 		Messenger: &message.MessengerImpl{Session: s},
 	}
 
 	hostState.MasterService = &master.MasterServiceImpl{
+		Log:       universeConfig.Log,
 		Messenger: &message.MessengerImpl{Session: s},
 	}
 
 	hostState.TabletServerService = &tserver.TabletServerServiceImpl{
+		Log:       universeConfig.Log,
 		Messenger: &message.MessengerImpl{Session: s},
 	}
 
 	hostState.TabletServerAdminService = &tserver.TabletServerAdminServiceImpl{
+		Log:       universeConfig.Log,
 		Messenger: &message.MessengerImpl{Session: s},
 	}
 
 	hostState.ConsensusService = &consensus.ConsensusServiceImpl{
+		Log:       universeConfig.Log,
 		Messenger: &message.MessengerImpl{Session: s},
 	}
 
 	hostState.CDCService = &cdc.CDCServiceImpl{
+		Log:       universeConfig.Log,
 		Messenger: &message.MessengerImpl{Session: s},
 	}
 
@@ -74,6 +80,7 @@ func (h *HostState) Close() error {
 
 func ping(s *session.Session) error {
 	service := server.GenericServiceImpl{
+		Log:       s.Log,
 		Messenger: &message.MessengerImpl{Session: s},
 	}
 	_, err := service.Ping(&server.PingRequestPB{})

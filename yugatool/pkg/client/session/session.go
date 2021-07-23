@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client/config"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client/dial"
@@ -16,6 +17,7 @@ type Session struct {
 	conn         io.ReadWriteCloser
 	messageCount int32
 
+	Log    logr.Logger
 	Dialer dial.Dialer
 	Ping   func(*Session) error
 }
@@ -27,6 +29,7 @@ func NewSession(host string, universeConfig *config.UniverseConfig, ping func(*S
 	}
 
 	s := &Session{
+		Log:    universeConfig.Log.WithValues("host", host),
 		Dialer: dialer,
 		Ping:   ping,
 	}
@@ -51,6 +54,7 @@ func (s *Session) Read(b []byte) (int, error) {
 }
 
 func (s *Session) Close() error {
+	s.Log.V(1).Info("closing connection")
 	return s.conn.Close()
 }
 
@@ -61,6 +65,7 @@ func (s *Session) GenerateCallID() int32 {
 
 func (s *Session) Connect(host string) error {
 	var err error
+	s.Log.V(1).Info("connecting to host")
 	s.conn, err = s.Dialer.Dial("tcp", host)
 	if err != nil {
 		return err
