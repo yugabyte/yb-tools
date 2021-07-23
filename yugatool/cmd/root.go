@@ -17,14 +17,20 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
 	"os"
 
 	homedir "github.com/mitchellh/go-homedir"
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-var cfgFile string
+var (
+	cfgFile                       string
+	dialTimeout                   int
+	masterAddresses               string
+	caCert, clientCert, clientKey string
+	skipHostVerification          bool
+)
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -43,7 +49,18 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	// Global configuration flags
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.yugatool.yaml)")
+	flags := rootCmd.PersistentFlags()
+	flags.StringVar(&cfgFile, "config", "", "config file (default is $HOME/.yugatool.yaml)")
+	flags.StringVarP(&masterAddresses, "master-address", "m", "", "The master addresses")
+	flags.IntVar(&dialTimeout, "dialtimeout", 10, "number of seconds for dial timeouts")
+	flags.BoolVar(&skipHostVerification, "skiphostverification", false, "skip ssl host verification")
+	flags.StringVarP(&caCert, "cacert", "c", "", "the path to the CA certificate")
+	flags.StringVar(&clientCert, "client-cert", "", "the path to the client certificate")
+	flags.StringVar(&clientKey, "client-key", "", "the path to the client key file")
+
+	if err := cobra.MarkFlagRequired(rootCmd.PersistentFlags(), "master-address"); err != nil {
+		panic(err)
+	}
 }
 
 // initConfig reads in config file and ENV variables if set.
