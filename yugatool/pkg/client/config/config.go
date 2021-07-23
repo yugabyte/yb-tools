@@ -13,11 +13,13 @@ import (
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client/dial"
 )
 
+// TODO: should this entire structure be a protobuf for to enable writing it out to a config file?
 type UniverseConfig struct {
 	dialer dial.Dialer
 	Log    logr.Logger
 	Fs     vfs.Filesystem
 
+	// TODO: this should be a hostport argument
 	Masters []string // Masters to get initial connection information from
 	Timeout time.Duration
 
