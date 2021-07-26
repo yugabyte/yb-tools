@@ -59,7 +59,7 @@ type RemoteBootstrapServiceImpl struct {
 // Establish a remote bootstrap session.
 
 func (s *RemoteBootstrapServiceImpl) BeginRemoteBootstrapSession(request *BeginRemoteBootstrapSessionRequestPB) (*BeginRemoteBootstrapSessionResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.RemoteBootstrapService", "method", "BeginRemoteBootstrapSession", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.RemoteBootstrapService", "method", "BeginRemoteBootstrapSession", "host", s.Messenger.GetHost(), "request", request)
 	response := &BeginRemoteBootstrapSessionResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.RemoteBootstrapService", "BeginRemoteBootstrapSession", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -67,7 +67,7 @@ func (s *RemoteBootstrapServiceImpl) BeginRemoteBootstrapSession(request *BeginR
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "BeginRemoteBootstrapSession", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "BeginRemoteBootstrapSession", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
@@ -75,7 +75,7 @@ func (s *RemoteBootstrapServiceImpl) BeginRemoteBootstrapSession(request *BeginR
 // Check whether the specified session is active.
 
 func (s *RemoteBootstrapServiceImpl) CheckSessionActive(request *CheckRemoteBootstrapSessionActiveRequestPB) (*CheckRemoteBootstrapSessionActiveResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.RemoteBootstrapService", "method", "CheckSessionActive", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.RemoteBootstrapService", "method", "CheckSessionActive", "host", s.Messenger.GetHost(), "request", request)
 	response := &CheckRemoteBootstrapSessionActiveResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.RemoteBootstrapService", "CheckSessionActive", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -83,7 +83,7 @@ func (s *RemoteBootstrapServiceImpl) CheckSessionActive(request *CheckRemoteBoot
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "CheckSessionActive", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "CheckSessionActive", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
@@ -91,7 +91,7 @@ func (s *RemoteBootstrapServiceImpl) CheckSessionActive(request *CheckRemoteBoot
 // Fetch data (blocks, logs) from the server.
 
 func (s *RemoteBootstrapServiceImpl) FetchData(request *FetchDataRequestPB) (*FetchDataResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.RemoteBootstrapService", "method", "FetchData", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.RemoteBootstrapService", "method", "FetchData", "host", s.Messenger.GetHost(), "request", request)
 	response := &FetchDataResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.RemoteBootstrapService", "FetchData", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -99,7 +99,7 @@ func (s *RemoteBootstrapServiceImpl) FetchData(request *FetchDataRequestPB) (*Fe
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "FetchData", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "FetchData", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
@@ -107,7 +107,7 @@ func (s *RemoteBootstrapServiceImpl) FetchData(request *FetchDataRequestPB) (*Fe
 // End a remote bootstrap session, allow server to release resources.
 
 func (s *RemoteBootstrapServiceImpl) EndRemoteBootstrapSession(request *EndRemoteBootstrapSessionRequestPB) (*EndRemoteBootstrapSessionResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.RemoteBootstrapService", "method", "EndRemoteBootstrapSession", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.RemoteBootstrapService", "method", "EndRemoteBootstrapSession", "host", s.Messenger.GetHost(), "request", request)
 	response := &EndRemoteBootstrapSessionResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.RemoteBootstrapService", "EndRemoteBootstrapSession", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -115,13 +115,13 @@ func (s *RemoteBootstrapServiceImpl) EndRemoteBootstrapSession(request *EndRemot
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "EndRemoteBootstrapSession", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "EndRemoteBootstrapSession", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *RemoteBootstrapServiceImpl) RemoveSession(request *RemoveSessionRequestPB) (*RemoveSessionResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.RemoteBootstrapService", "method", "RemoveSession", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.RemoteBootstrapService", "method", "RemoveSession", "host", s.Messenger.GetHost(), "request", request)
 	response := &RemoveSessionResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.RemoteBootstrapService", "RemoveSession", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -129,7 +129,7 @@ func (s *RemoteBootstrapServiceImpl) RemoveSession(request *RemoveSessionRequest
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "RemoveSession", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "RemoveSession", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }

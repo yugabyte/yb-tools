@@ -81,7 +81,7 @@ func generateServiceImpl(g *protogen.GeneratedFile, service *protogen.Service) {
 func generateServiceMethod(g *protogen.GeneratedFile, service *protogen.Service, method *protogen.Method) {
 	util.GenerateComments(g, method.Comments, method.Desc.Options().(*descriptorpb.MethodOptions).GetDeprecated())
 	g.P("func (s *" + service.GoName + "Impl)" + method.GoName + "(request *" + method.Input.GoIdent.GoName + ")" + "(*" + method.Output.GoIdent.GoName + ", error) {")
-	g.P(`    s.Log.V(1).Info("sending RPC message", "service", "`, string(service.Desc.FullName()), `", "method", "`, string(method.Desc.Name()), `", "message", request)`)
+	g.P(`    s.Log.V(1).Info("sending RPC request", "service", "`, string(service.Desc.FullName()), `", "method", "`, string(method.Desc.Name()), `", "host", s.Messenger.GetHost(), "request", request)`)
 	g.P("    response := &" + method.Output.GoIdent.GoName + "{}")
 	g.P()
 	g.P(`    err := s.Messenger.SendMessage("`, string(service.Desc.FullName()), `", "`, string(method.Desc.Name()), `", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())`)
@@ -89,7 +89,7 @@ func generateServiceMethod(g *protogen.GeneratedFile, service *protogen.Service,
 	g.P("        return nil, err")
 	g.P("    }")
 	g.P()
-	g.P(`    s.Log.V(1).Info("received RPC response", "service", "`, string(service.Desc.FullName()), `", "method", "`, string(method.Desc.Name()), `", "message", response)`)
+	g.P(`    s.Log.V(1).Info("received RPC response", "service", "`, string(service.Desc.FullName()), `", "method", "`, string(method.Desc.Name()), `", "host", s.Messenger.GetHost(), "response", response)`)
 	g.P()
 	g.P("    return response, nil")
 	g.P("}")

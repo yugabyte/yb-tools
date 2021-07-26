@@ -57,7 +57,7 @@ type GenericServiceImpl struct {
 }
 
 func (s *GenericServiceImpl) SetFlag(request *SetFlagRequestPB) (*SetFlagResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.server.GenericService", "method", "SetFlag", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.server.GenericService", "method", "SetFlag", "host", s.Messenger.GetHost(), "request", request)
 	response := &SetFlagResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.server.GenericService", "SetFlag", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -65,13 +65,13 @@ func (s *GenericServiceImpl) SetFlag(request *SetFlagRequestPB) (*SetFlagRespons
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "SetFlag", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "SetFlag", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *GenericServiceImpl) GetFlag(request *GetFlagRequestPB) (*GetFlagResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.server.GenericService", "method", "GetFlag", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.server.GenericService", "method", "GetFlag", "host", s.Messenger.GetHost(), "request", request)
 	response := &GetFlagResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.server.GenericService", "GetFlag", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -79,13 +79,13 @@ func (s *GenericServiceImpl) GetFlag(request *GetFlagRequestPB) (*GetFlagRespons
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "GetFlag", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "GetFlag", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *GenericServiceImpl) RefreshFlags(request *RefreshFlagsRequestPB) (*RefreshFlagsResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.server.GenericService", "method", "RefreshFlags", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.server.GenericService", "method", "RefreshFlags", "host", s.Messenger.GetHost(), "request", request)
 	response := &RefreshFlagsResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.server.GenericService", "RefreshFlags", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -93,13 +93,13 @@ func (s *GenericServiceImpl) RefreshFlags(request *RefreshFlagsRequestPB) (*Refr
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "RefreshFlags", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "RefreshFlags", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *GenericServiceImpl) FlushCoverage(request *FlushCoverageRequestPB) (*FlushCoverageResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.server.GenericService", "method", "FlushCoverage", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.server.GenericService", "method", "FlushCoverage", "host", s.Messenger.GetHost(), "request", request)
 	response := &FlushCoverageResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.server.GenericService", "FlushCoverage", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -107,13 +107,13 @@ func (s *GenericServiceImpl) FlushCoverage(request *FlushCoverageRequestPB) (*Fl
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "FlushCoverage", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "FlushCoverage", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *GenericServiceImpl) ServerClock(request *ServerClockRequestPB) (*ServerClockResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.server.GenericService", "method", "ServerClock", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.server.GenericService", "method", "ServerClock", "host", s.Messenger.GetHost(), "request", request)
 	response := &ServerClockResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.server.GenericService", "ServerClock", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -121,13 +121,13 @@ func (s *GenericServiceImpl) ServerClock(request *ServerClockRequestPB) (*Server
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "ServerClock", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "ServerClock", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *GenericServiceImpl) GetStatus(request *GetStatusRequestPB) (*GetStatusResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.server.GenericService", "method", "GetStatus", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.server.GenericService", "method", "GetStatus", "host", s.Messenger.GetHost(), "request", request)
 	response := &GetStatusResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.server.GenericService", "GetStatus", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -135,13 +135,13 @@ func (s *GenericServiceImpl) GetStatus(request *GetStatusRequestPB) (*GetStatusR
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "GetStatus", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "GetStatus", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *GenericServiceImpl) Ping(request *PingRequestPB) (*PingResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.server.GenericService", "method", "Ping", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.server.GenericService", "method", "Ping", "host", s.Messenger.GetHost(), "request", request)
 	response := &PingResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.server.GenericService", "Ping", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -149,7 +149,7 @@ func (s *GenericServiceImpl) Ping(request *PingRequestPB) (*PingResponsePB, erro
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "Ping", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "Ping", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }

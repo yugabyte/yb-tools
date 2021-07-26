@@ -17,6 +17,7 @@ type Session struct {
 	conn         io.ReadWriteCloser
 	messageCount int32
 
+	Host   string
 	Log    logr.Logger
 	Dialer dial.Dialer
 	Ping   func(*Session) error
@@ -29,6 +30,7 @@ func NewSession(host string, universeConfig *config.UniverseConfig, ping func(*S
 	}
 
 	s := &Session{
+		Host:   host,
 		Log:    universeConfig.Log.WithValues("host", host),
 		Dialer: dialer,
 		Ping:   ping,

@@ -32,7 +32,7 @@ type TabletServerBackupServiceImpl struct {
 }
 
 func (s *TabletServerBackupServiceImpl) TabletSnapshotOp(request *TabletSnapshotOpRequestPB) (*TabletSnapshotOpResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerBackupService", "method", "TabletSnapshotOp", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerBackupService", "method", "TabletSnapshotOp", "host", s.Messenger.GetHost(), "request", request)
 	response := &TabletSnapshotOpResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerBackupService", "TabletSnapshotOp", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -40,7 +40,7 @@ func (s *TabletServerBackupServiceImpl) TabletSnapshotOp(request *TabletSnapshot
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerBackupService", "method", "TabletSnapshotOp", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerBackupService", "method", "TabletSnapshotOp", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
