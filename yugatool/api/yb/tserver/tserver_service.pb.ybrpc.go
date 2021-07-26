@@ -68,7 +68,7 @@ type TabletServerServiceImpl struct {
 }
 
 func (s *TabletServerServiceImpl) Write(request *WriteRequestPB) (*WriteResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerService", "method", "Write", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "Write", "host", s.Messenger.GetHost(), "request", request)
 	response := &WriteResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "Write", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -76,13 +76,13 @@ func (s *TabletServerServiceImpl) Write(request *WriteRequestPB) (*WriteResponse
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "Write", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "Write", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *TabletServerServiceImpl) Read(request *ReadRequestPB) (*ReadResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerService", "method", "Read", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "Read", "host", s.Messenger.GetHost(), "request", request)
 	response := &ReadResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "Read", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -90,13 +90,13 @@ func (s *TabletServerServiceImpl) Read(request *ReadRequestPB) (*ReadResponsePB,
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "Read", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "Read", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *TabletServerServiceImpl) NoOp(request *NoOpRequestPB) (*NoOpResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerService", "method", "NoOp", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "NoOp", "host", s.Messenger.GetHost(), "request", request)
 	response := &NoOpResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "NoOp", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -104,13 +104,13 @@ func (s *TabletServerServiceImpl) NoOp(request *NoOpRequestPB) (*NoOpResponsePB,
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "NoOp", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "NoOp", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *TabletServerServiceImpl) ListTablets(request *ListTabletsRequestPB) (*ListTabletsResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerService", "method", "ListTablets", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "ListTablets", "host", s.Messenger.GetHost(), "request", request)
 	response := &ListTabletsResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "ListTablets", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -118,13 +118,13 @@ func (s *TabletServerServiceImpl) ListTablets(request *ListTabletsRequestPB) (*L
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "ListTablets", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "ListTablets", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *TabletServerServiceImpl) GetLogLocation(request *GetLogLocationRequestPB) (*GetLogLocationResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerService", "method", "GetLogLocation", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "GetLogLocation", "host", s.Messenger.GetHost(), "request", request)
 	response := &GetLogLocationResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "GetLogLocation", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -132,7 +132,7 @@ func (s *TabletServerServiceImpl) GetLogLocation(request *GetLogLocationRequestP
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetLogLocation", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetLogLocation", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
@@ -143,7 +143,7 @@ func (s *TabletServerServiceImpl) GetLogLocation(request *GetLogLocationRequestP
 // function.
 
 func (s *TabletServerServiceImpl) Checksum(request *ChecksumRequestPB) (*ChecksumResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerService", "method", "Checksum", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "Checksum", "host", s.Messenger.GetHost(), "request", request)
 	response := &ChecksumResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "Checksum", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -151,13 +151,13 @@ func (s *TabletServerServiceImpl) Checksum(request *ChecksumRequestPB) (*Checksu
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "Checksum", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "Checksum", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *TabletServerServiceImpl) ListTabletsForTabletServer(request *ListTabletsForTabletServerRequestPB) (*ListTabletsForTabletServerResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerService", "method", "ListTabletsForTabletServer", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "ListTabletsForTabletServer", "host", s.Messenger.GetHost(), "request", request)
 	response := &ListTabletsForTabletServerResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "ListTabletsForTabletServer", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -165,13 +165,13 @@ func (s *TabletServerServiceImpl) ListTabletsForTabletServer(request *ListTablet
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "ListTabletsForTabletServer", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "ListTabletsForTabletServer", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *TabletServerServiceImpl) ImportData(request *ImportDataRequestPB) (*ImportDataResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerService", "method", "ImportData", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "ImportData", "host", s.Messenger.GetHost(), "request", request)
 	response := &ImportDataResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "ImportData", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -179,13 +179,13 @@ func (s *TabletServerServiceImpl) ImportData(request *ImportDataRequestPB) (*Imp
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "ImportData", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "ImportData", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *TabletServerServiceImpl) UpdateTransaction(request *UpdateTransactionRequestPB) (*UpdateTransactionResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerService", "method", "UpdateTransaction", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "UpdateTransaction", "host", s.Messenger.GetHost(), "request", request)
 	response := &UpdateTransactionResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "UpdateTransaction", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -193,7 +193,7 @@ func (s *TabletServerServiceImpl) UpdateTransaction(request *UpdateTransactionRe
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "UpdateTransaction", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "UpdateTransaction", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
@@ -201,7 +201,7 @@ func (s *TabletServerServiceImpl) UpdateTransaction(request *UpdateTransactionRe
 // Returns transaction status at coordinator, i.e. PENDING, ABORTED, COMMITTED etc.
 
 func (s *TabletServerServiceImpl) GetTransactionStatus(request *GetTransactionStatusRequestPB) (*GetTransactionStatusResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerService", "method", "GetTransactionStatus", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "GetTransactionStatus", "host", s.Messenger.GetHost(), "request", request)
 	response := &GetTransactionStatusResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "GetTransactionStatus", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -209,7 +209,7 @@ func (s *TabletServerServiceImpl) GetTransactionStatus(request *GetTransactionSt
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetTransactionStatus", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetTransactionStatus", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
@@ -218,7 +218,7 @@ func (s *TabletServerServiceImpl) GetTransactionStatus(request *GetTransactionSt
 // aborted.
 
 func (s *TabletServerServiceImpl) GetTransactionStatusAtParticipant(request *GetTransactionStatusAtParticipantRequestPB) (*GetTransactionStatusAtParticipantResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerService", "method", "GetTransactionStatusAtParticipant", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "GetTransactionStatusAtParticipant", "host", s.Messenger.GetHost(), "request", request)
 	response := &GetTransactionStatusAtParticipantResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "GetTransactionStatusAtParticipant", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -226,13 +226,13 @@ func (s *TabletServerServiceImpl) GetTransactionStatusAtParticipant(request *Get
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetTransactionStatusAtParticipant", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetTransactionStatusAtParticipant", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *TabletServerServiceImpl) AbortTransaction(request *AbortTransactionRequestPB) (*AbortTransactionResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerService", "method", "AbortTransaction", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "AbortTransaction", "host", s.Messenger.GetHost(), "request", request)
 	response := &AbortTransactionResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "AbortTransaction", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -240,13 +240,13 @@ func (s *TabletServerServiceImpl) AbortTransaction(request *AbortTransactionRequ
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "AbortTransaction", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "AbortTransaction", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *TabletServerServiceImpl) Truncate(request *TruncateRequestPB) (*TruncateResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerService", "method", "Truncate", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "Truncate", "host", s.Messenger.GetHost(), "request", request)
 	response := &TruncateResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "Truncate", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -254,13 +254,13 @@ func (s *TabletServerServiceImpl) Truncate(request *TruncateRequestPB) (*Truncat
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "Truncate", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "Truncate", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *TabletServerServiceImpl) GetTabletStatus(request *GetTabletStatusRequestPB) (*GetTabletStatusResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerService", "method", "GetTabletStatus", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "GetTabletStatus", "host", s.Messenger.GetHost(), "request", request)
 	response := &GetTabletStatusResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "GetTabletStatus", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -268,13 +268,13 @@ func (s *TabletServerServiceImpl) GetTabletStatus(request *GetTabletStatusReques
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetTabletStatus", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetTabletStatus", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *TabletServerServiceImpl) GetMasterAddresses(request *GetMasterAddressesRequestPB) (*GetMasterAddressesResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerService", "method", "GetMasterAddresses", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "GetMasterAddresses", "host", s.Messenger.GetHost(), "request", request)
 	response := &GetMasterAddressesResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "GetMasterAddresses", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -282,13 +282,13 @@ func (s *TabletServerServiceImpl) GetMasterAddresses(request *GetMasterAddresses
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetMasterAddresses", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetMasterAddresses", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *TabletServerServiceImpl) Publish(request *PublishRequestPB) (*PublishResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerService", "method", "Publish", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "Publish", "host", s.Messenger.GetHost(), "request", request)
 	response := &PublishResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "Publish", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -296,13 +296,13 @@ func (s *TabletServerServiceImpl) Publish(request *PublishRequestPB) (*PublishRe
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "Publish", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "Publish", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
 
 func (s *TabletServerServiceImpl) IsTabletServerReady(request *IsTabletServerReadyRequestPB) (*IsTabletServerReadyResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerService", "method", "IsTabletServerReady", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "IsTabletServerReady", "host", s.Messenger.GetHost(), "request", request)
 	response := &IsTabletServerReadyResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "IsTabletServerReady", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -310,7 +310,7 @@ func (s *TabletServerServiceImpl) IsTabletServerReady(request *IsTabletServerRea
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "IsTabletServerReady", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "IsTabletServerReady", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
@@ -318,7 +318,7 @@ func (s *TabletServerServiceImpl) IsTabletServerReady(request *IsTabletServerRea
 // Takes precreated transaction from this tserver.
 
 func (s *TabletServerServiceImpl) TakeTransaction(request *TakeTransactionRequestPB) (*TakeTransactionResponsePB, error) {
-	s.Log.V(1).Info("sending RPC message", "service", "yb.tserver.TabletServerService", "method", "TakeTransaction", "message", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "TakeTransaction", "host", s.Messenger.GetHost(), "request", request)
 	response := &TakeTransactionResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "TakeTransaction", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -326,7 +326,7 @@ func (s *TabletServerServiceImpl) TakeTransaction(request *TakeTransactionReques
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "TakeTransaction", "message", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "TakeTransaction", "host", s.Messenger.GetHost(), "response", response)
 
 	return response, nil
 }
