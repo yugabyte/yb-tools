@@ -60,7 +60,7 @@ type CalculatorServiceImpl struct {
 }
 
 func (s *CalculatorServiceImpl) Add(request *AddRequestPB) (*AddResponsePB, error) {
-	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "Add", "host", s.Messenger.GetHost(), "request", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "Add", "request", request)
 	response := &AddResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "Add", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -68,13 +68,13 @@ func (s *CalculatorServiceImpl) Add(request *AddRequestPB) (*AddResponsePB, erro
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Add", "host", s.Messenger.GetHost(), "response", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Add", "response", response)
 
 	return response, nil
 }
 
 func (s *CalculatorServiceImpl) Sleep(request *SleepRequestPB) (*SleepResponsePB, error) {
-	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "Sleep", "host", s.Messenger.GetHost(), "request", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "Sleep", "request", request)
 	response := &SleepResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "Sleep", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -82,13 +82,13 @@ func (s *CalculatorServiceImpl) Sleep(request *SleepRequestPB) (*SleepResponsePB
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Sleep", "host", s.Messenger.GetHost(), "response", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Sleep", "response", response)
 
 	return response, nil
 }
 
 func (s *CalculatorServiceImpl) Echo(request *EchoRequestPB) (*EchoResponsePB, error) {
-	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "Echo", "host", s.Messenger.GetHost(), "request", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "Echo", "request", request)
 	response := &EchoResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "Echo", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -96,13 +96,13 @@ func (s *CalculatorServiceImpl) Echo(request *EchoRequestPB) (*EchoResponsePB, e
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Echo", "host", s.Messenger.GetHost(), "response", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Echo", "response", response)
 
 	return response, nil
 }
 
 func (s *CalculatorServiceImpl) WhoAmI(request *WhoAmIRequestPB) (*WhoAmIResponsePB, error) {
-	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "WhoAmI", "host", s.Messenger.GetHost(), "request", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "WhoAmI", "request", request)
 	response := &WhoAmIResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "WhoAmI", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -110,13 +110,13 @@ func (s *CalculatorServiceImpl) WhoAmI(request *WhoAmIRequestPB) (*WhoAmIRespons
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "WhoAmI", "host", s.Messenger.GetHost(), "response", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "WhoAmI", "response", response)
 
 	return response, nil
 }
 
 func (s *CalculatorServiceImpl) TestArgumentsInDiffPackage(request *ReqDiffPackagePB) (*RespDiffPackagePB, error) {
-	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "TestArgumentsInDiffPackage", "host", s.Messenger.GetHost(), "request", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "TestArgumentsInDiffPackage", "request", request)
 	response := &RespDiffPackagePB{}
 
 	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "TestArgumentsInDiffPackage", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -124,13 +124,13 @@ func (s *CalculatorServiceImpl) TestArgumentsInDiffPackage(request *ReqDiffPacka
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "TestArgumentsInDiffPackage", "host", s.Messenger.GetHost(), "response", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "TestArgumentsInDiffPackage", "response", response)
 
 	return response, nil
 }
 
 func (s *CalculatorServiceImpl) Panic(request *PanicRequestPB) (*PanicResponsePB, error) {
-	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "Panic", "host", s.Messenger.GetHost(), "request", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "Panic", "request", request)
 	response := &PanicResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "Panic", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -138,13 +138,13 @@ func (s *CalculatorServiceImpl) Panic(request *PanicRequestPB) (*PanicResponsePB
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Panic", "host", s.Messenger.GetHost(), "response", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Panic", "response", response)
 
 	return response, nil
 }
 
 func (s *CalculatorServiceImpl) Ping(request *PingRequestPB) (*PingResponsePB, error) {
-	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "Ping", "host", s.Messenger.GetHost(), "request", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "Ping", "request", request)
 	response := &PingResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "Ping", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -152,13 +152,13 @@ func (s *CalculatorServiceImpl) Ping(request *PingRequestPB) (*PingResponsePB, e
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Ping", "host", s.Messenger.GetHost(), "response", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Ping", "response", response)
 
 	return response, nil
 }
 
 func (s *CalculatorServiceImpl) Disconnect(request *DisconnectRequestPB) (*DisconnectResponsePB, error) {
-	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "Disconnect", "host", s.Messenger.GetHost(), "request", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "Disconnect", "request", request)
 	response := &DisconnectResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "Disconnect", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -166,13 +166,13 @@ func (s *CalculatorServiceImpl) Disconnect(request *DisconnectRequestPB) (*Disco
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Disconnect", "host", s.Messenger.GetHost(), "response", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Disconnect", "response", response)
 
 	return response, nil
 }
 
 func (s *CalculatorServiceImpl) Forward(request *ForwardRequestPB) (*ForwardResponsePB, error) {
-	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "Forward", "host", s.Messenger.GetHost(), "request", request)
+	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "Forward", "request", request)
 	response := &ForwardResponsePB{}
 
 	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "Forward", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
@@ -180,7 +180,7 @@ func (s *CalculatorServiceImpl) Forward(request *ForwardRequestPB) (*ForwardResp
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Forward", "host", s.Messenger.GetHost(), "response", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Forward", "response", response)
 
 	return response, nil
 }

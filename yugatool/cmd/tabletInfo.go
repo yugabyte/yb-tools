@@ -17,7 +17,6 @@ package cmd
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/blang/vfs"
 	"github.com/spf13/cobra"
@@ -25,9 +24,9 @@ import (
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/consensus"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/tserver"
+	"github.com/yugabyte/yb-tools/yugatool/api/yugatool/config"
 	"github.com/yugabyte/yb-tools/yugatool/cmd/util"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
-	"github.com/yugabyte/yb-tools/yugatool/pkg/client/config"
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
@@ -63,23 +62,27 @@ func tabletInfo(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	c, err := client.Connect(&config.UniverseConfig{
-		Log:     log.WithName("client"),
-		Fs:      vfs.OS(),
-		Masters: hosts,
-		Timeout: time.Duration(dialTimeout) * time.Second,
-		SslOpts: &config.SslOptions{
-			SkipHostVerification: skipHostVerification,
-			CaCertPath:           caCert,
-			CertPath:             clientCert,
-			KeyPath:              clientKey,
+	c := &client.YBClient{
+		Log: log.WithName("client"),
+		Fs:  vfs.OS(),
+		Config: &config.UniverseConfigPB{
+			Masters:        hosts,
+			TimeoutSeconds: &dialTimeout,
+			SslOpts: &config.SslOptionsPB{
+				SkipHostVerification: &skipHostVerification,
+				CaCertPath:           &caCert,
+				CertPath:             &clientCert,
+				KeyPath:              &clientKey,
+			},
 		},
-	})
+	}
 
+	err = c.Connect()
 	if err != nil {
 		return err
 	}
 	defer c.Close()
+
 	for _, host := range c.TServersHostMap {
 		tablets, err := host.TabletServerService.ListTablets(&tserver.ListTabletsRequestPB{})
 		if err != nil {

@@ -8,8 +8,9 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
-	"github.com/yugabyte/yb-tools/yugatool/pkg/client/config"
+	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client/dial"
+	"github.com/yugabyte/yb-tools/yugatool/pkg/util"
 )
 
 type Session struct {
@@ -17,25 +18,20 @@ type Session struct {
 	conn         io.ReadWriteCloser
 	messageCount int32
 
-	Host   string
+	Host   *common.HostPortPB
 	Log    logr.Logger
 	Dialer dial.Dialer
 	Ping   func(*Session) error
 }
 
-func NewSession(host string, universeConfig *config.UniverseConfig, ping func(*Session) error) (*Session, error) {
-	dialer, err := universeConfig.GetDialer()
-	if err != nil {
-		return &Session{}, err
-	}
-
+func NewSession(log logr.Logger, host *common.HostPortPB, dialer dial.Dialer, ping func(*Session) error) (*Session, error) {
 	s := &Session{
 		Host:   host,
-		Log:    universeConfig.Log.WithValues("host", host),
+		Log:    log,
 		Dialer: dialer,
 		Ping:   ping,
 	}
-	err = s.Connect(host)
+	err := s.Connect(host)
 	return s, err
 }
 
@@ -65,10 +61,10 @@ func (s *Session) GenerateCallID() int32 {
 	return count
 }
 
-func (s *Session) Connect(host string) error {
+func (s *Session) Connect(host *common.HostPortPB) error {
 	var err error
 	s.Log.V(1).Info("connecting to host")
-	s.conn, err = s.Dialer.Dial("tcp", host)
+	s.conn, err = s.Dialer.Dial("tcp", util.HostPortString(host))
 	if err != nil {
 		return err
 	}

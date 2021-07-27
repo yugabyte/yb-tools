@@ -12,22 +12,22 @@ type Dialer interface {
 }
 
 type NetDialer struct {
-	Timeout time.Duration
+	TimeoutSeconds int64
 }
 
 func (d *NetDialer) Dial(network, address string) (io.ReadWriteCloser, error) {
-	netDialer := &net.Dialer{Timeout: d.Timeout}
+	netDialer := &net.Dialer{Timeout: time.Duration(d.TimeoutSeconds) * time.Second}
 	return netDialer.Dial(network, address)
 }
 
 type TLSDialer struct {
-	Timeout time.Duration
-	Config  *tls.Config
+	TimeoutSeconds int64
+	Config         *tls.Config
 }
 
 func (d *TLSDialer) Dial(network, address string) (io.ReadWriteCloser, error) {
 	sslDialer := tls.Dialer{
-		NetDialer: &net.Dialer{Timeout: d.Timeout},
+		NetDialer: &net.Dialer{Timeout: time.Duration(d.TimeoutSeconds) * time.Second},
 		Config:    d.Config,
 	}
 	return sslDialer.Dial(network, address)
