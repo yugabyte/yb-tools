@@ -152,7 +152,3 @@ func (m *MessengerImpl) getMessageLen() (uint32, error) {
 
 	return binary.BigEndian.Uint32(responseLenBuf), nil
 }
-
-func (m *MessengerImpl) GetHost() string {
-	return m.Session.Host
-}

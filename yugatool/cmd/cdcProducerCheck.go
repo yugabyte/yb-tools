@@ -17,7 +17,6 @@ package cmd
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/blang/vfs"
 	"github.com/go-logr/logr"
@@ -28,10 +27,10 @@ import (
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/cdc"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/master"
+	"github.com/yugabyte/yb-tools/yugatool/api/yugatool/config"
 	"github.com/yugabyte/yb-tools/yugatool/api/yugatool/healthcheck"
 	"github.com/yugabyte/yb-tools/yugatool/cmd/util"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
-	"github.com/yugabyte/yb-tools/yugatool/pkg/client/config"
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
@@ -58,19 +57,22 @@ func cdcProducerCheck(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	consumerClient, err := client.Connect(&config.UniverseConfig{
-		Log:     log.WithName("consumerClient"),
-		Fs:      vfs.OS(),
-		Masters: hosts,
-		Timeout: time.Duration(dialTimeout) * time.Second,
-		SslOpts: &config.SslOptions{
-			SkipHostVerification: skipHostVerification,
-			CaCertPath:           caCert,
-			CertPath:             clientCert,
-			KeyPath:              clientKey,
+	consumerClient := &client.YBClient{
+		Log: log.WithName("ConsumerClient"),
+		Fs:  vfs.OS(),
+		Config: &config.UniverseConfigPB{
+			Masters:        hosts,
+			TimeoutSeconds: &dialTimeout,
+			SslOpts: &config.SslOptionsPB{
+				SkipHostVerification: &skipHostVerification,
+				CaCertPath:           &caCert,
+				CertPath:             &clientCert,
+				KeyPath:              &clientKey,
+			},
 		},
-	})
+	}
 
+	err = consumerClient.Connect()
 	if err != nil {
 		return err
 	}
@@ -110,25 +112,23 @@ func (r *CDCProducerReport) RunCheck() error {
 		r.Log.V(1).Info("consumer and producer UUID match")
 	}
 
-	var masters []string
-	for _, m := range r.Producer.GetMasterAddrs() {
-		masterHost := fmt.Sprintf("%s:%d", m.GetHost(), m.GetPort())
-		masters = append(masters, masterHost)
+	r.Log.V(1).Info("connecting to producer")
+	producerClient := &client.YBClient{
+		Log: r.Log.WithName("ProducerClient"),
+		Fs:  vfs.OS(),
+		Config: &config.UniverseConfigPB{
+			Masters:        r.Producer.GetMasterAddrs(),
+			TimeoutSeconds: &dialTimeout,
+			SslOpts: &config.SslOptionsPB{
+				SkipHostVerification: &skipHostVerification,
+				CaCertPath:           &caCert,
+				CertPath:             &clientCert,
+				KeyPath:              &clientKey,
+			},
+		},
 	}
 
-	r.Log.V(1).Info("connecting to producer")
-	producerClient, err := client.Connect(&config.UniverseConfig{
-		Log:     r.Log.WithName("producerClient"),
-		Fs:      vfs.OS(),
-		Masters: masters,
-		Timeout: time.Duration(dialTimeout) * time.Second,
-		SslOpts: &config.SslOptions{
-			SkipHostVerification: skipHostVerification,
-			CaCertPath:           caCert,
-			CertPath:             clientCert,
-			KeyPath:              clientKey,
-		},
-	})
+	err := producerClient.Connect()
 	if err != nil {
 		return err
 	}

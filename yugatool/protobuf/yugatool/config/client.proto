@@ -1,0 +1,36 @@
+/*
+Copyright © 2021 Yugabyte Support
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+syntax = "proto2";
+
+package yugatool.config;
+
+option java_package = "org.yugatool.config";
+
+import "yb/common/common.proto";
+
+
+message SslOptionsPB {
+  required bool SkipHostVerification = 1;
+  required string CaCertPath = 2;
+  required string CertPath = 3;
+  required string KeyPath = 4;
+}
+
+message UniverseConfigPB {
+  repeated yb.HostPortPB masters = 1;
+  required int64 timeout_seconds = 2;
+  optional SslOptionsPB ssl_opts = 3;
+}

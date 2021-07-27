@@ -27,7 +27,7 @@ import (
 var (
 	cfgFile                       string
 	debug                         bool
-	dialTimeout                   int
+	dialTimeout                   int64
 	masterAddresses               string
 	caCert, clientCert, clientKey string
 	skipHostVerification          bool
@@ -54,7 +54,7 @@ func init() {
 	flags.StringVar(&cfgFile, "config", "", "config file (default is $HOME/.yugatool.yaml)")
 	flags.BoolVar(&debug, "debug", false, "debug mode")
 	flags.StringVarP(&masterAddresses, "master-address", "m", "", "The master addresses")
-	flags.IntVar(&dialTimeout, "dialtimeout", 10, "number of seconds for dial timeouts")
+	flags.Int64Var(&dialTimeout, "dialtimeout", 10, "number of seconds for dial timeouts")
 	flags.BoolVar(&skipHostVerification, "skiphostverification", false, "skip ssl host verification")
 	flags.StringVarP(&caCert, "cacert", "c", "", "the path to the CA certificate")
 	flags.StringVar(&clientCert, "client-cert", "", "the path to the client certificate")
