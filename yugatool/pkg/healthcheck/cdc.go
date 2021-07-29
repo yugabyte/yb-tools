@@ -1,112 +1,48 @@
-/*
-Copyright © 2021 Yugabyte Support
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-package cmd
+package healthcheck
 
 import (
-	"fmt"
-
 	"github.com/blang/vfs"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	. "github.com/icza/gox/gox"
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/cdc"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/master"
 	"github.com/yugabyte/yb-tools/yugatool/api/yugatool/config"
 	"github.com/yugabyte/yb-tools/yugatool/api/yugatool/healthcheck"
-	"github.com/yugabyte/yb-tools/yugatool/cmd/util"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
-// clusterInfoCmd represents the clusterInfo command
-var cdcProducerCheckCmd = &cobra.Command{
-	Use:   "cdc_producer_check",
-	Short: "Check for xCluster replication configuration issues",
-	Long:  `Check for xCluster replication configuration issues between yugabyte clusters.`,
-	RunE:  cdcProducerCheck,
-}
-
-func init() {
-	rootCmd.AddCommand(cdcProducerCheckCmd)
-}
-
-func cdcProducerCheck(_ *cobra.Command, _ []string) error {
-	log, err := util.GetLogger("cdc_producer_check", debug)
-	if err != nil {
-		return err
-	}
-
-	hosts, err := util.ValidateMastersFlag(masterAddresses)
-	if err != nil {
-		return err
-	}
-
-	consumerClient := &client.YBClient{
-		Log: log.WithName("ConsumerClient"),
-		Fs:  vfs.OS(),
-		Config: &config.UniverseConfigPB{
-			Masters:        hosts,
-			TimeoutSeconds: &dialTimeout,
-			SslOpts: &config.SslOptionsPB{
-				SkipHostVerification: &skipHostVerification,
-				CaCertPath:           &caCert,
-				CertPath:             &clientCert,
-				KeyPath:              &clientKey,
-			},
-		},
-	}
-
-	err = consumerClient.Connect()
-	if err != nil {
-		return err
-	}
-	defer consumerClient.Close()
-
-	return RunCDCProducerCheck(log, consumerClient)
-}
-
 type CDCProducerReport struct {
 	*healthcheck.CDCProducerReportPB
 
-	Log                   logr.Logger
-	ConsumerClient        *client.YBClient
-	ConsumerClusterConfig *master.SysClusterConfigEntryPB
-	Producer              *cdc.ProducerEntryPB
+	Log            logr.Logger
+	ConsumerClient *client.YBClient
+	ConsumerUUID   string
+	Producer       *cdc.ProducerEntryPB
+	Config         *config.UniverseConfigPB
 }
 
-func NewCDCProducerReport(log logr.Logger, consumerClient *client.YBClient, consumerClusterConfig *master.SysClusterConfigEntryPB, producerID string, producer *cdc.ProducerEntryPB) *CDCProducerReport {
+func NewCDCProducerReport(log logr.Logger, consumerClient *client.YBClient, consumerClusterConfig *config.UniverseConfigPB, consumerUUID string, producerID string, producer *cdc.ProducerEntryPB) *CDCProducerReport {
 	return &CDCProducerReport{
 		CDCProducerReportPB: &healthcheck.CDCProducerReportPB{
 			ProducerId:              &producerID,
 			ProducerMasterAddresses: producer.GetMasterAddrs(),
 		},
-		Log:                   log.WithName("CDCProducerReport").WithValues("producerID", producerID),
-		ConsumerClient:        consumerClient,
-		ConsumerClusterConfig: consumerClusterConfig,
-		Producer:              producer,
+		Log:            log.WithName("CDCProducerReport").WithValues("producerID", producerID),
+		ConsumerClient: consumerClient,
+		ConsumerUUID:   consumerUUID,
+		Producer:       producer,
+		Config:         consumerClusterConfig,
 	}
 }
 
 func (r *CDCProducerReport) RunCheck() error {
 	reportErrors := &healthcheck.CDCProducerReportPBErrorlist{}
 	errorSet := false
-	if r.GetProducerId() == r.ConsumerClusterConfig.GetClusterUuid() {
+	if r.GetProducerId() == r.ConsumerUUID {
 		reportErrors.MastersReferenceSelf = NewBool(true)
 		// TODO: check master addresses directly
 		r.Log.V(1).Info("consumer and producer UUID match")
@@ -114,18 +50,9 @@ func (r *CDCProducerReport) RunCheck() error {
 
 	r.Log.V(1).Info("connecting to producer")
 	producerClient := &client.YBClient{
-		Log: r.Log.WithName("ProducerClient"),
-		Fs:  vfs.OS(),
-		Config: &config.UniverseConfigPB{
-			Masters:        r.Producer.GetMasterAddrs(),
-			TimeoutSeconds: &dialTimeout,
-			SslOpts: &config.SslOptionsPB{
-				SkipHostVerification: &skipHostVerification,
-				CaCertPath:           &caCert,
-				CertPath:             &clientCert,
-				KeyPath:              &clientKey,
-			},
-		},
+		Log:    r.Log.WithName("ProducerClient"),
+		Fs:     vfs.OS(),
+		Config: r.Config,
 	}
 
 	err := producerClient.Connect()
@@ -379,39 +306,4 @@ func GetReplicationLag(replicationIndexes *healthcheck.CDCReplicatedIndexListPB)
 		}
 	}
 	return tabletsWithLag
-}
-
-func RunCDCProducerCheck(log logr.Logger, consumerClient *client.YBClient) error {
-	clusterConfig, err := consumerClient.Master.MasterService.GetMasterClusterConfig(&master.GetMasterClusterConfigRequestPB{})
-	if err != nil {
-		return err
-	}
-
-	if clusterConfig.GetError() != nil {
-		return errors.Errorf("Failed to get cluster config: %s", clusterConfig.GetError())
-	}
-
-	for producerID, producer := range clusterConfig.GetClusterConfig().GetConsumerRegistry().GetProducerMap() {
-		producerReport := NewCDCProducerReport(log, consumerClient, clusterConfig.GetClusterConfig(), producerID, producer)
-
-		err := producerReport.RunCheck()
-		if err != nil {
-			return err
-		}
-		if producerReport.Errors != nil {
-			fmt.Println(prototext.Format(producerReport))
-		}
-
-		// TODO: Check that the schema matches for both tables - check for problems such as adding/removing columns
-		// TODO: Check that all masters are actually valid on producer
-		//        - The master is actually in the producer cluster, and not in another cluster
-		//        - The master is reachable
-		// TODO: Check that every master in the producer is valid in the producer map
-		// TODO: Confirm that the UUID of the universe actually matches the name of the CDC stream (it is never actually checked when creating the stream)
-		// TODO: Report if streams are disabled
-		// TODO: Check for multiple copies of replication of the same table
-		// TODO: Check if table was deleted
-		// TODO: Check that the producer isn't on the same system as this one
-	}
-	return nil
 }
