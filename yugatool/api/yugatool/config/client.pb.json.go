@@ -21,11 +21,11 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-func (m *SslOptionsPB) MarshalJSON() ([]byte, error) {
+func (m *TlsOptionsPB) MarshalJSON() ([]byte, error) {
 	return protojson.MarshalOptions{}.Marshal(m)
 }
 
-func (m *SslOptionsPB) UnmarshalJSON(b []byte) error {
+func (m *TlsOptionsPB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
 

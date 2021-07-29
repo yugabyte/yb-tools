@@ -36,7 +36,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type SslOptionsPB struct {
+type TlsOptionsPB struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -47,8 +47,8 @@ type SslOptionsPB struct {
 	KeyPath              *string `protobuf:"bytes,4,req,name=KeyPath" json:"KeyPath,omitempty"`
 }
 
-func (x *SslOptionsPB) Reset() {
-	*x = SslOptionsPB{}
+func (x *TlsOptionsPB) Reset() {
+	*x = TlsOptionsPB{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_yugatool_config_client_proto_msgTypes[0]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -56,13 +56,13 @@ func (x *SslOptionsPB) Reset() {
 	}
 }
 
-func (x *SslOptionsPB) String() string {
+func (x *TlsOptionsPB) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SslOptionsPB) ProtoMessage() {}
+func (*TlsOptionsPB) ProtoMessage() {}
 
-func (x *SslOptionsPB) ProtoReflect() protoreflect.Message {
+func (x *TlsOptionsPB) ProtoReflect() protoreflect.Message {
 	mi := &file_yugatool_config_client_proto_msgTypes[0]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -74,33 +74,33 @@ func (x *SslOptionsPB) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SslOptionsPB.ProtoReflect.Descriptor instead.
-func (*SslOptionsPB) Descriptor() ([]byte, []int) {
+// Deprecated: Use TlsOptionsPB.ProtoReflect.Descriptor instead.
+func (*TlsOptionsPB) Descriptor() ([]byte, []int) {
 	return file_yugatool_config_client_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *SslOptionsPB) GetSkipHostVerification() bool {
+func (x *TlsOptionsPB) GetSkipHostVerification() bool {
 	if x != nil && x.SkipHostVerification != nil {
 		return *x.SkipHostVerification
 	}
 	return false
 }
 
-func (x *SslOptionsPB) GetCaCertPath() string {
+func (x *TlsOptionsPB) GetCaCertPath() string {
 	if x != nil && x.CaCertPath != nil {
 		return *x.CaCertPath
 	}
 	return ""
 }
 
-func (x *SslOptionsPB) GetCertPath() string {
+func (x *TlsOptionsPB) GetCertPath() string {
 	if x != nil && x.CertPath != nil {
 		return *x.CertPath
 	}
 	return ""
 }
 
-func (x *SslOptionsPB) GetKeyPath() string {
+func (x *TlsOptionsPB) GetKeyPath() string {
 	if x != nil && x.KeyPath != nil {
 		return *x.KeyPath
 	}
@@ -114,7 +114,7 @@ type UniverseConfigPB struct {
 
 	Masters        []*common.HostPortPB `protobuf:"bytes,1,rep,name=masters" json:"masters,omitempty"`
 	TimeoutSeconds *int64               `protobuf:"varint,2,req,name=timeout_seconds,json=timeoutSeconds" json:"timeout_seconds,omitempty"`
-	SslOpts        *SslOptionsPB        `protobuf:"bytes,3,opt,name=ssl_opts,json=sslOpts" json:"ssl_opts,omitempty"`
+	TlsOpts        *TlsOptionsPB        `protobuf:"bytes,3,opt,name=tls_opts,json=tlsOpts" json:"tls_opts,omitempty"`
 }
 
 func (x *UniverseConfigPB) Reset() {
@@ -163,9 +163,9 @@ func (x *UniverseConfigPB) GetTimeoutSeconds() int64 {
 	return 0
 }
 
-func (x *UniverseConfigPB) GetSslOpts() *SslOptionsPB {
+func (x *UniverseConfigPB) GetTlsOpts() *TlsOptionsPB {
 	if x != nil {
-		return x.SslOpts
+		return x.TlsOpts
 	}
 	return nil
 }
@@ -177,7 +177,7 @@ var file_yugatool_config_client_proto_rawDesc = []byte{
 	0x67, 0x2f, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x0f,
 	0x79, 0x75, 0x67, 0x61, 0x74, 0x6f, 0x6f, 0x6c, 0x2e, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x1a,
 	0x16, 0x79, 0x62, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f,
-	0x6e, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x98, 0x01, 0x0a, 0x0c, 0x53, 0x73, 0x6c, 0x4f,
+	0x6e, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x98, 0x01, 0x0a, 0x0c, 0x54, 0x6c, 0x73, 0x4f,
 	0x70, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x50, 0x42, 0x12, 0x32, 0x0a, 0x14, 0x53, 0x6b, 0x69, 0x70,
 	0x48, 0x6f, 0x73, 0x74, 0x56, 0x65, 0x72, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e,
 	0x18, 0x01, 0x20, 0x02, 0x28, 0x08, 0x52, 0x14, 0x53, 0x6b, 0x69, 0x70, 0x48, 0x6f, 0x73, 0x74,
@@ -193,10 +193,10 @@ var file_yugatool_config_client_proto_rawDesc = []byte{
 	0x73, 0x74, 0x50, 0x6f, 0x72, 0x74, 0x50, 0x42, 0x52, 0x07, 0x6d, 0x61, 0x73, 0x74, 0x65, 0x72,
 	0x73, 0x12, 0x27, 0x0a, 0x0f, 0x74, 0x69, 0x6d, 0x65, 0x6f, 0x75, 0x74, 0x5f, 0x73, 0x65, 0x63,
 	0x6f, 0x6e, 0x64, 0x73, 0x18, 0x02, 0x20, 0x02, 0x28, 0x03, 0x52, 0x0e, 0x74, 0x69, 0x6d, 0x65,
-	0x6f, 0x75, 0x74, 0x53, 0x65, 0x63, 0x6f, 0x6e, 0x64, 0x73, 0x12, 0x38, 0x0a, 0x08, 0x73, 0x73,
-	0x6c, 0x5f, 0x6f, 0x70, 0x74, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1d, 0x2e, 0x79,
-	0x75, 0x67, 0x61, 0x74, 0x6f, 0x6f, 0x6c, 0x2e, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2e, 0x53,
-	0x73, 0x6c, 0x4f, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x50, 0x42, 0x52, 0x07, 0x73, 0x73, 0x6c,
+	0x6f, 0x75, 0x74, 0x53, 0x65, 0x63, 0x6f, 0x6e, 0x64, 0x73, 0x12, 0x38, 0x0a, 0x08, 0x74, 0x6c,
+	0x73, 0x5f, 0x6f, 0x70, 0x74, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1d, 0x2e, 0x79,
+	0x75, 0x67, 0x61, 0x74, 0x6f, 0x6f, 0x6c, 0x2e, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2e, 0x54,
+	0x6c, 0x73, 0x4f, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x50, 0x42, 0x52, 0x07, 0x74, 0x6c, 0x73,
 	0x4f, 0x70, 0x74, 0x73, 0x42, 0x15, 0x0a, 0x13, 0x6f, 0x72, 0x67, 0x2e, 0x79, 0x75, 0x67, 0x61,
 	0x74, 0x6f, 0x6f, 0x6c, 0x2e, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67,
 }
@@ -215,13 +215,13 @@ func file_yugatool_config_client_proto_rawDescGZIP() []byte {
 
 var file_yugatool_config_client_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_yugatool_config_client_proto_goTypes = []interface{}{
-	(*SslOptionsPB)(nil),      // 0: yugatool.config.SslOptionsPB
+	(*TlsOptionsPB)(nil),      // 0: yugatool.config.TlsOptionsPB
 	(*UniverseConfigPB)(nil),  // 1: yugatool.config.UniverseConfigPB
 	(*common.HostPortPB)(nil), // 2: yb.HostPortPB
 }
 var file_yugatool_config_client_proto_depIdxs = []int32{
 	2, // 0: yugatool.config.UniverseConfigPB.masters:type_name -> yb.HostPortPB
-	0, // 1: yugatool.config.UniverseConfigPB.ssl_opts:type_name -> yugatool.config.SslOptionsPB
+	0, // 1: yugatool.config.UniverseConfigPB.tls_opts:type_name -> yugatool.config.TlsOptionsPB
 	2, // [2:2] is the sub-list for method output_type
 	2, // [2:2] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
@@ -236,7 +236,7 @@ func file_yugatool_config_client_proto_init() {
 	}
 	if !protoimpl.UnsafeEnabled {
 		file_yugatool_config_client_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SslOptionsPB); i {
+			switch v := v.(*TlsOptionsPB); i {
 			case 0:
 				return &v.state
 			case 1:

@@ -68,7 +68,7 @@ func tabletInfo(cmd *cobra.Command, args []string) error {
 		Config: &config.UniverseConfigPB{
 			Masters:        hosts,
 			TimeoutSeconds: &dialTimeout,
-			SslOpts: &config.SslOptionsPB{
+			TlsOpts: &config.TlsOptionsPB{
 				SkipHostVerification: &skipHostVerification,
 				CaCertPath:           &caCert,
 				CertPath:             &clientCert,

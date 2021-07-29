@@ -22,7 +22,7 @@ option java_package = "org.yugatool.config";
 import "yb/common/common.proto";
 
 
-message SslOptionsPB {
+message TlsOptionsPB {
   required bool SkipHostVerification = 1;
   required string CaCertPath = 2;
   required string CertPath = 3;
@@ -32,5 +32,5 @@ message SslOptionsPB {
 message UniverseConfigPB {
   repeated yb.HostPortPB masters = 1;
   required int64 timeout_seconds = 2;
-  optional SslOptionsPB ssl_opts = 3;
+  optional TlsOptionsPB tls_opts = 3;
 }

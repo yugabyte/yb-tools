@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"reflect"
 
 	"github.com/blang/vfs"
 	"github.com/go-logr/logr"
@@ -14,6 +13,7 @@ import (
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/master"
 	"github.com/yugabyte/yb-tools/yugatool/api/yugatool/config"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client/dial"
+	"github.com/yugabyte/yb-tools/yugatool/pkg/util"
 )
 
 const DefaultMasterPort = 7100
@@ -105,12 +105,7 @@ func (c *YBClient) GetDialer() (dial.Dialer, error) {
 	if c.dialer != nil {
 		return c.dialer, nil
 	}
-	if c.Config.SslOpts == nil || reflect.DeepEqual(*c.Config.GetSslOpts(), config.SslOptionsPB{
-		SkipHostVerification: NewBool(false),
-		CaCertPath:           NewString(""),
-		CertPath:             NewString(""),
-		KeyPath:              NewString(""),
-	}) {
+	if !util.HasTLS(c.Config.GetTlsOpts()) {
 		netDialer := &dial.NetDialer{
 			TimeoutSeconds: c.Config.GetTimeoutSeconds(),
 		}
@@ -119,11 +114,11 @@ func (c *YBClient) GetDialer() (dial.Dialer, error) {
 	}
 
 	tlsConfig := &tls.Config{
-		InsecureSkipVerify: c.Config.GetSslOpts().GetSkipHostVerification(),
+		InsecureSkipVerify: c.Config.GetTlsOpts().GetSkipHostVerification(),
 	}
 
-	if c.Config.GetSslOpts().GetCaCertPath() != "" {
-		f, err := vfs.ReadFile(c.Fs, c.Config.GetSslOpts().GetCaCertPath())
+	if c.Config.GetTlsOpts().GetCaCertPath() != "" {
+		f, err := vfs.ReadFile(c.Fs, c.Config.GetTlsOpts().GetCaCertPath())
 		if err != nil {
 			return nil, err
 		}
@@ -131,25 +126,25 @@ func (c *YBClient) GetDialer() (dial.Dialer, error) {
 			tlsConfig.RootCAs = x509.NewCertPool()
 		}
 		if ok := tlsConfig.RootCAs.AppendCertsFromPEM(f); !ok {
-			return nil, errors.Errorf("unable to add %s to the CA list", c.Config.GetSslOpts().GetCaCertPath())
+			return nil, errors.Errorf("unable to add %s to the CA list", c.Config.GetTlsOpts().GetCaCertPath())
 		}
 	}
 
-	if c.Config.GetSslOpts().GetCertPath() != "" || c.Config.GetSslOpts().GetKeyPath() != "" {
-		if c.Config.GetSslOpts().GetKeyPath() == "" || c.Config.GetSslOpts().GetCertPath() == "" {
+	if c.Config.GetTlsOpts().GetCertPath() != "" || c.Config.GetTlsOpts().GetKeyPath() != "" {
+		if c.Config.GetTlsOpts().GetKeyPath() == "" || c.Config.GetTlsOpts().GetCertPath() == "" {
 			return nil, errors.New("client certificate and key must both be set")
 		}
-		sslCert, err := vfs.ReadFile(c.Fs, c.Config.GetSslOpts().GetCertPath())
+		tlsCert, err := vfs.ReadFile(c.Fs, c.Config.GetTlsOpts().GetCertPath())
 		if err != nil {
 			return c.dialer, fmt.Errorf("unable to read x509 certificate: %w", err)
 		}
 
-		sslKey, err := vfs.ReadFile(c.Fs, c.Config.GetSslOpts().GetKeyPath())
+		tlsKey, err := vfs.ReadFile(c.Fs, c.Config.GetTlsOpts().GetKeyPath())
 		if err != nil {
 			return c.dialer, fmt.Errorf("unable to read client key: %w", err)
 		}
 
-		tlsCertificate, err := tls.X509KeyPair(sslCert, sslKey)
+		tlsCertificate, err := tls.X509KeyPair(tlsCert, tlsKey)
 		if err != nil {
 			return c.dialer, fmt.Errorf("unable to read x509 key pair: %w", err)
 		}

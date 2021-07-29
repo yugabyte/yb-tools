@@ -44,15 +44,15 @@ var _ = Describe("Client", func() {
 		})
 
 		Context("NetDialer", func() {
-			When("SSlOpts is not set", func() {
+			When("TlsOpts is not set", func() {
 				It("returns a NetDialer", func() {
 					Expect(dialer).To(BeEquivalentTo(&dial.NetDialer{TimeoutSeconds: dialTimeout}))
 					Expect(dialerError).NotTo(HaveOccurred())
 				})
 			})
-			When("SSlOpts is the default", func() {
+			When("TlsOpts is the default", func() {
 				BeforeEach(func() {
-					yugabyteClient.Config.SslOpts = &config.SslOptionsPB{
+					yugabyteClient.Config.TlsOpts = &config.TlsOptionsPB{
 						SkipHostVerification: NewBool(false),
 						CaCertPath:           NewString(""),
 						CertPath:             NewString(""),
@@ -66,14 +66,14 @@ var _ = Describe("Client", func() {
 			})
 		})
 
-		Context("SSLDialer", func() {
+		Context("TLSDialer", func() {
 			var (
 				CaCertPath = "/ca.crt"
 				CertPath   = "/yugabyte.crt"
 				KeyPath    = "/yugabyte.key"
 			)
 			BeforeEach(func() {
-				yugabyteClient.Config.SslOpts = &config.SslOptionsPB{
+				yugabyteClient.Config.TlsOpts = &config.TlsOptionsPB{
 					SkipHostVerification: NewBool(false),
 					CaCertPath:           NewString(CaCertPath),
 					CertPath:             NewString(CertPath),
@@ -153,7 +153,7 @@ var _ = Describe("Client", func() {
 			})
 			When("a client certificate is supplied without a correponding client key", func() {
 				BeforeEach(func() {
-					yugabyteClient.Config.GetSslOpts().CertPath = nil
+					yugabyteClient.Config.GetTlsOpts().CertPath = nil
 				})
 				It("returns an error", func() {
 					Expect(dialerError).To(MatchError("client certificate and key must both be set"))
@@ -161,7 +161,7 @@ var _ = Describe("Client", func() {
 			})
 			When("skiphostverification is set", func() {
 				BeforeEach(func() {
-					yugabyteClient.Config.SslOpts = &config.SslOptionsPB{SkipHostVerification: NewBool(true)}
+					yugabyteClient.Config.TlsOpts = &config.TlsOptionsPB{SkipHostVerification: NewBool(true)}
 				})
 				It("returns a TLSDialer", func() {
 					Expect(dialerError).NotTo(HaveOccurred())
