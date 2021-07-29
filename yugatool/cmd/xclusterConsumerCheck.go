@@ -58,7 +58,7 @@ func cdcProducerCheck(_ *cobra.Command, _ []string) error {
 		Config: &config.UniverseConfigPB{
 			Masters:        hosts,
 			TimeoutSeconds: &dialTimeout,
-			SslOpts: &config.SslOptionsPB{
+			TlsOpts: &config.TlsOptionsPB{
 				SkipHostVerification: &skipHostVerification,
 				CaCertPath:           &caCert,
 				CertPath:             &clientCert,
@@ -90,7 +90,7 @@ func RunXClusterConsumerCheck(log logr.Logger, consumerClient *client.YBClient) 
 		consumerUniverseConfig := &config.UniverseConfigPB{
 			Masters:        producer.GetMasterAddrs(),
 			TimeoutSeconds: consumerClient.Config.TimeoutSeconds,
-			SslOpts:        consumerClient.Config.SslOpts,
+			TlsOpts:        consumerClient.Config.TlsOpts,
 		}
 
 		producerReport := healthcheck.NewCDCProducerReport(log, consumerClient, consumerUniverseConfig, clusterConfig.GetClusterConfig().GetClusterUuid(), producerID, producer)

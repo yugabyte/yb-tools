@@ -26,9 +26,9 @@ type TLSDialer struct {
 }
 
 func (d *TLSDialer) Dial(network, address string) (io.ReadWriteCloser, error) {
-	sslDialer := tls.Dialer{
+	tlsDialer := tls.Dialer{
 		NetDialer: &net.Dialer{Timeout: time.Duration(d.TimeoutSeconds) * time.Second},
 		Config:    d.Config,
 	}
-	return sslDialer.Dial(network, address)
+	return tlsDialer.Dial(network, address)
 }

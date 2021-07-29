@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
+	"github.com/yugabyte/yb-tools/yugatool/api/yugatool/config"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/util"
 )
 
@@ -37,6 +38,36 @@ var _ = Describe("Util", func() {
 			Entry("an hostname hostport", "master-1.common.svc.local", false),
 			// TODO: What to do about notation like this?
 			// Entry("an IPv4 literal hostport", &common.HostPortPB{Host: NewString("::FFFF:50.214.15.3"), Port: NewUint32(7100)}, "[::FFFF:50.214.15.3]:7100"),
+		)
+	})
+
+	Context("IsTLS()", func() {
+		DescribeTable("when given TlsOptionsPB", func(tlsOptions *config.TlsOptionsPB, expected bool) {
+			hasTLS := util.HasTLS(tlsOptions)
+
+			Expect(hasTLS).To(Equal(expected))
+		},
+			Entry("a nil TlsOptionsPB", nil, false),
+			Entry("an empty TlsOptionsPB", &config.TlsOptionsPB{}, false),
+			Entry("TlsOptionsPB with all defaults", &config.TlsOptionsPB{
+				SkipHostVerification: NewBool(false),
+				CaCertPath:           NewString(""),
+				CertPath:             NewString(""),
+				KeyPath:              NewString(""),
+			}, false),
+			Entry("TlsOptionsPB with just SkipHostVerification set to false", &config.TlsOptionsPB{
+				SkipHostVerification: NewBool(false),
+			}, false),
+			Entry("TlsOptionsPB with just SkipHostVerification set to true", &config.TlsOptionsPB{
+				SkipHostVerification: NewBool(true),
+			}, true),
+			Entry("TlsOptionsPB with CaCertPath set", &config.TlsOptionsPB{
+				CaCertPath: NewString("/test.crt"),
+			}, true),
+			Entry("TlsOptionsPB with CaCertPath set", &config.TlsOptionsPB{
+				CertPath: NewString("cert.set"),
+				KeyPath:  NewString("key.set"),
+			}, true),
 		)
 	})
 })

@@ -55,7 +55,7 @@ func init() {
 	flags.BoolVar(&debug, "debug", false, "debug mode")
 	flags.StringVarP(&masterAddresses, "master-address", "m", "", "The master addresses")
 	flags.Int64Var(&dialTimeout, "dialtimeout", 10, "number of seconds for dial timeouts")
-	flags.BoolVar(&skipHostVerification, "skiphostverification", false, "skip ssl host verification")
+	flags.BoolVar(&skipHostVerification, "skiphostverification", false, "skip tls host verification")
 	flags.StringVarP(&caCert, "cacert", "c", "", "the path to the CA certificate")
 	flags.StringVar(&clientCert, "client-cert", "", "the path to the client certificate")
 	flags.StringVar(&clientKey, "client-key", "", "the path to the client key file")

@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
+	"github.com/yugabyte/yb-tools/yugatool/api/yugatool/config"
 )
 
 func HostPortString(host *common.HostPortPB) string {
@@ -26,4 +27,19 @@ func IsBasicIPv6(host string) bool {
 	}
 
 	return true
+}
+
+func HasTLS(tlsOptions *config.TlsOptionsPB) bool {
+	if tlsOptions == nil {
+		return false
+	}
+
+	if tlsOptions.GetSkipHostVerification() ||
+		tlsOptions.GetCaCertPath() != "" ||
+		tlsOptions.GetCertPath() != "" ||
+		tlsOptions.GetCaCertPath() != "" {
+		return true
+	}
+
+	return false
 }
