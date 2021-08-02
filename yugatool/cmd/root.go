@@ -53,7 +53,7 @@ func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&cfgFile, "config", "", "config file (default is $HOME/.yugatool.yaml)")
 	flags.BoolVar(&debug, "debug", false, "debug mode")
-	flags.StringVarP(&masterAddresses, "master-address", "m", "", "The master addresses")
+	flags.StringVarP(&masterAddresses, "master-address", "m", "", "comma-separated list of YB Master server addresses (minimum of one)")
 	flags.Int64Var(&dialTimeout, "dialtimeout", 10, "number of seconds for dial timeouts")
 	flags.BoolVar(&skipHostVerification, "skiphostverification", false, "skip tls host verification")
 	flags.StringVarP(&caCert, "cacert", "c", "", "the path to the CA certificate")
