@@ -31,7 +31,7 @@ import (
 )
 
 var cdcProducerCheckCmd = &cobra.Command{
-	Use:   "xcluster_consumer_check",
+	Use:   "xcluster_consumer_check -m master-1[:port],master-2[:port]...",
 	Short: "Check for xCluster replication configuration issues",
 	Long:  `Check for xCluster replication configuration issues between yugabyte clusters.`,
 	RunE:  cdcProducerCheck,

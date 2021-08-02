@@ -34,7 +34,7 @@ var tablet string
 
 // clusterInfoCmd represents the clusterInfo command
 var tabletInfoCmd = &cobra.Command{
-	Use:   "tablet_info",
+	Use:   "tablet_info -m master-1[:port],master-2[:port]... --tablet <tablet>",
 	Short: "Get tablet consensus info and state",
 	Long:  `Get tablet consensus info and state`,
 	RunE:  tabletInfo,

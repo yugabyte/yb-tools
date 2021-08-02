@@ -32,9 +32,9 @@ import (
 
 // clusterInfoCmd represents the clusterInfo command
 var clusterInfoCmd = &cobra.Command{
-	Use:   "cluster_info",
-	Short: "export cluster information",
-	Long:  `export cluster information`,
+	Use:   "cluster_info -m master-1[:port],master-2[:port]...",
+	Short: "Export cluster information",
+	Long:  `Export cluster information`,
 	RunE:  clusterInfo,
 }
 
