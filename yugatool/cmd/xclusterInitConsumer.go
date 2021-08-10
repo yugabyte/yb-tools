@@ -50,7 +50,7 @@ func xclusterInitConsumer(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	hosts, err := cmdutil.ValidateMastersFlag(masterAddresses)
+	hosts, err := cmdutil.ValidateHostnameList(masterAddresses, client.DefaultMasterPort)
 	if err != nil {
 		return err
 	}

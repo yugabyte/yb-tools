@@ -7,13 +7,14 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugatool/cmd/util"
+	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
 )
 
 var _ = Describe("Flags", func() {
-	Context("ValidateMastersFlag()", func() {
+	Context("ValidateHostnameList()", func() {
 		DescribeTable("happy path",
 			func(flagInput string, expectedHosts []*common.HostPortPB) {
-				returnFlags, err := util.ValidateMastersFlag(flagInput)
+				returnFlags, err := util.ValidateHostnameList(flagInput, client.DefaultMasterPort)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(returnFlags).Should(ContainElements(expectedHosts))
@@ -95,7 +96,7 @@ var _ = Describe("Flags", func() {
 		When("given an empty host list", func() {
 			var err error
 			BeforeEach(func() {
-				_, err = util.ValidateMastersFlag("")
+				_, err = util.ValidateHostnameList("", client.DefaultMasterPort)
 			})
 			It("returns an error", func() {
 				Expect(err).To(MatchError("unable to validate master address: master host list empty"))

@@ -18,6 +18,7 @@ import (
 
 const DefaultMasterPort = 7100
 const DefaultTserverPort = 9100
+const DefaultCsqlPort = 9042
 
 type YBClient struct {
 	Log logr.Logger

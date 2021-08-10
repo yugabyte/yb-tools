@@ -47,7 +47,7 @@ func cdcProducerCheck(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	hosts, err := util.ValidateMastersFlag(masterAddresses)
+	hosts, err := util.ValidateHostnameList(masterAddresses, client.DefaultMasterPort)
 	if err != nil {
 		return err
 	}

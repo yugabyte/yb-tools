@@ -9,11 +9,10 @@ import (
 	. "github.com/icza/gox/gox"
 	"github.com/pkg/errors"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
-	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/util"
 )
 
-func ValidateMastersFlag(masterAddresses string) ([]*common.HostPortPB, error) {
+func ValidateHostnameList(masterAddresses string, defaultPort int) ([]*common.HostPortPB, error) {
 	// TODO: how to structure the flag validation logic?
 	var hostports []*common.HostPortPB
 	validateError := func(err error) ([]*common.HostPortPB, error) {
@@ -28,7 +27,7 @@ func ValidateMastersFlag(masterAddresses string) ([]*common.HostPortPB, error) {
 	}
 
 	for _, h := range hosts {
-		host, port, err := SplitHostPort(h)
+		host, port, err := SplitHostPort(h, defaultPort)
 		if err != nil {
 			return validateError(err)
 		}
@@ -42,13 +41,13 @@ func ValidateMastersFlag(masterAddresses string) ([]*common.HostPortPB, error) {
 	return hostports, nil
 }
 
-func SplitHostPort(h string) (string, uint32, error) {
+func SplitHostPort(h string, defaultPort int) (string, uint32, error) {
 	validateError := func(err error) (string, uint32, error) {
 		return "", 0, err
 	}
 
 	if util.IsBasicIPv6(h) {
-		return h, uint32(client.DefaultMasterPort), nil
+		return h, uint32(defaultPort), nil
 	}
 	var port int
 
@@ -57,7 +56,7 @@ func SplitHostPort(h string) (string, uint32, error) {
 		switch x := err.(type) {
 		case *net.AddrError:
 			if x.Err == "missing port in address" {
-				return SplitHostPort(fmt.Sprintf("%s:%d", h, client.DefaultMasterPort))
+				return SplitHostPort(fmt.Sprintf("%s:%d", h, defaultPort), defaultPort)
 			}
 		default:
 			return validateError(err)
