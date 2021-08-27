@@ -35,6 +35,7 @@ message CDCProducerStreamReportPB {
   message errorlist {
     optional yb.master.MasterErrorPB consumer_schema_error = 1;
     optional yb.master.MasterErrorPB producer_schema_error = 2;
+    optional yb.master.MasterErrorPB schema_mismatch_error = 8;
     repeated string missing_tablets_consumer = 3;
     repeated string missing_tablets_producer = 4;
     required CDCReplicatedIndexListPB tablets_with_replication_lag = 7;

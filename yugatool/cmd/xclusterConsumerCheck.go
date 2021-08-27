@@ -103,7 +103,6 @@ func RunXClusterConsumerCheck(log logr.Logger, consumerClient *client.YBClient) 
 			fmt.Println(prototext.Format(producerReport))
 		}
 
-		// TODO: Check that the schema matches for both tables - check for problems such as adding/removing columns
 		// TODO: Check that all masters are actually valid on producer
 		//        - The master is actually in the producer cluster, and not in another cluster
 		//        - The master is reachable

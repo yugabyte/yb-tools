@@ -1,17 +1,24 @@
 package healthcheck
 
 import (
+	"encoding/json"
+	"fmt"
+	"reflect"
+
 	"github.com/blang/vfs"
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	. "github.com/icza/gox/gox"
 	"github.com/pkg/errors"
+	diff "github.com/yudai/gojsondiff"
+	"github.com/yudai/gojsondiff/formatter"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/cdc"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/master"
 	"github.com/yugabyte/yb-tools/yugatool/api/yugatool/config"
 	"github.com/yugabyte/yb-tools/yugatool/api/yugatool/healthcheck"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
@@ -165,13 +172,21 @@ func (r *CDCProducerStreamReport) RunCheck() error {
 	}
 
 	// Check for schema errors
+
+	// Does this table exist on the consumer?
 	if r.ConsumerSchema.Error != nil {
 		reportErrors.ConsumerSchemaError = r.ConsumerSchema.Error
 		errorSet = true
 	}
 
+	// Does this table exist on the producer?
 	if r.ProducerSchema.Error != nil {
 		reportErrors.ProducerSchemaError = r.ProducerSchema.Error
+		errorSet = true
+	}
+
+	if mismatchError := GetSchemaMismatchErrors(r.ConsumerSchema, r.ProducerSchema); mismatchError != nil {
+		reportErrors.SchemaMismatchError = mismatchError
 		errorSet = true
 	}
 	// Check consumer tablets exist
@@ -200,6 +215,49 @@ func (r *CDCProducerStreamReport) RunCheck() error {
 	if errorSet {
 		r.CDCProducerStreamReportPB.Errors = reportErrors
 	}
+	return nil
+}
+
+func GetSchemaMismatchErrors(consumerSchema *master.GetTableSchemaResponsePB, producerSchema *master.GetTableSchemaResponsePB) *master.MasterErrorPB {
+	if consumerSchema.Error != nil || producerSchema.Error != nil {
+		return nil
+	}
+
+	if !reflect.DeepEqual(consumerSchema.GetSchema(), producerSchema.GetSchema()) {
+		masterError := &master.MasterErrorPB{
+			Code: master.MasterErrorPB_INVALID_SCHEMA.Enum(),
+			Status: &common.AppStatusPB{
+				Code:    common.AppStatusPB_CONFIGURATION_ERROR.Enum(),
+				Message: NewString("consumer schema and producer schema mismatch"),
+			},
+		}
+		consumerSchemaJSON := protojson.Format(consumerSchema.GetSchema())
+		producerSchemaJSON := protojson.Format(producerSchema.GetSchema())
+		differ := diff.New()
+		d, err := differ.Compare([]byte(consumerSchemaJSON), []byte(producerSchemaJSON))
+		if err != nil {
+			return masterError
+		}
+
+		var consumerJSON map[string]interface{}
+		if err := json.Unmarshal([]byte(consumerSchemaJSON), &consumerJSON); err != nil {
+			return masterError
+		}
+
+		c := formatter.AsciiFormatterConfig{
+			ShowArrayIndex: true,
+			Coloring:       true,
+		}
+
+		f := formatter.NewAsciiFormatter(consumerJSON, c)
+		// No error can occur
+		diffString, _ := f.Format(d)
+		//df := formatter.DeltaFormatter{}
+		//diffString, _ := df.Format(d)
+		masterError.GetStatus().Message = NewString(fmt.Sprintf("mismatched schema diff: %s", diffString))
+		return masterError
+	}
+
 	return nil
 }
 
