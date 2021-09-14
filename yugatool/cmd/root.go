@@ -31,13 +31,16 @@ var (
 	masterAddresses               string
 	caCert, clientCert, clientKey string
 	skipHostVerification          bool
+
+	Version = "DEV"
 )
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "yugatool",
-	Short: "A tool to make troubleshooting yugabyte somewhat easier",
-	Long:  `A tool to make troubleshooting yugabyte somewhat easier`,
+	Use:     "yugatool",
+	Short:   "A tool to make troubleshooting yugabyte somewhat easier",
+	Long:    `A tool to make troubleshooting yugabyte somewhat easier`,
+	Version: Version,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

@@ -27,7 +27,7 @@ const (
 )
 
 var (
-	Version  = "DEV"
+	Version = "DEV"
 
 	debug    bool
 	errored  bool
@@ -52,13 +52,11 @@ var (
 
 	user, password string
 
-	session *gocql.Session
-
 	rootCmd = &cobra.Command{
-		Use:   "ycrc <keyspace>",
-		Args:  cobra.ExactArgs(1),
-		Short: "YCql Row Count",
-		Long:  "YCql Row Count (ycrc) parallelizes counting the number of rows in a table for YugabyteDB CQL, allowing count(*) on tables that otherwise would fail with query timeouts",
+		Use:     "ycrc <keyspace>",
+		Args:    cobra.ExactArgs(1),
+		Short:   "YCql Row Count",
+		Long:    "YCql Row Count (ycrc) parallelizes counting the number of rows in a table for YugabyteDB CQL, allowing count(*) on tables that otherwise would fail with query timeouts",
 		Version: Version,
 		Run: func(cmd *cobra.Command, args []string) {
 			rowCount(args[0])
