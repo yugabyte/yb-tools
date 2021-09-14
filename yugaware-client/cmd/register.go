@@ -130,7 +130,7 @@ func (o *RegisterOptions) AddFlags(cmd *cobra.Command) {
 
 	flags.StringVar(&o.Environment, "environment", "", `The environment Yugaware is deployed`)
 	flags.StringVar(&o.FullName, "full-name", "", "The full name of the admin user")
-	flags.StringVar(&o.Environment, "email", "", "The email address of the admin user")
+	flags.StringVar(&o.Email, "email", "", "The email address of the admin user")
 	flags.StringVar(&o.Password, "password", "", "The password to register")
 
 	cmdutil.BindFlags(flags)
