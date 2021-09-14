@@ -1,46 +1,13 @@
+TOP_BUILDDIR = ../.
+include ../global.mk
+
 .PHONEY: all protobuf yugatool
 
-all: protobuf test yugatool
+all: test yugatool
 
 yugatool:
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o ./bin/yugatool main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -ldflags=" -X 'github.com/yugabyte/yb-tools/yugatool/cmd.Version=$$(git rev-parse HEAD)'" -o ${TOP_BUILDDIR}/bin/yugatool main.go
 
 # Generate protobufs
-protobuf: tools
+protobuf: tools protoc-gen-ybrpc
 	make -C protobuf/
-
-# Run tests
-test: fmt vet lint
-	go test ./... -coverprofile cover.out
-
-lint: tools
-	golangci-lint run
-
-# Run go fmt against code
-fmt:
-	go fmt ./...
-
-# Run go vet against code
-vet:
-	go vet ./...
-
-.PHONY: tools
-tools: ${GOBIN}/ginkgo ${GOBIN}/golangci-lint ${GOBIN}/cobra ${GOBIN}/protoc-gen-go ${GOBIN}/protoc-gen-ybrpc
-
-${GOBIN}/ginkgo:
-	go install github.com/onsi/ginkgo/ginkgo
-
-${GOBIN}/golangci-lint:
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint
-
-${GOBIN}/cobra:
-	go install github.com/spf13/cobra/cobra
-
-${GOBIN}/protoc-gen-go:
-	go install google.golang.org/protobuf/cmd/protoc-gen-go
-
-${GOBIN}/protoc-gen-ybrpc:
-	go install github.com/yugabyte/yb-tools/protoc-gen-ybrpc
-
-clean:
-	rm -rf bin

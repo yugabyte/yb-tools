@@ -41,34 +41,17 @@ It is recommended to leave this value at the default of 6, unless you get server
 This is the value, in milliseconds, that the `ycrc` client allows for a query to respond. The default value of 1500 should be sufficient for most use cases, but increasing to a higher value may be necessary if client side timeouts are noted.
 
 
+## Requirements
+
+* make
+* direnv (or source .envrc)
+* golang v1.16+
 
 ## Building
 
-```
-go build
-```
-
-Note that this will leave the version string set to the default
-
-```
-./ycrc -v
-ycrc version DEV
-```
-
-You can override this like so - recommended before shipping, so you get better error reports back.
-
-```
-go tool nm ./ycrc | grep -i cmd.Version
-  a0a0b0 D github.com/yugabyte/yb-tools/ycrc/cmd.Version
-env CGO_ENABLED=0 go build -ldflags=" -X 'github.com/yugabyte/yb-tools/ycrc/cmd.Version=$(git rev-parse HEAD)'"
-./ycrc -v
-ycrc version 842fdc078334ee6a38ea0bb77653fb2d7b5a702f
-```
-
-If you need to build for windows,
-
-```
-env CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags=" -X 'github.com/yugabyte/yb-tools/ycrc/cmd.Version=$(git rev-parse HEAD)'"
+```bash
+direnv allow
+make
 ```
 
 Consider renaming the file, while compressing, before you ship like
@@ -77,10 +60,6 @@ Consider renaming the file, while compressing, before you ship like
 zip ./ycrc-windows-amd64-$(git rev-parse --short HEAD)-$(date -Iminutes).zip ./ycrc.exe
 zip ./ycrc-linux-amd64-$(git rev-parse --short HEAD)-$(date -Iminutes).zip ./ycrc
 ```
-
-Probably required go 1.15, but might not. I don't know, I haven't tested it.
-
-Makefile contribution would be welcome
 
 ## Behind the scenes
 

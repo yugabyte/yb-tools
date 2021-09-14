@@ -1,0 +1,16 @@
+OpenJDK 64-Bit Server VM warning: Option UseConcMarkSweepGC was deprecated in version 9.0 and will likely be removed in a future release.
+2021-09-14 11:57:37,633 [   2646]   WARN - l.NotificationGroupManagerImpl - Notification group CodeWithMe is already registered (group=com.intellij.notification.NotificationGroup@3b1cb3a6). Plugin descriptor: PluginDescriptor(name=Code With Me, id=com.jetbrains.codeWithMe, descriptorPath=plugin.xml, path=/snap/goland/150/plugins/cwm-plugin, version=212.5080.74, package=null) 
+2021-09-14 11:57:37,759 [   2772]   WARN - nSystem.impl.ActionManagerImpl - keymap "Visual Studio" not found [Plugin: com.intellij] 
+2021-09-14 11:57:37,771 [   2784]   WARN - nSystem.impl.ActionManagerImpl - keymap "Eclipse" not found [Plugin: com.intellij] 
+2021-09-14 11:57:37,771 [   2784]   WARN - nSystem.impl.ActionManagerImpl - keymap "NetBeans 6.5" not found [Plugin: com.intellij] 
+2021-09-14 11:57:37,771 [   2784]   WARN - nSystem.impl.ActionManagerImpl - keymap "Visual Studio" not found [Plugin: com.intellij] 
+2021-09-14 11:57:37,931 [   2944]   WARN - nSystem.impl.ActionManagerImpl - keymap "Eclipse" not found [Plugin: IdeaVIM] 
+2021-09-14 11:57:37,931 [   2944]   WARN - nSystem.impl.ActionManagerImpl - keymap "NetBeans 6.5" not found [Plugin: IdeaVIM] 
+2021-09-14 11:57:37,931 [   2944]   WARN - nSystem.impl.ActionManagerImpl - keymap "Visual Studio" not found [Plugin: IdeaVIM] 
+2021-09-14 11:57:37,951 [   2964]   WARN - nSystem.impl.ActionManagerImpl - keymap "Eclipse" not found [Plugin: org.jetbrains.plugins.github] 
+2021-09-14 11:57:37,969 [   2982]   WARN - nSystem.impl.ActionManagerImpl - keymap "Visual Studio" not found [Plugin: HtmlTools] 
+2021-09-14 11:57:37,975 [   2988]   WARN - nSystem.impl.ActionManagerImpl - keymap "Eclipse" not found [Plugin: JavaScript] 
+2021-09-14 11:57:37,975 [   2988]   WARN - nSystem.impl.ActionManagerImpl - keymap "Visual Studio" not found [Plugin: JavaScript] 
+[JetBrains Runtime] Detected slow X11, switched off alpha compositing of images. Control with -Dremote.x11.workaround={true|false|auto}.
+2021-09-14 11:58:02,536 [  27549]   WARN - ctionSystem.impl.ActionUpdater - Slow (121 ms) `com.jetbrains.performancePlugin.actions.CaptureMemorySnapshotAction#update`. Consider speeding it up and/or implementing UpdateInBackground. 
+2021-09-14 11:59:00,435 [  85448]   WARN - pl.local.NativeFileWatcherImpl - Watcher terminated with exit code 130 
