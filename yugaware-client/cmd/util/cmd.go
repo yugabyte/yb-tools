@@ -58,8 +58,6 @@ func (o *GlobalOptions) AddFlags(cmd *cobra.Command) {
 	flags.StringVarP(&o.CACert, "cacert", "c", "", "the path to the CA certificate")
 	flags.StringVar(&o.ClientCert, "client-cert", "", "the path to the client certificate")
 	flags.StringVar(&o.ClientKey, "client-key", "", "the path to the client key file")
-
-	BindFlags(flags)
 }
 
 func (o *GlobalOptions) Validate(_ *CommandContext) error {
@@ -154,6 +152,7 @@ func (ctx *CommandContext) Setup() error {
 }
 
 func (ctx *CommandContext) complete() error {
+	BindFlags(ctx.Cmd.Flags())
 	err := mergeConfigFile(ctx)
 	if err != nil {
 		return err

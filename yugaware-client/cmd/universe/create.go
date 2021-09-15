@@ -137,8 +137,6 @@ func (o *CreateOptions) AddFlags(cmd *cobra.Command) {
 	flags.BoolVar(&o.StaticPublicIP, "static-public-ip", false, "assign a static public IP to the cluster")
 	flags.BoolVar(&o.UseSystemd, "use-systemd", false, "use systemd as the daemon controller")
 	flags.Int32Var(&o.VolumeSize, "volume-size", 0, "volume size to use for cluster nodes")
-
-	cmdutil.BindFlags(flags)
 }
 
 func (o *CreateOptions) GetUniverseConfigParams(ctx *cmdutil.CommandContext) *universe_cluster_mutations.CreateAllClustersParams {

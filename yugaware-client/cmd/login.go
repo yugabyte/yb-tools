@@ -45,7 +45,6 @@ func (o *LoginOptions) AddFlags(cmd *cobra.Command) {
 	flags.StringVarP(&o.Email, "email", "u", "", "yugaware username")
 	flags.StringVarP(&o.Password, "password", "p", "", "yugaware password")
 
-	cmdutil.BindFlags(flags)
 	cmdutil.MarkFlagRequired("email", flags)
 }
 

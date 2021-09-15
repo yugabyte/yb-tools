@@ -133,7 +133,6 @@ func (o *RegisterOptions) AddFlags(cmd *cobra.Command) {
 	flags.StringVar(&o.Email, "email", "", "The email address of the admin user")
 	flags.StringVar(&o.Password, "password", "", "The password to register")
 
-	cmdutil.BindFlags(flags)
 	cmdutil.MarkFlagsRequired([]string{"environment", "full-name", "email"}, flags)
 }
 
