@@ -1921,15 +1921,15 @@
       "properties" : {
         "completionTime" : {
           "description" : "Customer task completion time",
-          "example" : "1624295417405",
+          "example" : 1624295417405,
           "format" : "date-time",
-          "type" : "string"
+          "type" : "integer"
         },
         "createTime" : {
           "description" : "Customer task creation time",
-          "example" : "1624295417405",
+          "example" : 1624295417405,
           "format" : "date-time",
-          "type" : "string"
+          "type" : "integer"
         },
         "id" : {
           "description" : "Customer task UUID",

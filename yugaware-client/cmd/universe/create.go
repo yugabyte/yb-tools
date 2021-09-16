@@ -19,6 +19,7 @@ package universe
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/go-openapi/strfmt"
 	"github.com/icza/gox/gox"
@@ -26,6 +27,7 @@ import (
 	cmdutil "github.com/yugabyte/yb-tools/yugaware-client/cmd/util"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/access_keys"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/cloud_providers"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/customer_tasks"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/instance_types"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/region_management"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/release_management"
@@ -74,6 +76,13 @@ func createUniverse(ctx *cmdutil.CommandContext, options *CreateOptions) error {
 
 	log.V(1).Info("create universe task", "task", task.GetPayload())
 
+	if options.Wait {
+		err = waitForCompletion(ctx, task.GetPayload())
+		if err != nil {
+			return err
+		}
+	}
+
 	table := &cmdutil.OutputFormatter{
 		OutputMessage: "Universe Created",
 		JSONObject:    task.GetPayload(),
@@ -84,6 +93,37 @@ func createUniverse(ctx *cmdutil.CommandContext, options *CreateOptions) error {
 		},
 	}
 	return table.Print()
+}
+
+func waitForCompletion(ctx *cmdutil.CommandContext, createTask *models.YBPTask) error {
+	params := customer_tasks.NewTasksListParams().
+		WithContext(ctx).
+		WithCUUID(ctx.Client.CustomerUUID())
+
+	for {
+		select {
+		case <-time.After(1 * time.Second):
+			resp, err := ctx.Client.PlatformAPIs.CustomerTasks.TasksList(params, ctx.Client.SwaggerAuth)
+			if err != nil {
+				return err
+			}
+			for _, task := range resp.GetPayload() {
+				if task.ID == createTask.TaskUUID {
+					if task.Status == "Success" {
+						return nil
+					} else if task.Status != "Running" {
+						return fmt.Errorf("failed to create universe: %s", task.Status)
+					}
+
+					ctx.Log.V(1).Info("not complete yet", "task", task)
+					break
+				}
+			}
+		case <-ctx.Done(): // Done returns a channel that's closed when work done on behalf of this context is canceled
+			ctx.Log.Info("wait cancelled")
+			return nil
+		}
+	}
 }
 
 type CreateOptions struct {
@@ -104,6 +144,8 @@ type CreateOptions struct {
 	UseSystemd        bool              `mapstructure:"use_systemd,omitempty"`
 	VolumeSize        int32             `mapstructure:"volume_size,omitempty"`
 
+	Wait bool `mapstructure:"wait,omitempty"`
+
 	provider        *models.Provider
 	preferredRegion strfmt.UUID
 	regions         []*models.Region
@@ -121,6 +163,7 @@ func (o *CreateOptions) ConfigKey() string {
 
 func (o *CreateOptions) AddFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
+	// Create flags
 	flags.StringVar(&o.UniverseName, "universe-name", "", "the desired name of the universe")
 	flags.StringVar(&o.Provider, "provider", "", "the Yugaware provider to be used for deployment")
 	flags.StringArrayVar(&o.Regions, "regions", []string{}, "list of regions to deploy yugabyte")
@@ -137,6 +180,9 @@ func (o *CreateOptions) AddFlags(cmd *cobra.Command) {
 	flags.BoolVar(&o.StaticPublicIP, "static-public-ip", false, "assign a static public IP to the cluster")
 	flags.BoolVar(&o.UseSystemd, "use-systemd", false, "use systemd as the daemon controller")
 	flags.Int32Var(&o.VolumeSize, "volume-size", 0, "volume size to use for cluster nodes")
+
+	// Other flags
+	flags.BoolVar(&o.Wait, "wait", false, "Wait for create to complete")
 }
 
 func (o *CreateOptions) GetUniverseConfigParams(ctx *cmdutil.CommandContext) *universe_cluster_mutations.CreateAllClustersParams {
