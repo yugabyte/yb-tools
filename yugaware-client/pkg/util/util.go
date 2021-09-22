@@ -42,3 +42,21 @@ func PasswordPrompt() (string, error) {
 
 	return string(password), nil
 }
+
+func ConfirmationDialog() error {
+	var userInput string
+
+	fmt.Print("Are you sure? (y/n): ")
+	_, err := fmt.Scanln(&userInput)
+	if err != nil {
+		return err
+	}
+	switch strings.ToLower(userInput) {
+	case "y", "yes":
+		return nil
+	case "n", "no":
+		return fmt.Errorf("user declined confirmation dialog")
+	default:
+		return fmt.Errorf(`invalid input: must be "yes" or "no"`)
+	}
+}

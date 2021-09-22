@@ -103,16 +103,17 @@ func RootInit() *cobra.Command {
 			Name:        "provider",
 			Description: "Interact with Yugaware providers",
 			Commands: []*cobra.Command{
-				provider.ListCmd(ctx),
 				provider.CreateCmd(ctx),
+				provider.ListCmd(ctx),
 			},
 		},
 		{
 			Name:        "universe",
 			Description: "Interact with Yugabyte universes",
 			Commands: []*cobra.Command{
-				universe.ListCmd(ctx),
 				universe.CreateUniverseCmd(ctx),
+				universe.DeleteUniverseCmd(ctx),
+				universe.ListCmd(ctx),
 			},
 		},
 	}

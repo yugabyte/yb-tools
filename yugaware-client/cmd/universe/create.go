@@ -19,7 +19,6 @@ package universe
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/go-openapi/strfmt"
 	"github.com/icza/gox/gox"
@@ -27,7 +26,6 @@ import (
 	cmdutil "github.com/yugabyte/yb-tools/yugaware-client/cmd/util"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/access_keys"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/cloud_providers"
-	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/customer_tasks"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/instance_types"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/region_management"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/release_management"
@@ -39,14 +37,18 @@ import (
 func CreateUniverseCmd(ctx *cmdutil.CommandContext) *cobra.Command {
 	options := &CreateOptions{}
 	cmd := &cobra.Command{
-		Use:   "create",
-		Short: "Create a Yugabyte Universe",
-		Long:  `Create a Yugabyte Universe`,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		Use:   "create UNIVERSE_NAME --provider <provider> --regions <region> --instance-type <size> --version <version>",
+		Short: "Create a Yugabyte universe",
+		Long:  `Create a Yugabyte universe`,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
 			err := ctx.WithCmd(cmd).WithOptions(options).Setup()
 			if err != nil {
 				return err
 			}
+
+			// Positional argument
+			options.UniverseName = args[0]
 
 			err = options.Validate(ctx)
 			if err != nil {
@@ -77,7 +79,7 @@ func createUniverse(ctx *cmdutil.CommandContext, options *CreateOptions) error {
 	log.V(1).Info("create universe task", "task", task.GetPayload())
 
 	if options.Wait {
-		err = waitForCompletion(ctx, task.GetPayload())
+		err = cmdutil.WaitForTaskCompletion(ctx, task.GetPayload())
 		if err != nil {
 			return err
 		}
@@ -88,46 +90,16 @@ func createUniverse(ctx *cmdutil.CommandContext, options *CreateOptions) error {
 		JSONObject:    task.GetPayload(),
 		OutputType:    ctx.GlobalOptions.Output,
 		TableColumns: []cmdutil.Column{
-			{Name: "ResourceUUID", JSONPath: "$.resourceUUID"},
-			{Name: "TaskUUID", JSONPath: "$.taskUUID"},
+			{Name: "UNIVERSE_UUID", JSONPath: "$.resourceUUID"},
+			{Name: "TASK_UUID", JSONPath: "$.taskUUID"},
 		},
 	}
 	return table.Print()
 }
 
-func waitForCompletion(ctx *cmdutil.CommandContext, createTask *models.YBPTask) error {
-	params := customer_tasks.NewTasksListParams().
-		WithContext(ctx).
-		WithCUUID(ctx.Client.CustomerUUID())
-
-	for {
-		select {
-		case <-time.After(1 * time.Second):
-			resp, err := ctx.Client.PlatformAPIs.CustomerTasks.TasksList(params, ctx.Client.SwaggerAuth)
-			if err != nil {
-				return err
-			}
-			for _, task := range resp.GetPayload() {
-				if task.ID == createTask.TaskUUID {
-					if task.Status == "Success" {
-						return nil
-					} else if task.Status != "Running" {
-						return fmt.Errorf("failed to create universe: %s", task.Status)
-					}
-
-					ctx.Log.V(1).Info("not complete yet", "task", task)
-					break
-				}
-			}
-		case <-ctx.Done(): // Done returns a channel that's closed when work done on behalf of this context is canceled
-			ctx.Log.Info("wait cancelled")
-			return nil
-		}
-	}
-}
-
 type CreateOptions struct {
-	UniverseName      string            `mapstructure:"universe_name,omitempty"`
+	UniverseName string // positional arg
+
 	Provider          string            `mapstructure:"provider,omitempty"`
 	Regions           []string          `mapstructure:"regions,omitempty"`
 	PreferredRegion   string            `mapstructure:"preferred_region,omitempty"`
@@ -157,14 +129,9 @@ type CreateOptions struct {
 
 var _ cmdutil.CommandOptions = &CreateOptions{}
 
-func (o *CreateOptions) ConfigKey() string {
-	return "universe_create"
-}
-
 func (o *CreateOptions) AddFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 	// Create flags
-	flags.StringVar(&o.UniverseName, "universe-name", "", "the desired name of the universe")
 	flags.StringVar(&o.Provider, "provider", "", "the Yugaware provider to be used for deployment")
 	flags.StringArrayVar(&o.Regions, "regions", []string{}, "list of regions to deploy yugabyte")
 	flags.StringVar(&o.PreferredRegion, "preferred-region", "", "preferred region for tablet leaders")
