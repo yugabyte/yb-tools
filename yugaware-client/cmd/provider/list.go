@@ -18,6 +18,7 @@ package provider
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/yugabyte/yb-tools/pkg/format"
 	cmdutil "github.com/yugabyte/yb-tools/yugaware-client/cmd/util"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/cloud_providers"
 )
@@ -50,11 +51,11 @@ func list(ctx *cmdutil.CommandContext) error {
 		return err
 	}
 
-	table := &cmdutil.OutputFormatter{
+	table := &format.Output{
 		OutputMessage: "Provider List",
 		JSONObject:    providers.GetPayload(),
 		OutputType:    ctx.GlobalOptions.Output,
-		TableColumns: []cmdutil.Column{
+		TableColumns: []format.Column{
 			{Name: "NAME", JSONPath: "$.name"},
 			{Name: "CODE", JSONPath: "$.code"},
 			{Name: "UUID", JSONPath: "$.uuid"},

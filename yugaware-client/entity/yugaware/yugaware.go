@@ -17,7 +17,7 @@ limitations under the License.
 package yugaware
 
 import (
-	"github.com/yugabyte/yb-tools/yugaware-client/pkg/util"
+	"github.com/yugabyte/yb-tools/pkg/util"
 	"go.uber.org/zap/zapcore"
 )
 

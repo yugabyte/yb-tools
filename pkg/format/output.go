@@ -1,4 +1,4 @@
-package util
+package format
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 	"github.com/spyzhov/ajson"
 )
 
-type OutputFormatter struct {
+type Output struct {
 	OutputMessage string
 	JSONObject    interface{}
 	OutputType    string
@@ -27,7 +27,7 @@ type Column struct {
 	JSONPath string
 }
 
-func (f *OutputFormatter) Print() error {
+func (f *Output) Print() error {
 	if f.OutputType == "table" {
 		return f.OutputTable()
 	} else if f.OutputType == "json" {
@@ -39,7 +39,7 @@ func (f *OutputFormatter) Print() error {
 	return fmt.Errorf("unknown output type: %s", f.OutputType)
 }
 
-func (f *OutputFormatter) OutputYAML() error {
+func (f *Output) OutputYAML() error {
 	output := OutputContainer{
 		Message: f.OutputMessage,
 		Content: f.JSONObject,
@@ -53,7 +53,7 @@ func (f *OutputFormatter) OutputYAML() error {
 	return nil
 }
 
-func (f *OutputFormatter) OutputJSON() error {
+func (f *Output) OutputJSON() error {
 	output := OutputContainer{
 		Message: f.OutputMessage,
 		Content: f.JSONObject,
@@ -67,7 +67,7 @@ func (f *OutputFormatter) OutputJSON() error {
 	return nil
 }
 
-func (f *OutputFormatter) OutputTable() error {
+func (f *Output) OutputTable() error {
 	table := simpletable.New()
 
 	table.Header = &simpletable.Header{}
@@ -115,7 +115,7 @@ func (f *OutputFormatter) OutputTable() error {
 	return nil
 }
 
-func (f *OutputFormatter) formatJSONPathRow(root *ajson.Node) ([]*simpletable.Cell, error) {
+func (f *Output) formatJSONPathRow(root *ajson.Node) ([]*simpletable.Cell, error) {
 	var row []*simpletable.Cell
 	for _, col := range f.TableColumns {
 		buf, err := ajson.Marshal(root)

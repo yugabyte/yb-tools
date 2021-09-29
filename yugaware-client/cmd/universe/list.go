@@ -18,6 +18,7 @@ package universe
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/yugabyte/yb-tools/pkg/format"
 	cmdutil "github.com/yugabyte/yb-tools/yugaware-client/cmd/util"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/universe_management"
 )
@@ -50,11 +51,11 @@ func list(ctx *cmdutil.CommandContext) error {
 		return err
 	}
 
-	table := &cmdutil.OutputFormatter{
+	table := &format.Output{
 		OutputMessage: "Universe List",
 		JSONObject:    universes.GetPayload(),
 		OutputType:    ctx.GlobalOptions.Output,
-		TableColumns: []cmdutil.Column{
+		TableColumns: []format.Column{
 			{Name: "NAME", JSONPath: "$.name"},
 			{Name: "UNIVERSE_UUID", JSONPath: "$.universeUUID"},
 			{Name: "CLOUD", JSONPath: "$.universeDetails.clusters[0].placementInfo.cloudList[0].code"},

@@ -20,10 +20,11 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/yugabyte/yb-tools/pkg/format"
+	"github.com/yugabyte/yb-tools/pkg/util"
 	cmdutil "github.com/yugabyte/yb-tools/yugaware-client/cmd/util"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/universe_management"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
-	"github.com/yugabyte/yb-tools/yugaware-client/pkg/util"
 )
 
 func DeleteUniverseCmd(ctx *cmdutil.CommandContext) *cobra.Command {
@@ -83,11 +84,11 @@ func deleteUniverse(ctx *cmdutil.CommandContext, options *DeleteOptions) error {
 		}
 	}
 
-	table := &cmdutil.OutputFormatter{
+	table := &format.Output{
 		OutputMessage: "Universe Deleted",
 		JSONObject:    task.GetPayload(),
 		OutputType:    ctx.GlobalOptions.Output,
-		TableColumns: []cmdutil.Column{
+		TableColumns: []format.Column{
 			{Name: "UNIVERSE_UUID", JSONPath: "$.resourceUUID"},
 			{Name: "TASK_UUID", JSONPath: "$.taskUUID"},
 		},

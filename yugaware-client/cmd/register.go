@@ -18,9 +18,10 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/yugabyte/yb-tools/pkg/format"
+	"github.com/yugabyte/yb-tools/pkg/util"
 	cmdutil "github.com/yugabyte/yb-tools/yugaware-client/cmd/util"
 	"github.com/yugabyte/yb-tools/yugaware-client/entity/yugaware"
-	"github.com/yugabyte/yb-tools/yugaware-client/pkg/util"
 )
 
 func RegisterCmd(ctx *cmdutil.CommandContext) *cobra.Command {
@@ -90,11 +91,11 @@ func executeRegister(ctx *cmdutil.CommandContext, options *RegisterOptions) erro
 		}
 		ctx.Log.V(1).Info("registered yugaware", "response", response)
 
-		table := &cmdutil.OutputFormatter{
+		table := &format.Output{
 			OutputMessage: "Registration Completed",
 			JSONObject:    response,
 			OutputType:    ctx.GlobalOptions.Output,
-			TableColumns: []cmdutil.Column{
+			TableColumns: []format.Column{
 				{Name: "AUTH_TOKEN", JSONPath: "$.authToken"},
 				{Name: "CUSTOMER_UUID", JSONPath: "$.customerUUID"},
 				{Name: "USER_UUID", JSONPath: "$.userUUID"},

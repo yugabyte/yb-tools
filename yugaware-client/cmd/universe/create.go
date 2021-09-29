@@ -23,6 +23,7 @@ import (
 	"github.com/go-openapi/strfmt"
 	"github.com/icza/gox/gox"
 	"github.com/spf13/cobra"
+	"github.com/yugabyte/yb-tools/pkg/format"
 	cmdutil "github.com/yugabyte/yb-tools/yugaware-client/cmd/util"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/access_keys"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/cloud_providers"
@@ -85,11 +86,11 @@ func createUniverse(ctx *cmdutil.CommandContext, options *CreateOptions) error {
 		}
 	}
 
-	table := &cmdutil.OutputFormatter{
+	table := &format.Output{
 		OutputMessage: "Universe Created",
 		JSONObject:    task.GetPayload(),
 		OutputType:    ctx.GlobalOptions.Output,
-		TableColumns: []cmdutil.Column{
+		TableColumns: []format.Column{
 			{Name: "UNIVERSE_UUID", JSONPath: "$.resourceUUID"},
 			{Name: "TASK_UUID", JSONPath: "$.taskUUID"},
 		},

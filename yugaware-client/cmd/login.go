@@ -18,9 +18,9 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/yugabyte/yb-tools/pkg/util"
 	cmdutil "github.com/yugabyte/yb-tools/yugaware-client/cmd/util"
 	"github.com/yugabyte/yb-tools/yugaware-client/entity/yugaware"
-	"github.com/yugabyte/yb-tools/yugaware-client/pkg/util"
 )
 
 type LoginOptions struct {
