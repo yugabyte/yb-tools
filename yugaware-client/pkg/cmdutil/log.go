@@ -1,4 +1,4 @@
-package util
+package cmdutil
 
 import (
 	"github.com/go-logr/logr"
@@ -19,6 +19,8 @@ func GetLogger(module string, debug bool) (logr.Logger, error) {
 
 	if !debug {
 		zc.DisableStacktrace = true
+		zc.Encoding = "console"
+		zc.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	}
 
 	z, err := zc.Build()

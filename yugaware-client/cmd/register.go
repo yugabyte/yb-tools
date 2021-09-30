@@ -18,13 +18,14 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/yugabyte/yb-tools/pkg/flag"
 	"github.com/yugabyte/yb-tools/pkg/format"
 	"github.com/yugabyte/yb-tools/pkg/util"
-	cmdutil "github.com/yugabyte/yb-tools/yugaware-client/cmd/util"
 	"github.com/yugabyte/yb-tools/yugaware-client/entity/yugaware"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/cmdutil"
 )
 
-func RegisterCmd(ctx *cmdutil.CommandContext) *cobra.Command {
+func RegisterCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 	options := &RegisterOptions{}
 
 	registerCmd := &cobra.Command{
@@ -50,7 +51,7 @@ func RegisterCmd(ctx *cmdutil.CommandContext) *cobra.Command {
 	return registerCmd
 }
 
-func registerYugaware(ctx *cmdutil.CommandContext, options *RegisterOptions) error {
+func registerYugaware(ctx *cmdutil.YWClientContext, options *RegisterOptions) error {
 	err := executeRegister(ctx, options)
 	if err != nil {
 
@@ -70,7 +71,7 @@ func registerYugaware(ctx *cmdutil.CommandContext, options *RegisterOptions) err
 	return nil
 }
 
-func executeRegister(ctx *cmdutil.CommandContext, options *RegisterOptions) error {
+func executeRegister(ctx *cmdutil.YWClientContext, options *RegisterOptions) error {
 	countResponse, err := ctx.Client.CustomerCount()
 	if err != nil {
 		return err
@@ -122,7 +123,7 @@ type RegisterOptions struct {
 	Password    string `mapstructure:"password,omitempty"`
 }
 
-func (o *RegisterOptions) Validate(_ *cmdutil.CommandContext) error {
+func (o *RegisterOptions) Validate(_ *cmdutil.YWClientContext) error {
 	return o.validatePassword()
 }
 
@@ -134,7 +135,7 @@ func (o *RegisterOptions) AddFlags(cmd *cobra.Command) {
 	flags.StringVar(&o.Email, "email", "", "The email address of the admin user")
 	flags.StringVar(&o.Password, "password", "", "The password to register")
 
-	cmdutil.MarkFlagsRequired([]string{"environment", "full-name", "email"}, flags)
+	flag.MarkFlagsRequired([]string{"environment", "full-name", "email"}, flags)
 }
 
 func (o *RegisterOptions) validatePassword() error {

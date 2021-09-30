@@ -13,70 +13,43 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package cmd
+
+package healthcheck
 
 import (
 	"fmt"
 
-	"github.com/blang/vfs"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/master"
 	"github.com/yugabyte/yb-tools/yugatool/api/yugatool/config"
-	"github.com/yugabyte/yb-tools/yugatool/cmd/util"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
+	"github.com/yugabyte/yb-tools/yugatool/pkg/cmdutil"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/healthcheck"
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
-var cdcProducerCheckCmd = &cobra.Command{
-	Use:   "xcluster_consumer_check -m master-1[:port],master-2[:port]...",
-	Short: "Check for xCluster replication configuration issues",
-	Long:  `Check for xCluster replication configuration issues between yugabyte clusters.`,
-	RunE:  cdcProducerCheck,
-}
+func XclusterConsumerCheck(ctx *cmdutil.YugatoolContext) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "xcluster_consumer_check",
+		Short: "Check for xCluster replication configuration issues",
+		Long:  `Check for xCluster replication configuration issues between yugabyte clusters.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			err := ctx.WithCmd(cmd).Setup()
+			if err != nil {
+				return err
+			}
+			defer ctx.Client.Close()
 
-func init() {
-	rootCmd.AddCommand(cdcProducerCheckCmd)
-}
-
-func cdcProducerCheck(_ *cobra.Command, _ []string) error {
-	log, err := util.GetLogger("xcluster_consumer_check", debug)
-	if err != nil {
-		return err
-	}
-
-	hosts, err := util.ValidateHostnameList(masterAddresses, client.DefaultMasterPort)
-	if err != nil {
-		return err
-	}
-
-	consumerClient := &client.YBClient{
-		Log: log.WithName("ConsumerClient"),
-		Fs:  vfs.OS(),
-		Config: &config.UniverseConfigPB{
-			Masters:        hosts,
-			TimeoutSeconds: &dialTimeout,
-			TlsOpts: &config.TlsOptionsPB{
-				SkipHostVerification: &skipHostVerification,
-				CaCertPath:           &caCert,
-				CertPath:             &clientCert,
-				KeyPath:              &clientKey,
-			},
+			return runXClusterConsumerCheck(ctx.Log, ctx.Client)
 		},
 	}
 
-	err = consumerClient.Connect()
-	if err != nil {
-		return err
-	}
-	defer consumerClient.Close()
-
-	return RunXClusterConsumerCheck(log, consumerClient)
+	return cmd
 }
 
-func RunXClusterConsumerCheck(log logr.Logger, consumerClient *client.YBClient) error {
+func runXClusterConsumerCheck(log logr.Logger, consumerClient *client.YBClient) error {
 	clusterConfig, err := consumerClient.Master.MasterService.GetMasterClusterConfig(&master.GetMasterClusterConfigRequestPB{})
 	if err != nil {
 		return err

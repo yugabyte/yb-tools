@@ -13,68 +13,42 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package cmd
 
 import (
 	"fmt"
 
-	"github.com/blang/vfs"
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/consensus"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/master"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/tserver"
-	"github.com/yugabyte/yb-tools/yugatool/api/yugatool/config"
-	"github.com/yugabyte/yb-tools/yugatool/cmd/util"
-	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
+	"github.com/yugabyte/yb-tools/yugatool/pkg/cmdutil"
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
-// clusterInfoCmd represents the clusterInfo command
-var clusterInfoCmd = &cobra.Command{
-	Use:   "cluster_info -m master-1[:port],master-2[:port]...",
-	Short: "Export cluster information",
-	Long:  `Export cluster information`,
-	RunE:  clusterInfo,
-}
+func ClusterInfoCmd(ctx *cmdutil.YugatoolContext) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "cluster_info",
+		Short: "Export cluster information",
+		Long:  `Export cluster information`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			err := ctx.WithCmd(cmd).Setup()
+			if err != nil {
+				return err
+			}
+			defer ctx.Client.Close()
 
-func init() {
-	rootCmd.AddCommand(clusterInfoCmd)
-}
-
-// TODO: right now this is just a dumping ground for running random RPC calls... Getting cluster info should be
-//       a real command at some point
-func clusterInfo(cmd *cobra.Command, args []string) error {
-	log, err := util.GetLogger("cluster_info", debug)
-	if err != nil {
-		return err
-	}
-
-	hosts, err := util.ValidateHostnameList(masterAddresses, client.DefaultMasterPort)
-	if err != nil {
-		return err
-	}
-
-	c := &client.YBClient{
-		Log: log.WithName("client"),
-		Fs:  vfs.OS(),
-		Config: &config.UniverseConfigPB{
-			Masters:        hosts,
-			TimeoutSeconds: &dialTimeout,
-			TlsOpts: &config.TlsOptionsPB{
-				SkipHostVerification: &skipHostVerification,
-				CaCertPath:           &caCert,
-				CertPath:             &clientCert,
-				KeyPath:              &clientKey,
-			},
+			return clusterInfo(ctx)
 		},
 	}
 
-	err = c.Connect()
-	if err != nil {
-		return err
-	}
-	defer c.Close()
+	return cmd
+}
+
+func clusterInfo(ctx *cmdutil.YugatoolContext) error {
+	c := ctx.Client
 
 	listMasters, err := c.Master.MasterService.ListMasters(&master.ListMastersRequestPB{})
 	if err != nil {

@@ -24,18 +24,17 @@ import (
 	"github.com/icza/gox/gox"
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/pkg/format"
-	cmdutil "github.com/yugabyte/yb-tools/yugaware-client/cmd/util"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/access_keys"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/cloud_providers"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/instance_types"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/region_management"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/release_management"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/universe_cluster_mutations"
-	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/universe_management"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/cmdutil"
 )
 
-func CreateUniverseCmd(ctx *cmdutil.CommandContext) *cobra.Command {
+func CreateUniverseCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 	options := &CreateOptions{}
 	cmd := &cobra.Command{
 		Use:   "create UNIVERSE_NAME --provider <provider> --regions <region> --instance-type <size> --version <version>",
@@ -65,7 +64,7 @@ func CreateUniverseCmd(ctx *cmdutil.CommandContext) *cobra.Command {
 	return cmd
 }
 
-func createUniverse(ctx *cmdutil.CommandContext, options *CreateOptions) error {
+func createUniverse(ctx *cmdutil.YWClientContext, options *CreateOptions) error {
 	log := ctx.Log
 	ywc := ctx.Client
 
@@ -153,7 +152,7 @@ func (o *CreateOptions) AddFlags(cmd *cobra.Command) {
 	flags.BoolVar(&o.Wait, "wait", false, "Wait for create to complete")
 }
 
-func (o *CreateOptions) GetUniverseConfigParams(ctx *cmdutil.CommandContext) *universe_cluster_mutations.CreateAllClustersParams {
+func (o *CreateOptions) GetUniverseConfigParams(ctx *cmdutil.YWClientContext) *universe_cluster_mutations.CreateAllClustersParams {
 	cluster := &models.Cluster{
 		ClusterType: gox.NewString(models.ClusterClusterTypePRIMARY),
 		UserIntent: &models.UserIntent{
@@ -199,7 +198,7 @@ func (o *CreateOptions) GetUniverseConfigParams(ctx *cmdutil.CommandContext) *un
 		WithUniverseConfigureTaskParams(&models.UniverseConfigureTaskParams{Clusters: []*models.Cluster{cluster}})
 }
 
-func (o *CreateOptions) Validate(ctx *cmdutil.CommandContext) error {
+func (o *CreateOptions) Validate(ctx *cmdutil.YWClientContext) error {
 	err := o.validateUniverseName(ctx)
 	if err != nil {
 		return err
@@ -218,7 +217,7 @@ func (o *CreateOptions) Validate(ctx *cmdutil.CommandContext) error {
 	return nil
 }
 
-func (o *CreateOptions) validateUniverseName(ctx *cmdutil.CommandContext) error {
+func (o *CreateOptions) validateUniverseName(ctx *cmdutil.YWClientContext) error {
 	validateUniverseNameError := func(err error) error {
 		return fmt.Errorf(`unable to validate universe name "%s": %w`, o.UniverseName, err)
 	}
@@ -228,24 +227,18 @@ func (o *CreateOptions) validateUniverseName(ctx *cmdutil.CommandContext) error 
 	}
 
 	ctx.Log.V(1).Info("fetching universes")
-	params := universe_management.NewListUniversesParams().
-		WithContext(ctx).
-		WithCUUID(ctx.Client.CustomerUUID())
-	universes, err := ctx.Client.PlatformAPIs.UniverseManagement.ListUniverses(params, ctx.Client.SwaggerAuth)
+	universe, err := ctx.Client.GetUniverseByName(o.UniverseName)
 	if err != nil {
 		return validateUniverseNameError(err)
 	}
-	ctx.Log.V(1).Info("got universes", "universes", universes.GetPayload())
 
-	for _, universe := range universes.GetPayload() {
-		if universe.Name == o.UniverseName {
-			return validateUniverseNameError(fmt.Errorf(`universe with name "%s" already exists`, universe.Name))
-		}
+	if universe != nil {
+		return validateUniverseNameError(fmt.Errorf(`universe with name "%s" already exists`, universe.Name))
 	}
 	return nil
 }
 
-func (o *CreateOptions) validateProvider(ctx *cmdutil.CommandContext) error {
+func (o *CreateOptions) validateProvider(ctx *cmdutil.YWClientContext) error {
 	validateProviderError := func(providers []*models.Provider, err error) error {
 		var expectedProviderNames []string
 		if providers != nil {
@@ -304,7 +297,7 @@ func (o *CreateOptions) validateProvider(ctx *cmdutil.CommandContext) error {
 	return validateProviderError(providers.GetPayload(), fmt.Errorf("could not find provider"))
 }
 
-func (o *CreateOptions) validateRegions(ctx *cmdutil.CommandContext) error {
+func (o *CreateOptions) validateRegions(ctx *cmdutil.YWClientContext) error {
 	validateRegionError := func(regions []*models.Region, err error) error {
 		var expectedRegionNames []string
 		if regions != nil {
@@ -360,7 +353,7 @@ func (o *CreateOptions) validateRegions(ctx *cmdutil.CommandContext) error {
 	return nil
 }
 
-func (o *CreateOptions) validateInstanceType(ctx *cmdutil.CommandContext) error {
+func (o *CreateOptions) validateInstanceType(ctx *cmdutil.YWClientContext) error {
 	validateInstanceTypeError := func(instances *[]*models.InstanceType, err error) error {
 		var expectedInstanceTypes []string
 		if instances != nil {
@@ -410,7 +403,7 @@ func (o *CreateOptions) validateInstanceType(ctx *cmdutil.CommandContext) error 
 	return validateInstanceTypeError(instanceTypes, fmt.Errorf("could not find instance type"))
 }
 
-func (o *CreateOptions) validateStorageClass(_ *cmdutil.CommandContext) error {
+func (o *CreateOptions) validateStorageClass(_ *cmdutil.YWClientContext) error {
 	// TODO: Should this be a flag?
 	if o.instanceType != nil {
 		cloud := o.instanceType.Provider.Code
@@ -423,7 +416,7 @@ func (o *CreateOptions) validateStorageClass(_ *cmdutil.CommandContext) error {
 	return nil
 }
 
-func (o *CreateOptions) validateVolumeSize(_ *cmdutil.CommandContext) error {
+func (o *CreateOptions) validateVolumeSize(_ *cmdutil.YWClientContext) error {
 	if o.instanceType != nil && o.VolumeSize == 0 {
 		if len(o.instanceType.InstanceTypeDetails.VolumeDetailsList) > 0 {
 			o.VolumeSize = *o.instanceType.InstanceTypeDetails.VolumeDetailsList[0].VolumeSizeGB
@@ -436,7 +429,7 @@ func (o *CreateOptions) validateVolumeSize(_ *cmdutil.CommandContext) error {
 	return nil
 }
 
-func (o CreateOptions) validateVersion(ctx *cmdutil.CommandContext) error {
+func (o CreateOptions) validateVersion(ctx *cmdutil.YWClientContext) error {
 	validateReleaseError := func(releases map[string]interface{}, err error) error {
 		var expectedReleaseNames []string
 		if releases != nil {
@@ -475,7 +468,7 @@ func (o CreateOptions) validateVersion(ctx *cmdutil.CommandContext) error {
 	return validateReleaseError(releases.GetPayload(), fmt.Errorf("could not find release"))
 }
 
-func (o *CreateOptions) getAccessKey(ctx *cmdutil.CommandContext) error {
+func (o *CreateOptions) getAccessKey(ctx *cmdutil.YWClientContext) error {
 	// Kubernetes does not use an access key
 	if o.provider.Code == "kubernetes" {
 		return nil

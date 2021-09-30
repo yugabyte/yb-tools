@@ -19,11 +19,11 @@ package universe
 import (
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/pkg/format"
-	cmdutil "github.com/yugabyte/yb-tools/yugaware-client/cmd/util"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/universe_management"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/cmdutil"
 )
 
-func ListCmd(ctx *cmdutil.CommandContext) *cobra.Command {
+func ListCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List Yugabyte universes",
@@ -39,7 +39,7 @@ func ListCmd(ctx *cmdutil.CommandContext) *cobra.Command {
 	}
 }
 
-func list(ctx *cmdutil.CommandContext) error {
+func list(ctx *cmdutil.YWClientContext) error {
 	log := ctx.Log
 	ywc := ctx.Client
 	log.V(1).Info("fetching universes")

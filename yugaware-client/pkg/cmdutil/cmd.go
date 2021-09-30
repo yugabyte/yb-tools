@@ -14,29 +14,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package util
+package cmdutil
 
 import (
 	"context"
 	"fmt"
-	"reflect"
-	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
+	"github.com/yugabyte/yb-tools/pkg/flag"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client"
 )
 
 type CommandOptions interface {
 	AddFlags(cmd *cobra.Command)
-	Validate(ctx *CommandContext) error
+	Validate(ctx *YWClientContext) error
 }
 
-var _ CommandOptions = &GlobalOptions{}
+var _ CommandOptions = &YWGlobalOptions{}
 
-type GlobalOptions struct {
+type YWGlobalOptions struct {
 	Debug                bool   `mapstructure:"debug"`
 	Output               string `mapstructure:"output"`
 	Hostname             string `mapstructure:"hostname"`
@@ -47,7 +44,7 @@ type GlobalOptions struct {
 	ClientKey            string `mapstructure:"client_key"`
 }
 
-func (o *GlobalOptions) AddFlags(cmd *cobra.Command) {
+func (o *YWGlobalOptions) AddFlags(cmd *cobra.Command) {
 	// Global configuration flags
 	flags := cmd.PersistentFlags()
 	flags.BoolVar(&o.Debug, "debug", false, "debug mode")
@@ -60,62 +57,42 @@ func (o *GlobalOptions) AddFlags(cmd *cobra.Command) {
 	flags.StringVar(&o.ClientKey, "client-key", "", "the path to the client key file")
 }
 
-func (o *GlobalOptions) Validate(_ *CommandContext) error {
+func (o *YWGlobalOptions) Validate(_ *YWClientContext) error {
 	return nil
 }
 
-func mergeConfigFile(ctx *CommandContext) error {
-	ctx.Log.V(1).Info("using viper config", "config", viper.AllSettings())
-
-	err := viper.Unmarshal(ctx.GlobalOptions)
-	if err != nil {
-		return err
-	}
-	ctx.Log.V(1).Info("unmarshalled global options", "config", ctx.GlobalOptions)
-
-	if ctx.CommandOptions != nil {
-		err = viper.Unmarshal(ctx.CommandOptions)
-		if err != nil {
-			return err
-		}
-		ctx.Log.V(1).Info("unmarshalled command options", "config", ctx.CommandOptions)
-	}
-
-	return nil
-}
-
-type CommandContext struct {
+type YWClientContext struct {
 	context.Context
 	Log            logr.Logger
 	Cmd            *cobra.Command
-	GlobalOptions  *GlobalOptions
+	GlobalOptions  *YWGlobalOptions
 	CommandOptions CommandOptions
 
 	Client *client.YugawareClient
 }
 
-func NewCommandContext() *CommandContext {
-	return &CommandContext{
+func NewCommandContext() *YWClientContext {
+	return &YWClientContext{
 		Context: context.Background(),
 	}
 }
 
-func (ctx *CommandContext) WithGlobalOptions(options *GlobalOptions) *CommandContext {
+func (ctx *YWClientContext) WithGlobalOptions(options *YWGlobalOptions) *YWClientContext {
 	ctx.GlobalOptions = options
 	return ctx
 }
 
-func (ctx *CommandContext) WithCmd(cmd *cobra.Command) *CommandContext {
+func (ctx *YWClientContext) WithCmd(cmd *cobra.Command) *YWClientContext {
 	ctx.Cmd = cmd
 	return ctx
 }
 
-func (ctx *CommandContext) WithOptions(options CommandOptions) *CommandContext {
+func (ctx *YWClientContext) WithOptions(options CommandOptions) *YWClientContext {
 	ctx.CommandOptions = options
 	return ctx
 }
 
-func (ctx *CommandContext) Setup() error {
+func (ctx *YWClientContext) Setup() error {
 	if ctx.Cmd == nil ||
 		ctx.GlobalOptions == nil {
 		panic("command context is not set")
@@ -142,7 +119,7 @@ func (ctx *CommandContext) Setup() error {
 		return setupError(err)
 	}
 
-	err = ValidateRequiredFlags(ctx.Cmd.Flags())
+	err = flag.ValidateRequiredFlags(ctx.Cmd.Flags())
 	if err != nil {
 		return err
 	}
@@ -151,17 +128,24 @@ func (ctx *CommandContext) Setup() error {
 	return nil
 }
 
-func (ctx *CommandContext) complete() error {
-	BindFlags(ctx.Cmd.Flags())
-	err := mergeConfigFile(ctx)
+func (ctx *YWClientContext) complete() error {
+	flag.BindFlags(ctx.Cmd.Flags())
+	err := flag.MergeConfigFile(ctx.Log, ctx.GlobalOptions)
 	if err != nil {
 		return err
+	}
+
+	if ctx.CommandOptions != nil {
+		err := flag.MergeConfigFile(ctx.Log, ctx.CommandOptions)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-func ConnectToYugaware(ctx *CommandContext) (*client.YugawareClient, error) {
+func ConnectToYugaware(ctx *YWClientContext) (*client.YugawareClient, error) {
 	return client.New(ctx, ctx.Log, ctx.GlobalOptions.Hostname).
 		TLSOptions(&client.TLSOptions{
 			SkipHostVerification: ctx.GlobalOptions.SkipHostVerification,
@@ -169,68 +153,4 @@ func ConnectToYugaware(ctx *CommandContext) (*client.YugawareClient, error) {
 			CertPath:             ctx.GlobalOptions.ClientCert,
 			KeyPath:              ctx.GlobalOptions.ClientKey,
 		}).TimeoutSeconds(ctx.GlobalOptions.DialTimeout).Connect()
-}
-
-func ShowHelp(cmd *cobra.Command, _ []string) {
-	_ = cmd.Help()
-}
-
-func BindFlags(flags *pflag.FlagSet) {
-	replacer := strings.NewReplacer("-", "_")
-
-	flags.VisitAll(func(flag *pflag.Flag) {
-		if err := viper.BindPFlag(replacer.Replace(flag.Name), flag); err != nil {
-			panic("unable to bind flag " + flag.Name + ": " + err.Error())
-		}
-	})
-}
-
-func ValidateRequiredFlags(flags *pflag.FlagSet) error {
-	var required []*pflag.Flag
-	flags.VisitAll(func(flag *pflag.Flag) {
-		if len(flag.Annotations[YugawareClientMarkFlagRequired]) > 0 {
-			required = append(required, flag)
-		}
-	})
-
-	var missing []string
-	for _, flag := range required {
-		replacer := strings.NewReplacer("-", "_")
-		vname := replacer.Replace(flag.Name)
-		// The flag was specified in the command line
-		if flag.Changed {
-			continue
-		}
-
-		value := viper.Get(vname)
-		if value != nil {
-			if !reflect.DeepEqual(value, reflect.Zero(reflect.TypeOf(value)).Interface()) {
-				continue
-			}
-		}
-
-		missing = append(missing, flag.Name)
-	}
-
-	if len(missing) > 0 {
-		return fmt.Errorf("required flag(s) %v not set", missing)
-	}
-	return nil
-}
-
-const (
-	YugawareClientMarkFlagRequired = "yugaware_client_flag_required_annotation"
-)
-
-func MarkFlagRequired(name string, flags *pflag.FlagSet) {
-	err := flags.SetAnnotation(name, YugawareClientMarkFlagRequired, []string{"true"})
-	if err != nil {
-		panic("could not mark flag required: " + err.Error())
-	}
-}
-
-func MarkFlagsRequired(names []string, flags *pflag.FlagSet) {
-	for _, name := range names {
-		MarkFlagRequired(name, flags)
-	}
 }

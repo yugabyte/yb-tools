@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package util
+package cmdutil
 
 import (
 	"fmt"
@@ -24,7 +24,7 @@ import (
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
-func WaitForTaskCompletion(ctx *CommandContext, waitTask *models.YBPTask) error {
+func WaitForTaskCompletion(ctx *YWClientContext, waitTask *models.YBPTask) error {
 	params := customer_tasks.NewTasksListParams().
 		WithContext(ctx).
 		WithCUUID(ctx.Client.CustomerUUID())

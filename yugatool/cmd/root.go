@@ -18,54 +18,37 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/yugabyte/yb-tools/yugatool/cmd/healthcheck"
+	"github.com/yugabyte/yb-tools/yugatool/cmd/util"
+	"github.com/yugabyte/yb-tools/yugatool/cmd/xcluster"
+	"github.com/yugabyte/yb-tools/yugatool/pkg/cmdutil"
 )
 
 var (
-	cfgFile                       string
-	debug                         bool
-	dialTimeout                   int64
-	masterAddresses               string
-	caCert, clientCert, clientKey string
-	skipHostVerification          bool
+	cfgFile string
 
 	Version = "DEV"
 )
 
 // rootCmd represents the base command when called without any subcommands
-var rootCmd = &cobra.Command{
-	Use:     "yugatool",
-	Short:   "A tool to make troubleshooting yugabyte somewhat easier",
-	Long:    `A tool to make troubleshooting yugabyte somewhat easier`,
-	Version: Version,
-}
+var rootCmd = RootInit()
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	cobra.CheckErr(rootCmd.Execute())
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }
 
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	// Global configuration flags
-	flags := rootCmd.PersistentFlags()
-	flags.StringVar(&cfgFile, "config", "", "config file (default is $HOME/.yugatool.yaml)")
-	flags.BoolVar(&debug, "debug", false, "debug mode")
-	flags.StringVarP(&masterAddresses, "master-address", "m", "", "comma-separated list of YB Master server addresses (minimum of one)")
-	flags.Int64Var(&dialTimeout, "dialtimeout", 10, "number of seconds for dial timeouts")
-	flags.BoolVar(&skipHostVerification, "skiphostverification", false, "skip tls host verification")
-	flags.StringVarP(&caCert, "cacert", "c", "", "the path to the CA certificate")
-	flags.StringVar(&clientCert, "client-cert", "", "the path to the client certificate")
-	flags.StringVar(&clientKey, "client-key", "", "the path to the client key file")
-
-	if err := cobra.MarkFlagRequired(rootCmd.PersistentFlags(), "master-address"); err != nil {
-		panic(err)
-	}
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -83,10 +66,79 @@ func initConfig() {
 		viper.SetConfigName(".yugatool")
 	}
 
+	viper.SetEnvPrefix("YB")
 	viper.AutomaticEnv() // read in environment variables that match
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
 	}
+}
+
+func RootInit() *cobra.Command {
+	globalOptions := &cmdutil.GlobalOptions{}
+
+	cmd := &cobra.Command{
+		Use:     "yugatool",
+		Short:   "A tool to make troubleshooting yugabyte somewhat easier",
+		Long:    `A tool to make troubleshooting yugabyte somewhat easier`,
+		Version: Version,
+	}
+
+	cmd.Flags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.yugatool.yaml)")
+	globalOptions.AddFlags(cmd)
+
+	ctx := cmdutil.NewCommandContext().
+		WithGlobalOptions(globalOptions)
+
+	// Top level commands
+	cmd.AddCommand(ClusterInfoCmd(ctx))
+	cmd.AddCommand(TabletInfoCmd(ctx))
+
+	type CommandCategory struct {
+		Name        string
+		Description string
+		Commands    []*cobra.Command
+	}
+
+	categories := []CommandCategory{
+		{
+			Name:        "healthcheck",
+			Description: "Run yugabyte health checks",
+			Commands: []*cobra.Command{
+				healthcheck.XclusterConsumerCheck(ctx),
+			},
+		},
+		{
+			Name:        "xcluster",
+			Description: "Various utilities to interract with xcluster replication",
+			Commands: []*cobra.Command{
+				xcluster.InitConsumerCmd(ctx),
+				xcluster.InitProducerCmd(ctx),
+			},
+		},
+		{
+			Name:        "util",
+			Description: "Miscellaneous utilities",
+			Commands: []*cobra.Command{
+				util.TableCreateCmd(ctx),
+			},
+		},
+	}
+
+	for _, category := range categories {
+		categoryCmd := &cobra.Command{
+			Use:   category.Name,
+			Short: category.Description,
+			Long:  category.Description,
+			Run:   cmd.HelpFunc(),
+		}
+		for _, subcommand := range category.Commands {
+			categoryCmd.AddCommand(subcommand)
+		}
+		cmd.AddCommand(categoryCmd)
+	}
+
+	return cmd
 }

@@ -25,7 +25,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd/provider"
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd/universe"
-	cmdutil "github.com/yugabyte/yb-tools/yugaware-client/cmd/util"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/cmdutil"
 )
 
 var (
@@ -59,9 +59,9 @@ func initConfig() {
 		home, err := homedir.Dir()
 		cobra.CheckErr(err)
 
-		// Search config in home directory with name ".yugatool" (without extension).
+		// Search config in home directory with name ".ywclient" (without extension).
 		viper.AddConfigPath(home)
-		viper.SetConfigName(".yugatool")
+		viper.SetConfigName(".ywclient")
 	}
 
 	viper.SetEnvPrefix("YW")
@@ -73,7 +73,7 @@ func initConfig() {
 }
 
 func RootInit() *cobra.Command {
-	globalOptions := &cmdutil.GlobalOptions{}
+	globalOptions := &cmdutil.YWGlobalOptions{}
 
 	cmd := &cobra.Command{
 		Use:     "yugaware-client",
@@ -123,7 +123,7 @@ func RootInit() *cobra.Command {
 			Use:   category.Name,
 			Short: category.Description,
 			Long:  category.Description,
-			Run:   cmdutil.ShowHelp,
+			Run:   cmd.HelpFunc(),
 		}
 		for _, subcommand := range category.Commands {
 			categoryCmd.AddCommand(subcommand)

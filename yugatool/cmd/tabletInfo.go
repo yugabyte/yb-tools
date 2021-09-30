@@ -18,71 +18,40 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/blang/vfs"
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/cdc"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/consensus"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/tserver"
-	"github.com/yugabyte/yb-tools/yugatool/api/yugatool/config"
-	"github.com/yugabyte/yb-tools/yugatool/cmd/util"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
+	"github.com/yugabyte/yb-tools/yugatool/pkg/cmdutil"
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
-var tablet string
+func TabletInfoCmd(ctx *cmdutil.YugatoolContext) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "tablet_info TABLET_UUID",
+		Short: "Get tablet consensus info and state",
+		Long:  `Get tablet consensus info and state`,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			err := ctx.WithCmd(cmd).Setup()
+			if err != nil {
+				return err
+			}
+			defer ctx.Client.Close()
 
-// clusterInfoCmd represents the clusterInfo command
-var tabletInfoCmd = &cobra.Command{
-	Use:   "tablet_info -m master-1[:port],master-2[:port]... --tablet <tablet>",
-	Short: "Get tablet consensus info and state",
-	Long:  `Get tablet consensus info and state`,
-	RunE:  tabletInfo,
-}
+			// Positional argument
+			tablet := args[0]
 
-func init() {
-	rootCmd.AddCommand(tabletInfoCmd)
-
-	flags := tabletInfoCmd.PersistentFlags()
-	flags.StringVar(&tablet, "tablet", "", "the tablet to query")
-
-	if err := cobra.MarkFlagRequired(flags, "tablet"); err != nil {
-		panic(err)
-	}
-}
-
-func tabletInfo(cmd *cobra.Command, args []string) error {
-	log, err := util.GetLogger("tablet_info", debug)
-	if err != nil {
-		return err
-	}
-
-	hosts, err := util.ValidateHostnameList(masterAddresses, client.DefaultMasterPort)
-	if err != nil {
-		return err
-	}
-
-	c := &client.YBClient{
-		Log: log.WithName("client"),
-		Fs:  vfs.OS(),
-		Config: &config.UniverseConfigPB{
-			Masters:        hosts,
-			TimeoutSeconds: &dialTimeout,
-			TlsOpts: &config.TlsOptionsPB{
-				SkipHostVerification: &skipHostVerification,
-				CaCertPath:           &caCert,
-				CertPath:             &clientCert,
-				KeyPath:              &clientKey,
-			},
+			return tabletInfo(ctx.Client, tablet)
 		},
 	}
 
-	err = c.Connect()
-	if err != nil {
-		return err
-	}
-	defer c.Close()
+	return cmd
+}
 
+func tabletInfo(c *client.YBClient, tablet string) error {
 	for _, host := range c.TServersHostMap {
 		tablets, err := host.TabletServerService.ListTablets(&tserver.ListTabletsRequestPB{})
 		if err != nil {

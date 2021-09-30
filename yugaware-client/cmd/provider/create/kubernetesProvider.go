@@ -25,11 +25,11 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/go-openapi/runtime"
 	"github.com/spf13/cobra"
-	cmdutil "github.com/yugabyte/yb-tools/yugaware-client/cmd/util"
 	"github.com/yugabyte/yb-tools/yugaware-client/entity/cli"
 	"github.com/yugabyte/yb-tools/yugaware-client/entity/yugaware"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/cloud_providers"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/cmdutil"
 )
 
 var longHelp = `Create a Kubernetes provider
@@ -70,7 +70,7 @@ regions:
               cloud.google.com/gke-nodepool: yugabyte-us-east1-
                 `
 
-func KubernetesProviderCmd(ctx *cmdutil.CommandContext) *cobra.Command {
+func KubernetesProviderCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 	var configPath string
 
 	cmd := &cobra.Command{
@@ -121,7 +121,7 @@ func readKubernetesConfiguration(log logr.Logger, config string) (*cli.Kubernete
 	return kubernetesConfig, nil
 }
 
-func createKubernetesProvider(ctx *cmdutil.CommandContext, config *cli.KubernetesProvider) error {
+func createKubernetesProvider(ctx *cmdutil.YWClientContext, config *cli.KubernetesProvider) error {
 	log := ctx.Log
 	ywc := ctx.Client
 	log.V(1).Info("fetching providers")
@@ -147,7 +147,7 @@ func createKubernetesProvider(ctx *cmdutil.CommandContext, config *cli.Kubernete
 	return nil
 }
 
-func registerKubernetesProvider(ctx *cmdutil.CommandContext, provider *cli.KubernetesProvider) error {
+func registerKubernetesProvider(ctx *cmdutil.YWClientContext, provider *cli.KubernetesProvider) error {
 	log := ctx.Log
 	ywc := ctx.Client
 

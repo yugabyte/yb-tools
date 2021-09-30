@@ -19,16 +19,16 @@ package provider
 import (
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd/provider/create"
-	cmdutil "github.com/yugabyte/yb-tools/yugaware-client/cmd/util"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/cmdutil"
 )
 
-func CreateCmd(ctx *cmdutil.CommandContext) *cobra.Command {
+func CreateCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 	createCmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create yugaware providers",
 		Long:  `Create yugaware providers`,
-		Run:   cmdutil.ShowHelp,
 	}
+	createCmd.Run = createCmd.HelpFunc()
 
 	subcommands := []*cobra.Command{
 		create.KubernetesProviderCmd(ctx),

@@ -14,14 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package cmd
+package util
 
 import (
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/blang/vfs"
 	"github.com/go-logr/logr"
 	. "github.com/icza/gox/gox"
 	"github.com/pkg/errors"
@@ -29,69 +28,58 @@ import (
 	"github.com/yugabyte/gocql"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/server"
-	"github.com/yugabyte/yb-tools/yugatool/api/yugatool/config"
-	cmdutil "github.com/yugabyte/yb-tools/yugatool/cmd/util"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
+	"github.com/yugabyte/yb-tools/yugatool/pkg/cmdutil"
 	util2 "github.com/yugabyte/yb-tools/yugatool/pkg/util"
 )
 
-// clusterInfoCmd represents the clusterInfo command
-var tableCreateCmd = &cobra.Command{
-	Use:   "table_create -m master-1[:port],master-2[:port]...",
-	Short: "Create a bunch of tables",
-	Long:  `Createa bunch of tables and optionally write to them`,
-	RunE:  tableCreate,
-}
-var (
-	numberOfTables, numberOfTabletsPerTserver, numberOfTuples int
-	populateTables                                            bool
-	user, password                                            string
-)
+func TableCreateCmd(ctx *cmdutil.YugatoolContext) *cobra.Command {
+	options := &CreateOptions{}
+	cmd := &cobra.Command{
+		Use:   "table_create",
+		Short: "Create a bunch of tables",
+		Long:  `Create a bunch of tables, and optionally write to them`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			err := ctx.WithCmd(cmd).WithOptions(options).Setup()
+			if err != nil {
+				return err
+			}
+			defer ctx.Client.Close()
 
-func init() {
-	rootCmd.AddCommand(tableCreateCmd)
-
-	flags := tableCreateCmd.PersistentFlags()
-	flags.IntVarP(&numberOfTables, "tables", "t", 100, "number of tables to create/populate")
-	flags.IntVarP(&numberOfTabletsPerTserver, "tablets", "T", 1, "number of tablets of to create per tserver")
-	flags.BoolVar(&populateTables, "populate", false, "populateTables")
-	flags.IntVarP(&numberOfTuples, "tuples", "n", 1, "number of tuples to insert")
-	flags.StringVarP(&user, "user", "u", "", "ycql username")
-	flags.StringVarP(&password, "password", "p", "", "ycql password")
-}
-
-func tableCreate(cmd *cobra.Command, args []string) error {
-	log, err := cmdutil.GetLogger("tableCreate", debug)
-	if err != nil {
-		return err
-	}
-
-	hosts, err := cmdutil.ValidateHostnameList(masterAddresses, client.DefaultMasterPort)
-	if err != nil {
-		return err
-	}
-
-	c := &client.YBClient{
-		Log: log.WithName("client"),
-		Fs:  vfs.OS(),
-		Config: &config.UniverseConfigPB{
-			Masters:        hosts,
-			TimeoutSeconds: &dialTimeout,
-			TlsOpts: &config.TlsOptionsPB{
-				SkipHostVerification: &skipHostVerification,
-				CaCertPath:           &caCert,
-				CertPath:             &clientCert,
-				KeyPath:              &clientKey,
-			},
+			return tableCreate(ctx.Log, ctx.Client, options, ctx.GlobalOptions)
 		},
 	}
+	options.AddFlags(cmd)
 
-	err = c.Connect()
-	if err != nil {
-		return err
-	}
-	defer c.Close()
+	return cmd
+}
 
+type CreateOptions struct {
+	TableCount     uint   `mapstructure:"tables_count"`
+	TabletCount    uint   `mapstructure:"tablet_count"`
+	TupleCount     uint   `mapstructure:"tuple_count"`
+	User           string `mapstructure:"user"`
+	Password       string `mapstructure:"password"`
+	PopulateTables bool   `mapstructure:"populate"`
+}
+
+var _ cmdutil.CommandOptions = &CreateOptions{}
+
+func (o *CreateOptions) AddFlags(cmd *cobra.Command) {
+	flags := cmd.PersistentFlags()
+	flags.UintVarP(&o.TableCount, "table-count", "t", 100, "number of tables to create/populate")
+	flags.UintVarP(&o.TabletCount, "tablet-count", "T", 1, "number of tablets of to create per tserver")
+	flags.UintVarP(&o.TupleCount, "tuple-count", "n", 1, "number of tuples to insert")
+	flags.StringVarP(&o.User, "user", "u", "", "ycql username")
+	flags.StringVarP(&o.Password, "password", "p", "", "ycql password")
+	flags.BoolVar(&o.PopulateTables, "populate", false, "populate tables")
+}
+
+func (o *CreateOptions) Validate() error {
+	return nil
+}
+
+func tableCreate(log logr.Logger, c *client.YBClient, options *CreateOptions, globalOptions *cmdutil.GlobalOptions) error {
 	log.Info("getting cql hosts...")
 	cqlHosts, err := getCqlHosts(c)
 	if err != nil {
@@ -100,21 +88,21 @@ func tableCreate(cmd *cobra.Command, args []string) error {
 
 	ycqlClient := gocql.NewCluster(cqlHosts...)
 
-	if password != "" {
+	if options.Password != "" {
 		ycqlClient.Authenticator = gocql.PasswordAuthenticator{
-			Username: user,
-			Password: password,
+			Username: options.User,
+			Password: options.Password,
 		}
 	}
 
-	ycqlClient.Timeout = time.Duration(dialTimeout) * time.Second
+	ycqlClient.Timeout = time.Duration(globalOptions.DialTimeout) * time.Second
 
-	if clientCert != "" || clientKey != "" || caCert != "" || skipHostVerification {
+	if globalOptions.ClientCert != "" || globalOptions.ClientKey != "" || globalOptions.CACert != "" || globalOptions.SkipHostVerification {
 		ycqlClient.SslOpts = &gocql.SslOptions{
-			CertPath:               clientCert,
-			KeyPath:                clientKey,
-			CaPath:                 caCert,
-			EnableHostVerification: skipHostVerification,
+			CertPath:               globalOptions.ClientCert,
+			KeyPath:                globalOptions.ClientKey,
+			CaPath:                 globalOptions.CACert,
+			EnableHostVerification: globalOptions.SkipHostVerification,
 		}
 	}
 
@@ -128,13 +116,13 @@ func tableCreate(cmd *cobra.Command, args []string) error {
 	}
 	defer session.Close()
 
-	err = RunTableCreate(log, session, numberOfTables, numberOfTabletsPerTserver*len(c.TServersUUIDMap))
+	err = RunTableCreate(log, session, options.TableCount, options.TabletCount*uint(len(c.TServersUUIDMap)))
 	if err != nil {
 		return err
 	}
 
-	if populateTables {
-		err = RunPopulateTables(log, session, numberOfTables, numberOfTuples)
+	if options.PopulateTables {
+		err = RunPopulateTables(log, session, options.TableCount, options.TupleCount)
 	}
 	return err
 }
@@ -172,7 +160,7 @@ func getCqlHosts(ybClient *client.YBClient) ([]string, error) {
 	return cqlHosts, nil
 }
 
-func RunTableCreate(log logr.Logger, session *gocql.Session, numberOfTables, numberOfTablets int) error {
+func RunTableCreate(log logr.Logger, session *gocql.Session, numberOfTables, numberOfTablets uint) error {
 	CreateKeyspaceStatement := `CREATE KEYSPACE IF NOT EXISTS test;`
 	log.Info("creating keyspace if not exists...", "query", CreateKeyspaceStatement)
 
@@ -182,7 +170,7 @@ func RunTableCreate(log logr.Logger, session *gocql.Session, numberOfTables, num
 		return err
 	}
 
-	for i := 0; i < numberOfTables; i++ {
+	for i := uint(0); i < numberOfTables; i++ {
 		tableName := fmt.Sprintf("test.table%d", i)
 		CreateTableStatement := `CREATE TABLE IF NOT EXISTS %s(a int primary key, b int) WITH transactions = { 'enabled' : true } AND tablets = %d;`
 		query := fmt.Sprintf(CreateTableStatement, tableName, numberOfTablets)
@@ -198,20 +186,20 @@ func RunTableCreate(log logr.Logger, session *gocql.Session, numberOfTables, num
 	return nil
 }
 
-func RunPopulateTables(log logr.Logger, session *gocql.Session, numberOfTables, numberOfTuples int) error {
+func RunPopulateTables(log logr.Logger, session *gocql.Session, numberOfTables, numberOfTuples uint) error {
 
 	wg := &sync.WaitGroup{}
-	for i := 0; i < numberOfTables; i++ {
+	for i := uint(0); i < numberOfTables; i++ {
 		tableName := fmt.Sprintf("test.table%d", i)
 		wg.Add(1)
 		log.Info("inserting into table", "table", tableName)
-		go func(log logr.Logger, tableName string, numberOfTuples int, wg *sync.WaitGroup) {
+		go func(log logr.Logger, tableName string, numberOfTuples uint, wg *sync.WaitGroup) {
 			query := fmt.Sprintf("insert into %s(a, b) VALUES (?, ?)", tableName)
-			for j := 1; j <= numberOfTuples; j++ {
+			for j := uint(1); j <= numberOfTuples; j++ {
 
 				err := session.Query(query).Bind(j, j).Exec()
 				if err != nil {
-					log.Error(err, "insert failed", "query", query, "values", []int{j, j})
+					log.Error(err, "insert failed", "query", query, "values", []uint{j, j})
 				}
 				if j%1000 == 0 {
 					log.Info("inserted tuples", "table", tableName, "count", j)

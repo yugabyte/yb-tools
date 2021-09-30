@@ -13,73 +13,43 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package cmd
+package xcluster
 
 import (
 	"bytes"
 	fmt "fmt"
 
-	"github.com/blang/vfs"
 	"github.com/go-logr/logr"
 	. "github.com/icza/gox/gox"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/master"
-	"github.com/yugabyte/yb-tools/yugatool/api/yugatool/config"
-	cmdutil "github.com/yugabyte/yb-tools/yugatool/cmd/util"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
+	"github.com/yugabyte/yb-tools/yugatool/pkg/cmdutil"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/util"
 )
 
-// clusterInfoCmd represents the clusterInfo command
-var xclusterInitConsumerCmd = &cobra.Command{
-	Use:   "xcluster_init_consumer",
-	Short: "Generate commands to init xCluster replication",
-	Long:  `Generate commands to init xCluster replication`,
-	RunE:  xclusterInitConsumer,
-}
+func InitConsumerCmd(ctx *cmdutil.YugatoolContext) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "init_consumer",
+		Short: "Generate commands to init xCluster replication",
+		Long:  `Generate commands to init xCluster replication`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			err := ctx.WithCmd(cmd).Setup()
+			if err != nil {
+				return err
+			}
+			defer ctx.Client.Close()
 
-func init() {
-	rootCmd.AddCommand(xclusterInitConsumerCmd)
-}
-
-func xclusterInitConsumer(_ *cobra.Command, _ []string) error {
-	log, err := cmdutil.GetLogger("xcluster_init_consumer", debug)
-	if err != nil {
-		return err
-	}
-
-	hosts, err := cmdutil.ValidateHostnameList(masterAddresses, client.DefaultMasterPort)
-	if err != nil {
-		return err
-	}
-
-	c := &client.YBClient{
-		Log: log.WithName("client"),
-		Fs:  vfs.OS(),
-		Config: &config.UniverseConfigPB{
-			Masters:        hosts,
-			TimeoutSeconds: &dialTimeout,
-			TlsOpts: &config.TlsOptionsPB{
-				SkipHostVerification: &skipHostVerification,
-				CaCertPath:           &caCert,
-				CertPath:             &clientCert,
-				KeyPath:              &clientKey,
-			},
+			return runInitConsumer(ctx.Log, ctx.Client)
 		},
 	}
 
-	err = c.Connect()
-	if err != nil {
-		return err
-	}
-	defer c.Close()
-
-	return RunInitXclusterConsumer(log, c)
+	return cmd
 }
 
-func RunInitXclusterConsumer(log logr.Logger, c *client.YBClient) error {
+func runInitConsumer(log logr.Logger, c *client.YBClient) error {
 	tables, err := c.Master.MasterService.ListTables(&master.ListTablesRequestPB{
 		ExcludeSystemTables: NewBool(true),
 		RelationTypeFilter:  []master.RelationType{master.RelationType_USER_TABLE_RELATION},

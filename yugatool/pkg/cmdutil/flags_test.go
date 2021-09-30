@@ -1,4 +1,4 @@
-package util_test
+package cmdutil_test
 
 import (
 	. "github.com/icza/gox/gox"
@@ -6,15 +6,15 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
-	"github.com/yugabyte/yb-tools/yugatool/cmd/util"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
+	"github.com/yugabyte/yb-tools/yugatool/pkg/cmdutil"
 )
 
 var _ = Describe("Flags", func() {
 	Context("ValidateHostnameList()", func() {
 		DescribeTable("happy path",
 			func(flagInput string, expectedHosts []*common.HostPortPB) {
-				returnFlags, err := util.ValidateHostnameList(flagInput, client.DefaultMasterPort)
+				returnFlags, err := cmdutil.ValidateHostnameList(flagInput, client.DefaultMasterPort)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(returnFlags).Should(ContainElements(expectedHosts))
@@ -96,7 +96,7 @@ var _ = Describe("Flags", func() {
 		When("given an empty host list", func() {
 			var err error
 			BeforeEach(func() {
-				_, err = util.ValidateHostnameList("", client.DefaultMasterPort)
+				_, err = cmdutil.ValidateHostnameList("", client.DefaultMasterPort)
 			})
 			It("returns an error", func() {
 				Expect(err).To(MatchError("unable to validate master address: master host list empty"))

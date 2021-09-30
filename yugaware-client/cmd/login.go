@@ -18,9 +18,10 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/yugabyte/yb-tools/pkg/flag"
 	"github.com/yugabyte/yb-tools/pkg/util"
-	cmdutil "github.com/yugabyte/yb-tools/yugaware-client/cmd/util"
 	"github.com/yugabyte/yb-tools/yugaware-client/entity/yugaware"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/cmdutil"
 )
 
 type LoginOptions struct {
@@ -28,7 +29,7 @@ type LoginOptions struct {
 	Password string `mapstructure:"password"`
 }
 
-func (o *LoginOptions) Validate(_ *cmdutil.CommandContext) error {
+func (o *LoginOptions) Validate(_ *cmdutil.YWClientContext) error {
 	var err error
 	if o.Password == "" {
 		o.Password, err = util.PasswordPrompt()
@@ -45,12 +46,12 @@ func (o *LoginOptions) AddFlags(cmd *cobra.Command) {
 	flags.StringVarP(&o.Email, "email", "u", "", "yugaware username")
 	flags.StringVarP(&o.Password, "password", "p", "", "yugaware password")
 
-	cmdutil.MarkFlagRequired("email", flags)
+	flag.MarkFlagRequired("email", flags)
 }
 
 var _ cmdutil.CommandOptions = &LoginOptions{}
 
-func LoginCmd(ctx *cmdutil.CommandContext) *cobra.Command {
+func LoginCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 	options := &LoginOptions{}
 
 	loginCmd := &cobra.Command{
@@ -76,7 +77,7 @@ func LoginCmd(ctx *cmdutil.CommandContext) *cobra.Command {
 	return loginCmd
 }
 
-func loginToYugaware(ctx *cmdutil.CommandContext, loginOpts *LoginOptions) error {
+func loginToYugaware(ctx *cmdutil.YWClientContext, loginOpts *LoginOptions) error {
 	log := ctx.Log
 
 	_, err := ctx.Client.Login(&yugaware.LoginRequest{

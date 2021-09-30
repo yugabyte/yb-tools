@@ -22,12 +22,12 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/pkg/format"
 	"github.com/yugabyte/yb-tools/pkg/util"
-	cmdutil "github.com/yugabyte/yb-tools/yugaware-client/cmd/util"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/universe_management"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/cmdutil"
 )
 
-func DeleteUniverseCmd(ctx *cmdutil.CommandContext) *cobra.Command {
+func DeleteUniverseCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 	options := &DeleteOptions{}
 	cmd := &cobra.Command{
 		Use:   "delete UNIVERSE_NAME",
@@ -57,7 +57,7 @@ func DeleteUniverseCmd(ctx *cmdutil.CommandContext) *cobra.Command {
 	return cmd
 }
 
-func deleteUniverse(ctx *cmdutil.CommandContext, options *DeleteOptions) error {
+func deleteUniverse(ctx *cmdutil.YWClientContext, options *DeleteOptions) error {
 	log := ctx.Log
 
 	if !options.Approve {
@@ -118,7 +118,7 @@ func (o *DeleteOptions) AddFlags(cmd *cobra.Command) {
 	flags.BoolVar(&o.Wait, "wait", false, "Wait for create to complete")
 }
 
-func (o *DeleteOptions) Validate(ctx *cmdutil.CommandContext) error {
+func (o *DeleteOptions) Validate(ctx *cmdutil.YWClientContext) error {
 	err := o.validateUniverseName(ctx)
 	if err != nil {
 		return err
@@ -141,7 +141,7 @@ func (o *DeleteOptions) Complete(args []string) error {
 	return nil
 }
 
-func (o *DeleteOptions) validateUniverseName(ctx *cmdutil.CommandContext) error {
+func (o *DeleteOptions) validateUniverseName(ctx *cmdutil.YWClientContext) error {
 	validateUniverseNameError := func(err error) error {
 		return fmt.Errorf(`unable to validate universe name "%s": %w`, o.UniverseName, err)
 	}
@@ -151,25 +151,21 @@ func (o *DeleteOptions) validateUniverseName(ctx *cmdutil.CommandContext) error 
 	}
 
 	ctx.Log.V(1).Info("fetching universes")
-	params := universe_management.NewListUniversesParams().
-		WithContext(ctx).
-		WithCUUID(ctx.Client.CustomerUUID())
-	universes, err := ctx.Client.PlatformAPIs.UniverseManagement.ListUniverses(params, ctx.Client.SwaggerAuth)
+
+	universe, err := ctx.Client.GetUniverseByName(o.UniverseName)
 	if err != nil {
 		return validateUniverseNameError(err)
 	}
-	ctx.Log.V(1).Info("got universes", "universes", universes.GetPayload())
 
-	for _, universe := range universes.GetPayload() {
-		if universe.Name == o.UniverseName {
-			o.universe = universe
-			return nil
-		}
+	if universe != nil {
+		ctx.Log.V(1).Info("got universe", "universe", universe)
+		o.universe = universe
 	}
+
 	return validateUniverseNameError(fmt.Errorf(`universe with name "%s" does not exist`, o.UniverseName))
 }
 
-func (o *DeleteOptions) GetUniverseDeleteParams(ctx *cmdutil.CommandContext) *universe_management.DeleteUniverseParams {
+func (o *DeleteOptions) GetUniverseDeleteParams(ctx *cmdutil.YWClientContext) *universe_management.DeleteUniverseParams {
 	return universe_management.NewDeleteUniverseParams().
 		WithDefaults().
 		WithCUUID(ctx.Client.CustomerUUID()).
