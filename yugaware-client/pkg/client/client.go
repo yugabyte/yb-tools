@@ -199,6 +199,10 @@ func (c *YugawareClient) setupSwaggerClient() {
 
 	// We are relying on the cookies obtained from Login() rather than the API key
 	c.SwaggerAuth = runtime.ClientAuthInfoWriterFunc(func(r runtime.ClientRequest, _ strfmt.Registry) error {
+		if c.authToken == "" {
+			return errors.Errorf("not logged in")
+		}
+
 		err := r.SetHeaderParam("X-AUTH-TOKEN", c.authToken)
 		if err != nil {
 			return err
