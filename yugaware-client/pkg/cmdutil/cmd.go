@@ -37,9 +37,9 @@ type YWGlobalOptions struct {
 	Debug                bool   `mapstructure:"debug"`
 	Output               string `mapstructure:"output"`
 	Hostname             string `mapstructure:"hostname"`
-	DialTimeout          int    `mapstructure:"dial_timeout"`
-	SkipHostVerification bool   `mapstructure:"skip_host_verification"`
-	CACert               string `mapstructure:"ca_cert"`
+	DialTimeout          int    `mapstructure:"dialtimeout"`
+	SkipHostVerification bool   `mapstructure:"skiphostverification"`
+	CACert               string `mapstructure:"cacert"`
 	ClientCert           string `mapstructure:"client_cert"`
 	ClientKey            string `mapstructure:"client_key"`
 }
