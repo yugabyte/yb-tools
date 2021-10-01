@@ -113,6 +113,7 @@ func RootInit() *cobra.Command {
 			Commands: []*cobra.Command{
 				universe.CreateUniverseCmd(ctx),
 				universe.DeleteUniverseCmd(ctx),
+				universe.HealthCheckCmd(ctx),
 				universe.ListCmd(ctx),
 			},
 		},
