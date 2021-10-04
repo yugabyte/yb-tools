@@ -160,6 +160,7 @@ func (o *DeleteOptions) validateUniverseName(ctx *cmdutil.YWClientContext) error
 	if universe != nil {
 		ctx.Log.V(1).Info("got universe", "universe", universe)
 		o.universe = universe
+		return nil
 	}
 
 	return validateUniverseNameError(fmt.Errorf(`universe with name "%s" does not exist`, o.UniverseName))
