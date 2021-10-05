@@ -81,5 +81,3 @@ func MergeConfigFile(log logr.Logger, globalOptions interface{}) error {
 
 	return nil
 }
-
-

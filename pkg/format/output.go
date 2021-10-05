@@ -2,13 +2,88 @@ package format
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/alexeyco/simpletable"
 	"github.com/ghodss/yaml"
+	"github.com/hako/durafmt"
+	"github.com/icza/gox/mathx"
 	"github.com/spyzhov/ajson"
 )
+
+func init() {
+	ajson.AddFunction("seconds_pretty", func(node *ajson.Node) (result *ajson.Node, err error) {
+		var seconds int
+		if node.IsString() {
+			seconds, err = strconv.Atoi(node.MustString())
+			if err != nil {
+				return node, err
+			}
+		} else {
+			return node, fmt.Errorf("seconds_pretty: unknown data type %n", node.Type())
+		}
+
+		fmtTime := durafmt.Parse(time.Duration(seconds) * time.Second)
+
+		return ajson.StringNode("", fmtTime.LimitFirstN(2).String()), err
+	})
+
+	// based on the pg_size_pretty function in Postgres
+	ajson.AddFunction("size_pretty", func(node *ajson.Node) (result *ajson.Node, err error) {
+		var size int
+		if node.IsString() {
+			size, err = strconv.Atoi(node.MustString())
+			if err != nil {
+				return node, err
+			}
+		} else {
+			return node, fmt.Errorf("size_pretty: unknown data type %n", node.Type())
+		}
+
+		limit := 10 * 1024
+
+		if mathx.AbsInt(size) < limit {
+			result = ajson.StringNode("", fmt.Sprintf("%d bytes", size))
+		} else {
+			size /= 1 << 10
+			if size < limit {
+				result = ajson.StringNode("", fmt.Sprintf("%d kB", size))
+			} else {
+				size /= 1 << 10
+				if size < limit {
+					result = ajson.StringNode("", fmt.Sprintf("%d MB", size))
+				} else {
+					size /= 1 << 10
+					if size < limit {
+						result = ajson.StringNode("", fmt.Sprintf("%d GB", size))
+					} else {
+						size /= 1 << 10
+						result = ajson.StringNode("", fmt.Sprintf("%d TB", size))
+					}
+				}
+			}
+		}
+
+		return result, nil
+	})
+
+	ajson.AddFunction("base64_decode", func(node *ajson.Node) (result *ajson.Node, err error) {
+		if node.IsString() {
+			decoded, err := base64.StdEncoding.DecodeString(node.MustString())
+			if err != nil {
+				return nil, err
+			}
+			return ajson.StringNode("", string(decoded)), nil
+		}
+		return node, fmt.Errorf("base64_decode: unknown data type %n", node.Type())
+
+	})
+
+}
 
 type Output struct {
 	OutputMessage string
@@ -98,7 +173,7 @@ func (f *Output) filterRows() error {
 
 func (f *Output) outputYAML() error {
 	output := ajson.ObjectNode("", map[string]*ajson.Node{
-		"msg": ajson.StringNode("", f.OutputMessage),
+		"msg":     ajson.StringNode("", f.OutputMessage),
 		"content": f.root,
 	})
 
@@ -119,7 +194,7 @@ func (f *Output) outputYAML() error {
 
 func (f *Output) outputJSON() error {
 	output := ajson.ObjectNode("", map[string]*ajson.Node{
-		"msg": ajson.StringNode("", f.OutputMessage),
+		"msg":     ajson.StringNode("", f.OutputMessage),
 		"content": f.root,
 	})
 
@@ -184,7 +259,7 @@ func (f *Output) formatPathRow(root *ajson.Node) ([]*simpletable.Cell, error) {
 		var cell *simpletable.Cell
 
 		if col.Expr != "" {
-			cell, err = f.formatEvalExpr(root, col.JSONPath)
+			cell, err = f.formatEvalExpr(root, col.Expr)
 			if err != nil {
 				return formatPathRowError(err)
 			}

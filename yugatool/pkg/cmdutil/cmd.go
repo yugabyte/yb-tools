@@ -128,6 +128,7 @@ var _ CommandOptions = &GlobalOptions{}
 
 type GlobalOptions struct {
 	Debug                bool   `mapstructure:"debug"`
+	Output               string `mapstructure:"output"`
 	DialTimeout          int64  `mapstructure:"dial_timeout"`
 	MasterAddresses      string `mapstructure:"master_addresses"`
 	CACert               string `mapstructure:"cacert"`
@@ -141,6 +142,7 @@ type GlobalOptions struct {
 func (o *GlobalOptions) AddFlags(cmd *cobra.Command) {
 	flags := cmd.PersistentFlags()
 	flags.BoolVar(&o.Debug, "debug", false, "debug mode")
+	flags.StringVarP(&o.Output, "output", "o", "table", "Output options as one of: [table, json, yaml]")
 	flags.StringVarP(&o.MasterAddresses, "master-addresses", "m", "", "comma-separated list of YB Master server addresses (minimum of one)")
 	flags.Int64Var(&o.DialTimeout, "dial-timeout", 10, "number of seconds for dial timeouts")
 	flags.BoolVar(&o.SkipHostVerification, "skiphostverification", false, "skip tls host verification")
