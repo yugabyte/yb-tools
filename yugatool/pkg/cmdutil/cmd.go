@@ -32,6 +32,7 @@ type YugatoolContext struct {
 func NewCommandContext() *YugatoolContext {
 	return &YugatoolContext{
 		Context: context.Background(),
+		Fs:      vfs.OS(),
 	}
 }
 
