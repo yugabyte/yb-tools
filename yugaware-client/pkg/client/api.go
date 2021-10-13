@@ -3,7 +3,9 @@ package client
 import (
 	"fmt"
 
+	"github.com/go-openapi/strfmt"
 	"github.com/yugabyte/yb-tools/yugaware-client/entity/yugaware"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/certificate_info"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/universe_management"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
@@ -119,6 +121,28 @@ func (c *YugawareClient) GetUniverseByName(name string) (*models.UniverseResp, e
 	for _, universe := range universes.GetPayload() {
 		if universe.Name == name {
 			return universe, nil
+		}
+	}
+
+	return nil, nil
+}
+
+func (c *YugawareClient) GetCertByIdentifier(identifier string) (*models.CertificateInfo, error) {
+
+	params := certificate_info.NewGetListOfCertificateParams().WithCUUID(c.CustomerUUID())
+
+	certs, err := c.PlatformAPIs.CertificateInfo.GetListOfCertificate(params, c.SwaggerAuth)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, cert := range certs.GetPayload() {
+		if cert.Label == identifier {
+			return cert, nil
+		}
+
+		if cert.UUID == strfmt.UUID(identifier) {
+			return cert, nil
 		}
 	}
 
