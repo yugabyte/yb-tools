@@ -28,11 +28,11 @@ type CDCProducerReport struct {
 	Log            logr.Logger
 	ConsumerClient *client.YBClient
 	ConsumerUUID   string
-	Producer       *cdc.ProducerEntryPB
+	Producer       *master.ProducerEntryPB
 	Config         *config.UniverseConfigPB
 }
 
-func NewCDCProducerReport(log logr.Logger, consumerClient *client.YBClient, consumerClusterConfig *config.UniverseConfigPB, consumerUUID string, producerID string, producer *cdc.ProducerEntryPB) *CDCProducerReport {
+func NewCDCProducerReport(log logr.Logger, consumerClient *client.YBClient, consumerClusterConfig *config.UniverseConfigPB, consumerUUID string, producerID string, producer *master.ProducerEntryPB) *CDCProducerReport {
 	return &CDCProducerReport{
 		CDCProducerReportPB: &healthcheck.CDCProducerReportPB{
 			ProducerId:              &producerID,
@@ -97,12 +97,12 @@ type CDCProducerStreamReport struct {
 	Log            logr.Logger
 	ConsumerClient *client.YBClient
 	ProducerClient *client.YBClient
-	StreamEntry    *cdc.StreamEntryPB
+	StreamEntry    *master.StreamEntryPB
 	ConsumerSchema *master.GetTableSchemaResponsePB
 	ProducerSchema *master.GetTableSchemaResponsePB
 }
 
-func NewCDCProducerStreamReport(log logr.Logger, consumerClient *client.YBClient, producerClient *client.YBClient, streamID string, streamEntry *cdc.StreamEntryPB) (*CDCProducerStreamReport, error) {
+func NewCDCProducerStreamReport(log logr.Logger, consumerClient *client.YBClient, producerClient *client.YBClient, streamID string, streamEntry *master.StreamEntryPB) (*CDCProducerStreamReport, error) {
 	consumerTableSchema, err := consumerClient.Master.MasterService.GetTableSchema(&master.GetTableSchemaRequestPB{
 		Table: &master.TableIdentifierPB{
 			TableId: []byte(streamEntry.ConsumerTableId),

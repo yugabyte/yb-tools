@@ -44,6 +44,7 @@ import (
 type TabletServerService interface {
 	Write(request *WriteRequestPB) (*WriteResponsePB, error)
 	Read(request *ReadRequestPB) (*ReadResponsePB, error)
+	VerifyTableRowRange(request *VerifyTableRowRangeRequestPB) (*VerifyTableRowRangeResponsePB, error)
 	NoOp(request *NoOpRequestPB) (*NoOpResponsePB, error)
 	ListTablets(request *ListTabletsRequestPB) (*ListTabletsResponsePB, error)
 	GetLogLocation(request *GetLogLocationRequestPB) (*GetLogLocationResponsePB, error)
@@ -60,6 +61,8 @@ type TabletServerService interface {
 	Publish(request *PublishRequestPB) (*PublishResponsePB, error)
 	IsTabletServerReady(request *IsTabletServerReadyRequestPB) (*IsTabletServerReadyResponsePB, error)
 	TakeTransaction(request *TakeTransactionRequestPB) (*TakeTransactionResponsePB, error)
+	GetSplitKey(request *GetSplitKeyRequestPB) (*GetSplitKeyResponsePB, error)
+	GetSharedData(request *GetSharedDataRequestPB) (*GetSharedDataResponsePB, error)
 }
 
 type TabletServerServiceImpl struct {
@@ -91,6 +94,20 @@ func (s *TabletServerServiceImpl) Read(request *ReadRequestPB) (*ReadResponsePB,
 	}
 
 	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "Read", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) VerifyTableRowRange(request *VerifyTableRowRangeRequestPB) (*VerifyTableRowRangeResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "VerifyTableRowRange", "request", request)
+	response := &VerifyTableRowRangeResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "VerifyTableRowRange", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "VerifyTableRowRange", "response", response)
 
 	return response, nil
 }
@@ -327,6 +344,34 @@ func (s *TabletServerServiceImpl) TakeTransaction(request *TakeTransactionReques
 	}
 
 	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "TakeTransaction", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) GetSplitKey(request *GetSplitKeyRequestPB) (*GetSplitKeyResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "GetSplitKey", "request", request)
+	response := &GetSplitKeyResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "GetSplitKey", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetSplitKey", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) GetSharedData(request *GetSharedDataRequestPB) (*GetSharedDataResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "GetSharedData", "request", request)
+	response := &GetSharedDataResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "GetSharedData", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetSharedData", "response", response)
 
 	return response, nil
 }

@@ -32,11 +32,11 @@
 //
 syntax = "proto2";
 
-package yb;
+package yb.consensus;
+
+option java_package = "org.yb.consensus";
 
 import "yb/common/common.proto";
-
-option java_package = "org.yb";
 
 // ===========================================================================
 //  Consensus Metadata

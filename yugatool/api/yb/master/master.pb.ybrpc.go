@@ -50,6 +50,7 @@ type MasterService interface {
 	IsTruncateTableDone(request *IsTruncateTableDoneRequestPB) (*IsTruncateTableDoneResponsePB, error)
 	BackfillIndex(request *BackfillIndexRequestPB) (*BackfillIndexResponsePB, error)
 	LaunchBackfillIndexForTable(request *LaunchBackfillIndexForTableRequestPB) (*LaunchBackfillIndexForTableResponsePB, error)
+	GetBackfillJobs(request *GetBackfillJobsRequestPB) (*GetBackfillJobsResponsePB, error)
 	DeleteTable(request *DeleteTableRequestPB) (*DeleteTableResponsePB, error)
 	IsDeleteTableDone(request *IsDeleteTableDoneRequestPB) (*IsDeleteTableDoneResponsePB, error)
 	AlterTable(request *AlterTableRequestPB) (*AlterTableResponsePB, error)
@@ -84,9 +85,11 @@ type MasterService interface {
 	DeleteCDCStream(request *DeleteCDCStreamRequestPB) (*DeleteCDCStreamResponsePB, error)
 	ListCDCStreams(request *ListCDCStreamsRequestPB) (*ListCDCStreamsResponsePB, error)
 	GetCDCStream(request *GetCDCStreamRequestPB) (*GetCDCStreamResponsePB, error)
+	UpdateCDCStream(request *UpdateCDCStreamRequestPB) (*UpdateCDCStreamResponsePB, error)
 	RedisConfigSet(request *RedisConfigSetRequestPB) (*RedisConfigSetResponsePB, error)
 	RedisConfigGet(request *RedisConfigGetRequestPB) (*RedisConfigGetResponsePB, error)
 	ListTabletServers(request *ListTabletServersRequestPB) (*ListTabletServersResponsePB, error)
+	ListLiveTabletServers(request *ListLiveTabletServersRequestPB) (*ListLiveTabletServersResponsePB, error)
 	ListMasters(request *ListMastersRequestPB) (*ListMastersResponsePB, error)
 	ListMasterRaftPeers(request *ListMasterRaftPeersRequestPB) (*ListMasterRaftPeersResponsePB, error)
 	GetMasterRegistration(request *GetMasterRegistrationRequestPB) (*GetMasterRegistrationResponsePB, error)
@@ -113,11 +116,13 @@ type MasterService interface {
 	AlterUniverseReplication(request *AlterUniverseReplicationRequestPB) (*AlterUniverseReplicationResponsePB, error)
 	SetUniverseReplicationEnabled(request *SetUniverseReplicationEnabledRequestPB) (*SetUniverseReplicationEnabledResponsePB, error)
 	GetUniverseReplication(request *GetUniverseReplicationRequestPB) (*GetUniverseReplicationResponsePB, error)
+	IsSetupUniverseReplicationDone(request *IsSetupUniverseReplicationDoneRequestPB) (*IsSetupUniverseReplicationDoneResponsePB, error)
 	AddUniverseKeys(request *AddUniverseKeysRequestPB) (*AddUniverseKeysResponsePB, error)
 	GetUniverseKeyRegistry(request *GetUniverseKeyRegistryRequestPB) (*GetUniverseKeyRegistryResponsePB, error)
 	HasUniverseKeyInMemory(request *HasUniverseKeyInMemoryRequestPB) (*HasUniverseKeyInMemoryResponsePB, error)
 	SplitTablet(request *SplitTabletRequestPB) (*SplitTabletResponsePB, error)
-	DeleteTablet(request *DeleteTabletRequestPB) (*DeleteTabletResponsePB, error)
+	DeleteNotServingTablet(request *DeleteNotServingTabletRequestPB) (*DeleteNotServingTabletResponsePB, error)
+	DdlLog(request *DdlLogRequestPB) (*DdlLogResponsePB, error)
 }
 
 type MasterServiceImpl struct {
@@ -237,6 +242,20 @@ func (s *MasterServiceImpl) LaunchBackfillIndexForTable(request *LaunchBackfillI
 	}
 
 	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "LaunchBackfillIndexForTable", "response", response)
+
+	return response, nil
+}
+
+func (s *MasterServiceImpl) GetBackfillJobs(request *GetBackfillJobsRequestPB) (*GetBackfillJobsResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.master.MasterService", "method", "GetBackfillJobs", "request", request)
+	response := &GetBackfillJobsResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.master.MasterService", "GetBackfillJobs", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "GetBackfillJobs", "response", response)
 
 	return response, nil
 }
@@ -725,6 +744,20 @@ func (s *MasterServiceImpl) GetCDCStream(request *GetCDCStreamRequestPB) (*GetCD
 	return response, nil
 }
 
+func (s *MasterServiceImpl) UpdateCDCStream(request *UpdateCDCStreamRequestPB) (*UpdateCDCStreamResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.master.MasterService", "method", "UpdateCDCStream", "request", request)
+	response := &UpdateCDCStreamResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.master.MasterService", "UpdateCDCStream", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "UpdateCDCStream", "response", response)
+
+	return response, nil
+}
+
 // Redis Config
 
 func (s *MasterServiceImpl) RedisConfigSet(request *RedisConfigSetRequestPB) (*RedisConfigSetResponsePB, error) {
@@ -767,6 +800,20 @@ func (s *MasterServiceImpl) ListTabletServers(request *ListTabletServersRequestP
 	}
 
 	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "ListTabletServers", "response", response)
+
+	return response, nil
+}
+
+func (s *MasterServiceImpl) ListLiveTabletServers(request *ListLiveTabletServersRequestPB) (*ListLiveTabletServersResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.master.MasterService", "method", "ListLiveTabletServers", "request", request)
+	response := &ListLiveTabletServersResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.master.MasterService", "ListLiveTabletServers", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "ListLiveTabletServers", "response", response)
 
 	return response, nil
 }
@@ -1140,6 +1187,20 @@ func (s *MasterServiceImpl) GetUniverseReplication(request *GetUniverseReplicati
 	return response, nil
 }
 
+func (s *MasterServiceImpl) IsSetupUniverseReplicationDone(request *IsSetupUniverseReplicationDoneRequestPB) (*IsSetupUniverseReplicationDoneResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.master.MasterService", "method", "IsSetupUniverseReplicationDone", "request", request)
+	response := &IsSetupUniverseReplicationDoneResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.master.MasterService", "IsSetupUniverseReplicationDone", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "IsSetupUniverseReplicationDone", "response", response)
+
+	return response, nil
+}
+
 func (s *MasterServiceImpl) AddUniverseKeys(request *AddUniverseKeysRequestPB) (*AddUniverseKeysResponsePB, error) {
 	s.Log.V(1).Info("sending RPC request", "service", "yb.master.MasterService", "method", "AddUniverseKeys", "request", request)
 	response := &AddUniverseKeysResponsePB{}
@@ -1196,16 +1257,30 @@ func (s *MasterServiceImpl) SplitTablet(request *SplitTabletRequestPB) (*SplitTa
 	return response, nil
 }
 
-func (s *MasterServiceImpl) DeleteTablet(request *DeleteTabletRequestPB) (*DeleteTabletResponsePB, error) {
-	s.Log.V(1).Info("sending RPC request", "service", "yb.master.MasterService", "method", "DeleteTablet", "request", request)
-	response := &DeleteTabletResponsePB{}
+func (s *MasterServiceImpl) DeleteNotServingTablet(request *DeleteNotServingTabletRequestPB) (*DeleteNotServingTabletResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.master.MasterService", "method", "DeleteNotServingTablet", "request", request)
+	response := &DeleteNotServingTabletResponsePB{}
 
-	err := s.Messenger.SendMessage("yb.master.MasterService", "DeleteTablet", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	err := s.Messenger.SendMessage("yb.master.MasterService", "DeleteNotServingTablet", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
 	if err != nil {
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "DeleteTablet", "response", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "DeleteNotServingTablet", "response", response)
+
+	return response, nil
+}
+
+func (s *MasterServiceImpl) DdlLog(request *DdlLogRequestPB) (*DdlLogResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.master.MasterService", "method", "DdlLog", "request", request)
+	response := &DdlLogResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.master.MasterService", "DdlLog", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.master.MasterService", "method", "DdlLog", "response", response)
 
 	return response, nil
 }

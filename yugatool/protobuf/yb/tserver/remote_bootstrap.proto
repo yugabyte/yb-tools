@@ -37,8 +37,8 @@ option java_package = "org.yb.tserver";
 
 import "yb/common/wire_protocol.proto";
 import "yb/common/consensus_metadata.proto";
-import "yb/common/tablet_metadata.proto";
 import "yb/rpc/rpc_header.proto";
+import "yb/tablet/metadata.proto";
 
 // RaftConfig remote bootstrap RPC calls.
 service RemoteBootstrapService {
@@ -136,7 +136,7 @@ message BeginRemoteBootstrapSessionResponsePB {
 
   // A snapshot of the committed Consensus state at the time that the
   // remote bootstrap session was started.
-  required consensus.ConsensusStatePB initial_committed_cstate = 5;
+  required ConsensusStatePB initial_committed_cstate = 5;
 }
 
 message CheckRemoteBootstrapSessionActiveRequestPB {

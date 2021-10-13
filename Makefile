@@ -1,6 +1,6 @@
 include global.mk
 
-YBTOOLS = ycrc yugatool yugaware-client
+YBTOOLS = ycrc yugatool yugaware-client protoc-gen-ybrpc
 
 all: ${YBTOOLS}
 

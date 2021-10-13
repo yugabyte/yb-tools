@@ -54,6 +54,7 @@ type TabletServerAdminService interface {
 	AddTableToTablet(request *AddTableToTabletRequestPB) (*AddTableToTabletResponsePB, error)
 	RemoveTableFromTablet(request *RemoveTableFromTabletRequestPB) (*RemoveTableFromTabletResponsePB, error)
 	SplitTablet(request *SplitTabletRequestPB) (*SplitTabletResponsePB, error)
+	UpgradeYsql(request *UpgradeYsqlRequestPB) (*UpgradeYsqlResponsePB, error)
 }
 
 type TabletServerAdminServiceImpl struct {
@@ -241,6 +242,20 @@ func (s *TabletServerAdminServiceImpl) SplitTablet(request *SplitTabletRequestPB
 	}
 
 	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "SplitTablet", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerAdminServiceImpl) UpgradeYsql(request *UpgradeYsqlRequestPB) (*UpgradeYsqlResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerAdminService", "method", "UpgradeYsql", "request", request)
+	response := &UpgradeYsqlResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "UpgradeYsql", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "UpgradeYsql", "response", response)
 
 	return response, nil
 }

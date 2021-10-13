@@ -20,7 +20,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/cdc"
-	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/consensus"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/tserver"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
@@ -70,7 +69,7 @@ func tabletInfo(c *client.YBClient, tablet string) error {
 				pb := consensus.GetConsensusStateRequestPB{
 					DestUuid: host.Status.GetNodeInstance().GetPermanentUuid(),
 					TabletId: []byte(t.GetTabletStatus().GetTabletId()),
-					Type:     common.ConsensusConfigType_CONSENSUS_CONFIG_COMMITTED.Enum(),
+					Type:     consensus.ConsensusConfigType_CONSENSUS_CONFIG_COMMITTED.Enum(),
 				}
 				consensusState, err := host.ConsensusService.GetConsensusState(&pb)
 				if err != nil {
