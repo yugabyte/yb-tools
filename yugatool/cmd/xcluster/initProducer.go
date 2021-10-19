@@ -16,73 +16,99 @@ limitations under the License.
 package xcluster
 
 import (
-	"bytes"
-	fmt "fmt"
+	"fmt"
+	"strings"
 
-	"github.com/go-logr/logr"
 	. "github.com/icza/gox/gox"
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/master"
-	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/cmdutil"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/util"
 )
 
 func InitProducerCmd(ctx *cmdutil.YugatoolContext) *cobra.Command {
+	options := &InitProducerOptions{}
 	cmd := &cobra.Command{
 		Use:   "init_producer",
-		Short: "Generate commands to init xCluster replication",
-		Long:  `Generate commands to init xCluster replication`,
+		Short: "Bootstrap Replication for xCluster replication producer",
+		Long:  `Bootstrap Replication for xCluster replication producer`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := ctx.WithCmd(cmd).Setup()
+			err := ctx.WithCmd(cmd).WithOptions(options).Setup()
 			if err != nil {
 				return err
 			}
 			defer ctx.Client.Close()
-
-			return runInitProducer(ctx.Log, ctx.Client)
+			return initProducer(ctx, options)
 		},
 	}
-
+	options.AddFlags(cmd)
 	return cmd
 }
 
-func runInitProducer(log logr.Logger, c *client.YBClient) error {
-	tables, err := c.Master.MasterService.ListTables(&master.ListTablesRequestPB{
+type InitProducerOptions struct {
+	KeyspaceName string `mapstructure:"keyspace"`
+}
+
+func (o *InitProducerOptions) AddFlags(cmd *cobra.Command) {
+	flags := cmd.Flags()
+	flags.StringVar(&o.KeyspaceName, "keyspace", "", "keyspace target for replication bootstrap")
+}
+
+func (o *InitProducerOptions) Validate() error {
+	return nil
+}
+
+var _ cmdutil.CommandOptions = &InitProducerOptions{}
+
+func getTablesToBootstrap(ctx *cmdutil.YugatoolContext, o *InitProducerOptions) (*master.ListTablesResponsePB, error) {
+	var namespacevar *master.NamespaceIdentifierPB
+
+	if o.KeyspaceName != "" {
+		namespacevar = &master.NamespaceIdentifierPB{
+			Name:         NewString(o.KeyspaceName),
+			DatabaseType: common.YQLDatabase_YQL_DATABASE_CQL.Enum(),
+		}
+	}
+
+	tables, err := ctx.Client.Master.MasterService.ListTables(&master.ListTablesRequestPB{
+		Namespace:           namespacevar,
 		ExcludeSystemTables: NewBool(true),
 		RelationTypeFilter:  []master.RelationType{master.RelationType_USER_TABLE_RELATION},
 	})
 	if err != nil {
+		return tables, err
+	}
+	if tables.Error != nil {
+		return tables, fmt.Errorf("List tables returned Error: %s", tables.Error)
+	}
+
+	return tables, nil
+}
+
+func initProducer(ctx *cmdutil.YugatoolContext, o *InitProducerOptions) error {
+	tables, err := getTablesToBootstrap(ctx, o)
+	if err != nil {
 		return err
 	}
 
-	//masters, err := c.Master.MasterService.ListMasters(&master.ListMastersRequestPB{})
-	//if err != nil {
-	//	return err
-	//}
-
-	var initCDCCommand bytes.Buffer
+	var initCDCCommand strings.Builder
 
 	initCDCCommand.WriteString("yb-admin -master_addresses ")
 	initCDCCommand.WriteString("$PRODUCER_MASTERS")
-	//for i, master := range masters.GetMasters() {
-	//	hostports := master.Registration.GetPrivateRpcAddresses()
-	//	initCDCCommand.WriteString(hostports[0].GetHost())
-	//	initCDCCommand.WriteRune(':')
-	//	initCDCCommand.WriteString(strconv.Itoa(int(hostports[0].GetPort())))
-	//	if i+1 < len(masters.GetMasters()) {
-	//		initCDCCommand.WriteRune(',')
-	//	}
-	//}
 
 	initCDCCommand.WriteRune(' ')
 
-	if util.HasTLS(c.Config.GetTlsOpts()) {
-		initCDCCommand.WriteString("-certs_dir_name $CERTS_DIR ")
+	if util.HasTLS(ctx.Client.Config.GetTlsOpts()) {
+		initCDCCommand.WriteString("-certs_dir_name $CERTS_DIR")
 	}
 
-	initCDCCommand.WriteString("bootstrap_cdc_producer ")
+	initCDCCommand.WriteRune(' ')
+
+	initCDCCommand.WriteString("bootstrap_cdc_producer")
+
+	initCDCCommand.WriteRune(' ')
+
 	for i, table := range tables.GetTables() {
 		if table.TableType.Number() == common.TableType_YQL_TABLE_TYPE.Number() {
 			initCDCCommand.Write(table.GetId())
@@ -93,5 +119,6 @@ func runInitProducer(log logr.Logger, c *client.YBClient) error {
 	}
 
 	fmt.Println(initCDCCommand.String())
+
 	return nil
 }

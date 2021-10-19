@@ -32,7 +32,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.8.1
 	github.com/spyzhov/ajson v0.4.2
-	github.com/yudai/gojsondiff v1.0.0 // indirect
+	github.com/yudai/gojsondiff v1.0.0
 	github.com/yugabyte/gocql v0.0.0-20200602185649-ef3952a45ff4
 	go.uber.org/zap v1.19.0
 	golang.org/x/net v0.0.0-20210825183410-e898025ed96a
