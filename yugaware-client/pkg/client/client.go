@@ -23,6 +23,7 @@ import (
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	swaggerclient "github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/session_management"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -30,10 +31,15 @@ type YugawareClient struct {
 	session   *http.Client
 	cookiejar *cookiejar.Jar
 
-	authToken    string
-	csrfToken    string
-	customerUUID string
-	userUUID     string
+	// One of these two values needs to be set when running API commands
+	apiToken  string // The API key from the GUI
+	authToken string // The API key from logging in - stored in a cookie
+
+	csrfToken string // Required when using login()
+
+	// Either set via API call (when using the API key) or from login()
+	customerUUID strfmt.UUID
+	userUUID     strfmt.UUID
 
 	Ctx            context.Context
 	hostname       string
@@ -91,6 +97,12 @@ func (c *YugawareClient) TLSOptions(opts *TLSOptions) *YugawareClient {
 	return c
 }
 
+func (c *YugawareClient) APIToken(token string) *YugawareClient {
+	c.apiToken = token
+
+	return c
+}
+
 func (c *YugawareClient) Connect() (*YugawareClient, error) {
 
 	// Check for previous errors
@@ -134,12 +146,13 @@ func (c *YugawareClient) Connect() (*YugawareClient, error) {
 		return nil, err
 	}
 
+	c.Log = c.Log.WithValues("host", c.baseURI.String())
+
 	err = c.openCookieJar()
 	if err != nil {
 		return nil, err
 	}
 
-	c.Log = c.Log.WithValues("host", c.baseURI.String())
 	c.session = &http.Client{
 		Transport: c.transport,
 		Jar:       c.cookiejar,
@@ -165,10 +178,6 @@ func (c *YugawareClient) Connect() (*YugawareClient, error) {
 			c.csrfToken = cookie.Value
 		} else if cookie.Name == "authToken" {
 			c.authToken = cookie.Value
-		} else if cookie.Name == "customerId" {
-			c.customerUUID = cookie.Value
-		} else if cookie.Name == "userId" {
-			c.userUUID = cookie.Value
 		}
 	}
 
@@ -178,7 +187,9 @@ func (c *YugawareClient) Connect() (*YugawareClient, error) {
 
 	c.setupSwaggerClient()
 
-	return c, nil
+	err = c.obtainSessionInfo()
+
+	return c, err
 }
 
 func (c *YugawareClient) setupSwaggerClient() {
@@ -197,18 +208,58 @@ func (c *YugawareClient) setupSwaggerClient() {
 
 	c.PlatformAPIs = swaggerclient.New(rt, nil)
 
+	// TODO: this needs to change in order to support the API token- if set, then use it instead of the cookies
 	// We are relying on the cookies obtained from Login() rather than the API key
 	c.SwaggerAuth = runtime.ClientAuthInfoWriterFunc(func(r runtime.ClientRequest, _ strfmt.Registry) error {
-		if c.authToken == "" {
+		if c.authToken == "" &&
+			c.apiToken == "" {
 			return errors.Errorf("not logged in")
 		}
 
-		err := r.SetHeaderParam("X-AUTH-TOKEN", c.authToken)
+		if c.authToken != "" {
+			err := r.SetHeaderParam("X-AUTH-TOKEN", c.authToken)
+			if err != nil {
+				return err
+			}
+		}
+
+		if c.apiToken != "" {
+			err := r.SetHeaderParam("X-AUTH-YW-API-TOKEN", c.apiToken)
+			if err != nil {
+				return err
+			}
+		}
+
+		return r.SetHeaderParam("Csrf-Token", c.csrfToken)
+	})
+}
+
+func (c *YugawareClient) obtainSessionInfo() error {
+	if c.apiToken != "" {
+		params := session_management.NewGetSessionInfoParams()
+
+		sessionInfo, err := c.PlatformAPIs.SessionManagement.GetSessionInfo(params, c.SwaggerAuth)
 		if err != nil {
 			return err
 		}
-		return r.SetHeaderParam("Csrf-Token", c.csrfToken)
-	})
+		c.Log.V(1).Info("obtained session info from server", "session_info", sessionInfo.GetPayload())
+
+		c.customerUUID = sessionInfo.GetPayload().CustomerUUID
+		c.userUUID = sessionInfo.GetPayload().UserUUID
+	} else {
+		cookies := c.session.Jar.Cookies(c.baseURI)
+		// Get persisted credentials
+		for _, cookie := range cookies {
+			if cookie.Name == "customerId" {
+				c.customerUUID = strfmt.UUID(cookie.Value)
+			} else if cookie.Name == "userId" {
+				c.userUUID = strfmt.UUID(cookie.Value)
+			}
+		}
+		c.Log.V(1).Info("using persisted session info", "CustomerUUID", c.customerUUID, "UserUUID", c.userUUID)
+	}
+
+	return nil
 }
 
 func (c *YugawareClient) openCookieJar() error {

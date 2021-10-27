@@ -72,8 +72,8 @@ func (c *YugawareClient) Login(request *yugaware.LoginRequest) (*yugaware.LoginR
 	}
 
 	c.authToken = response.AuthToken
-	c.customerUUID = response.CustomerUUID
-	c.userUUID = response.UserUUID
+	c.customerUUID = strfmt.UUID(response.CustomerUUID)
+	c.userUUID = strfmt.UUID(response.UserUUID)
 
 	return response, nil
 }
@@ -90,7 +90,7 @@ func (c *YugawareClient) ConfigureKubernetesProvider(request *yugaware.Configure
 		return nil, fmt.Errorf("customerUUID is not set, are you logged in?")
 	}
 
-	KubernetesPath := "/api/v1/customers/" + c.customerUUID + "/providers/kubernetes"
+	KubernetesPath := "/api/v1/customers/" + string(c.customerUUID) + "/providers/kubernetes"
 	response := &yugaware.ConfigureKubernetesProviderResponse{}
 
 	_, err := c.newRequest().

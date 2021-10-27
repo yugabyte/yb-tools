@@ -42,6 +42,7 @@ type YWGlobalOptions struct {
 	CACert               string `mapstructure:"cacert"`
 	ClientCert           string `mapstructure:"client_cert"`
 	ClientKey            string `mapstructure:"client_key"`
+	APIToken             string `mapstructure:"api_token"`
 }
 
 func (o *YWGlobalOptions) AddFlags(cmd *cobra.Command) {
@@ -55,6 +56,7 @@ func (o *YWGlobalOptions) AddFlags(cmd *cobra.Command) {
 	flags.StringVarP(&o.CACert, "cacert", "c", "", "the path to the CA certificate")
 	flags.StringVar(&o.ClientCert, "client-cert", "", "the path to the client certificate")
 	flags.StringVar(&o.ClientKey, "client-key", "", "the path to the client key file")
+	flags.StringVar(&o.APIToken, "api-token", "", "api token for yugaware session")
 }
 
 func (o *YWGlobalOptions) Validate(_ *YWClientContext) error {
@@ -152,5 +154,7 @@ func ConnectToYugaware(ctx *YWClientContext) (*client.YugawareClient, error) {
 			CaCertPath:           ctx.GlobalOptions.CACert,
 			CertPath:             ctx.GlobalOptions.ClientCert,
 			KeyPath:              ctx.GlobalOptions.ClientKey,
-		}).TimeoutSeconds(ctx.GlobalOptions.DialTimeout).Connect()
+		}).APIToken(ctx.GlobalOptions.APIToken).
+		TimeoutSeconds(ctx.GlobalOptions.DialTimeout).
+		Connect()
 }
