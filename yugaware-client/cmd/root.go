@@ -20,9 +20,10 @@ import (
 	"os"
 	"strings"
 
-	homedir "github.com/mitchellh/go-homedir"
+	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/yugabyte/yb-tools/yugaware-client/cmd/backup"
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd/certificate"
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd/provider"
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd/session"
@@ -107,6 +108,7 @@ func RootInit() *cobra.Command {
 			Description: "Interact with Yugabyte backups",
 			Commands: []*cobra.Command{
 				backup.CreateCmd(ctx),
+				backup.ListCmd(ctx),
 			},
 		},
 		{
