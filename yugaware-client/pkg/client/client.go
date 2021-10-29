@@ -181,6 +181,11 @@ func (c *YugawareClient) Connect() (*YugawareClient, error) {
 		}
 	}
 
+	// Don't use cookies beyond this point when using the API token
+	if c.apiToken != "" {
+		c.session.Jar = nil
+	}
+
 	if c.csrfToken == "" {
 		c.err = fmt.Errorf("could not obtain csrfToken")
 	}
@@ -201,10 +206,7 @@ func (c *YugawareClient) setupSwaggerClient() {
 		schemes = []string{"http"}
 	}
 
-	rt := client.New(c.hostname+":"+c.port, "/", schemes)
-
-	rt.Transport = c.transport
-	rt.Jar = c.cookiejar
+	rt := client.NewWithClient(c.hostname+":"+c.port, "/", schemes, c.session)
 
 	c.PlatformAPIs = swaggerclient.New(rt, nil)
 
@@ -229,8 +231,13 @@ func (c *YugawareClient) setupSwaggerClient() {
 				return err
 			}
 		}
-
-		return r.SetHeaderParam("Csrf-Token", c.csrfToken)
+		if c.csrfToken != "" {
+			err := r.SetHeaderParam("Csrf-Token", c.csrfToken)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 
@@ -272,9 +279,14 @@ func (c *YugawareClient) openCookieJar() error {
 	c.cookiejar, err = cookiejar.New(&cookiejar.Options{
 		PublicSuffixList: publicsuffix.List,
 		Filename:         path.Join(home, ".yugaware-client-cookiejar"),
-		NoPersist:        false,
+		NoPersist:        c.apiToken != "", // Don't persist cookies when using the API token
 		Filter: cookiejar.CookieFilterFunc(func(cookie *http.Cookie) bool {
-			return cookie.Name != "csrfToken"
+			if cookie.Name == "authToken" ||
+				cookie.Name == "customerId" ||
+				cookie.Name == "userId" {
+				return true
+			}
+			return false
 		}),
 	})
 	if err != nil {
