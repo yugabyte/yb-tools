@@ -24,7 +24,7 @@ func init() {
 				return node, err
 			}
 		} else {
-			return node, fmt.Errorf("seconds_pretty: unknown data type %n", node.Type())
+			return node, fmt.Errorf("seconds_pretty: unknown data type %d", node.Type())
 		}
 
 		fmtTime := durafmt.Parse(time.Duration(seconds) * time.Second)
@@ -41,7 +41,7 @@ func init() {
 				return node, err
 			}
 		} else {
-			return node, fmt.Errorf("size_pretty: unknown data type %n", node.Type())
+			return node, fmt.Errorf("size_pretty: unknown data type %d", node.Type())
 		}
 
 		limit := 10 * 1024
@@ -79,7 +79,7 @@ func init() {
 			}
 			return ajson.StringNode("", string(decoded)), nil
 		}
-		return node, fmt.Errorf("base64_decode: unknown data type %n", node.Type())
+		return node, fmt.Errorf("base64_decode: unknown data type %d", node.Type())
 
 	})
 
@@ -112,6 +112,10 @@ func (f *Output) Print() error {
 		return err
 	}
 
+	if !f.root.IsObject() && !f.root.IsArray() {
+		return fmt.Errorf("output %d must be an object or array", f.root.Type())
+	}
+
 	err = f.filterRows()
 	if err != nil {
 		return err
@@ -141,9 +145,10 @@ func (f *Output) Println() error {
 }
 
 func (f *Output) filterRows() error {
-	var filteredDocument []*ajson.Node
 
 	if f.root.IsArray() {
+		var filteredDocument []*ajson.Node
+
 		for _, ajsonRow := range f.root.MustArray() {
 			meetsFilter, err := f.checkMeetsFilter(ajsonRow)
 			if err != nil {
@@ -155,26 +160,25 @@ func (f *Output) filterRows() error {
 
 			filteredDocument = append(filteredDocument, ajsonRow)
 		}
+
+		f.root = ajson.ArrayNode("", filteredDocument)
 	} else if f.root.IsObject() {
 		meetsFilter, err := f.checkMeetsFilter(f.root)
 		if err != nil {
 			return err
 		}
-		if meetsFilter {
-			filteredDocument = append(filteredDocument, f.root)
+		if !meetsFilter {
+			f.root = ajson.ObjectNode("", nil)
 		}
 	} else {
 		return fmt.Errorf("json is not in the form of an object or array")
 	}
 
-	f.root = ajson.ArrayNode("", filteredDocument)
 	return nil
 }
 
 func (f *Output) outputYAML() error {
 	var output *ajson.Node
-	// TODO: Single objects may be emitted as one element arrays even if we don't want them to be. Add output context
-	// so the code can differentiate whether we want an array or a bare object (e.g. object vs 1 elem array of objects)
 	if f.OutputMessage == "" {
 		output = f.root
 	} else {
@@ -201,8 +205,6 @@ func (f *Output) outputYAML() error {
 
 func (f *Output) outputJSON() error {
 	var output *ajson.Node
-	// TODO: Single objects may be emitted as one element arrays even if we don't want them to be. Add output context
-	// so the code can differentiate whether we want an array or a bare object (e.g. object vs 1 elem array of objects)
 	if f.OutputMessage == "" {
 		output = f.root
 	} else {
@@ -230,6 +232,11 @@ func (f *Output) outputTable() error {
 			Align: simpletable.AlignCenter,
 			Text:  col.Name,
 		})
+	}
+
+	// Objects get printed as a single row table
+	if f.root.IsObject() {
+		f.root = ajson.ArrayNode("", []*ajson.Node{f.root})
 	}
 
 	table.Body = &simpletable.Body{}
