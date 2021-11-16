@@ -227,7 +227,7 @@ func (o *CreateOptions) validateUniverseName(ctx *cmdutil.YWClientContext) error
 	}
 
 	ctx.Log.V(1).Info("fetching universes")
-	universe, err := ctx.Client.GetUniverseByName(o.UniverseName)
+	universe, err := ctx.Client.GetUniverseByIdentifier(o.UniverseName)
 	if err != nil {
 		return validateUniverseNameError(err)
 	}

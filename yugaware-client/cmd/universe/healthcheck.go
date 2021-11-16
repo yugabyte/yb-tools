@@ -13,7 +13,7 @@ import (
 func HealthCheckCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 	options := &HealthCheckOptions{}
 	cmd := &cobra.Command{
-		Use:   "healthcheck UNIVERSE_NAME",
+		Use:   "healthcheck (UNIVERSE_NAME|UNIVERSE_UUID)",
 		Short: "Show universe healthchecks",
 		Long:  `Show universe healthchecks`,
 		Args:  cobra.ExactArgs(1),
@@ -24,9 +24,9 @@ func HealthCheckCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 			}
 
 			// Positional argument
-			universeName := args[0]
+			universeIdentifier := args[0]
 
-			return healthCheckCmd(ctx, universeName, options.ErrorsOnly)
+			return healthCheckCmd(ctx, universeIdentifier, options.ErrorsOnly)
 		},
 	}
 	options.AddFlags(cmd)
@@ -48,13 +48,13 @@ func (h *HealthCheckOptions) Validate(_ *cmdutil.YWClientContext) error {
 
 var _ cmdutil.CommandOptions = &HealthCheckOptions{}
 
-func healthCheckCmd(ctx *cmdutil.YWClientContext, universeName string, errorsOnly bool) error {
-	universe, err := ctx.Client.GetUniverseByName(universeName)
+func healthCheckCmd(ctx *cmdutil.YWClientContext, universeIdentifier string, errorsOnly bool) error {
+	universe, err := ctx.Client.GetUniverseByIdentifier(universeIdentifier)
 	if err != nil {
 		return err
 	}
 	if universe == nil {
-		return fmt.Errorf("universe does not exist: %s", universeName)
+		return fmt.Errorf("universe does not exist: %s", universeIdentifier)
 	}
 
 	params := universe_information.NewHealthCheckUniverseParams().WithDefaults().
@@ -94,7 +94,7 @@ func healthCheckCmd(ctx *cmdutil.YWClientContext, universeName string, errorsOnl
 
 	for _, hc := range healthchecks {
 		table := &format.Output{
-			OutputMessage: fmt.Sprintf("%s Health Check %s", universeName, hc.Timestamp),
+			OutputMessage: fmt.Sprintf("%s Health Check %s", universeIdentifier, hc.Timestamp),
 			JSONObject:    hc.Data,
 			OutputType:    ctx.GlobalOptions.Output,
 			TableColumns: []format.Column{

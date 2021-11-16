@@ -172,10 +172,17 @@ func (f *Output) filterRows() error {
 }
 
 func (f *Output) outputYAML() error {
-	output := ajson.ObjectNode("", map[string]*ajson.Node{
-		"msg":     ajson.StringNode("", f.OutputMessage),
-		"content": f.root,
-	})
+	var output *ajson.Node
+	// TODO: Single objects may be emitted as one element arrays even if we don't want them to be. Add output context
+	// so the code can differentiate whether we want an array or a bare object (e.g. object vs 1 elem array of objects)
+	if f.OutputMessage == "" {
+		output = f.root
+	} else {
+		output = ajson.ObjectNode("", map[string]*ajson.Node{
+			"msg":     ajson.StringNode("", f.OutputMessage),
+			"content": f.root,
+		})
+	}
 
 	document, err := ajson.Marshal(output)
 	if err != nil {
@@ -193,10 +200,17 @@ func (f *Output) outputYAML() error {
 }
 
 func (f *Output) outputJSON() error {
-	output := ajson.ObjectNode("", map[string]*ajson.Node{
-		"msg":     ajson.StringNode("", f.OutputMessage),
-		"content": f.root,
-	})
+	var output *ajson.Node
+	// TODO: Single objects may be emitted as one element arrays even if we don't want them to be. Add output context
+	// so the code can differentiate whether we want an array or a bare object (e.g. object vs 1 elem array of objects)
+	if f.OutputMessage == "" {
+		output = f.root
+	} else {
+		output = ajson.ObjectNode("", map[string]*ajson.Node{
+			"msg":     ajson.StringNode("", f.OutputMessage),
+			"content": f.root,
+		})
+	}
 
 	document, err := AJSONToIndentedJSON(output, " ", " ")
 	if err != nil {

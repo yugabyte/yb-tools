@@ -30,7 +30,7 @@ import (
 func DeleteUniverseCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 	options := &DeleteOptions{}
 	cmd := &cobra.Command{
-		Use:   "delete UNIVERSE_NAME",
+		Use:   "delete (UNIVERSE_NAME|UNIVERSE_UUID)",
 		Short: "Delete a Yugabyte universe",
 		Long:  `Delete a Yugabyte universe`,
 		Args:  cobra.ExactArgs(1),
@@ -41,7 +41,7 @@ func DeleteUniverseCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 			}
 
 			// Positional argument
-			options.UniverseName = args[0]
+			options.UniverseIdentifier = args[0]
 
 			err = options.Validate(ctx)
 			if err != nil {
@@ -69,7 +69,7 @@ func deleteUniverse(ctx *cmdutil.YWClientContext, options *DeleteOptions) error 
 
 	params := options.GetUniverseDeleteParams(ctx)
 
-	log.V(1).Info("deleting universe", "universe_name", options.UniverseName, "uuid", options.universe.UniverseUUID)
+	log.V(1).Info("deleting universe", "universe_name", options.universe.Name, "universe_uuid", options.universe.UniverseUUID)
 	task, err := ctx.Client.PlatformAPIs.UniverseManagement.DeleteUniverse(params, ctx.Client.SwaggerAuth)
 	if err != nil {
 		return err
@@ -97,7 +97,7 @@ func deleteUniverse(ctx *cmdutil.YWClientContext, options *DeleteOptions) error 
 }
 
 type DeleteOptions struct {
-	UniverseName string
+	UniverseIdentifier string
 
 	Approve       bool `mapstructure:"approve,omitempty"`
 	Force         bool `mapstructure:"force,omitempty"`
@@ -119,7 +119,7 @@ func (o *DeleteOptions) AddFlags(cmd *cobra.Command) {
 }
 
 func (o *DeleteOptions) Validate(ctx *cmdutil.YWClientContext) error {
-	err := o.validateUniverseName(ctx)
+	err := o.validateUniverseIdentifier(ctx)
 	if err != nil {
 		return err
 	}
@@ -129,32 +129,32 @@ func (o *DeleteOptions) Validate(ctx *cmdutil.YWClientContext) error {
 
 func (o *DeleteOptions) Complete(args []string) error {
 	if len(args) != 1 {
-		return fmt.Errorf("required argument UNIVERSE_NAME is not set")
+		return fmt.Errorf("a UNIVERSE_NAME or UNIVERSE_UUID argument is required")
 	}
 
 	if len(args) > 1 {
 		return fmt.Errorf("too many arguments")
 	}
 
-	o.UniverseName = args[0]
+	o.UniverseIdentifier = args[0]
 
 	return nil
 }
 
-func (o *DeleteOptions) validateUniverseName(ctx *cmdutil.YWClientContext) error {
-	validateUniverseNameError := func(err error) error {
-		return fmt.Errorf(`unable to validate universe name "%s": %w`, o.UniverseName, err)
+func (o *DeleteOptions) validateUniverseIdentifier(ctx *cmdutil.YWClientContext) error {
+	validateUniverseIdentifierError := func(err error) error {
+		return fmt.Errorf(`unable to validate universe identifier "%s": %w`, o.UniverseIdentifier, err)
 	}
 
-	if o.UniverseName == "" {
-		return validateUniverseNameError(fmt.Errorf(`required argument UNIVERSE_NAME is not set`))
+	if o.UniverseIdentifier == "" {
+		return validateUniverseIdentifierError(fmt.Errorf(`a UNIVERSE_NAME or UNIVERSE_UUID argument is required`))
 	}
 
 	ctx.Log.V(1).Info("fetching universes")
 
-	universe, err := ctx.Client.GetUniverseByName(o.UniverseName)
+	universe, err := ctx.Client.GetUniverseByIdentifier(o.UniverseIdentifier)
 	if err != nil {
-		return validateUniverseNameError(err)
+		return validateUniverseIdentifierError(err)
 	}
 
 	if universe != nil {
@@ -163,7 +163,7 @@ func (o *DeleteOptions) validateUniverseName(ctx *cmdutil.YWClientContext) error
 		return nil
 	}
 
-	return validateUniverseNameError(fmt.Errorf(`universe with name "%s" does not exist`, o.UniverseName))
+	return validateUniverseIdentifierError(fmt.Errorf(`universe with identifier "%s" does not exist`, o.UniverseIdentifier))
 }
 
 func (o *DeleteOptions) GetUniverseDeleteParams(ctx *cmdutil.YWClientContext) *universe_management.DeleteUniverseParams {
