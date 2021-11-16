@@ -1,5 +1,5 @@
 This is a python script based on Panda library to load CSV data to a table in YugabyteDB. This is to alleviate the 
-problem of `COPY` command failing and in turn requiring a need to truncate
+problem of a `COPY` command failing midway (say due to a timeout) and in turn requiring a need to truncate
 the table and run `COPY` again. It handles duplicates by either ignoring the new value
 or overwriting the oldvalue with newone.
 In case of failures, there is no need to truncate the table saving lots of time and effort.
