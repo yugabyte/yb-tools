@@ -5,18 +5,10 @@ import time
 import random
 import os
 from functools import partial
+import argparse
 import psycopg2
 
 from multiprocessing.dummy import Pool as ThreadPool
-
-# Which cluster? Which schema? How many sub-tasks? Max parallelism?
-schema_name="public"
-num_tasks_per_table=4096
-num_parallel_tasks=32
-
-cluster = psycopg2.connect("host=127.0.0.1 port=5433 dbname=yugabyte user=yugabyte password=yugabyte")
-session = cluster.cursor()
-
 
 threads = []
 
@@ -49,7 +41,7 @@ def check_table_row_counts(schema_name, table_name):
 "JOIN   pg_attribute a ON a.attrelid = i.indrelid " + 
                      "AND a.attnum = ANY(i.indkey) " + 
 "WHERE  i.indrelid = %s::regclass " +
-"AND    i.indisprimary;",
+"AND    i.indisprimary AND (i.indoption[array_position(i.indkey, a.attnum)] & 4 <> 0);",
                                (table_name,))
 
     # Add the partition columns to an array sorted by the
@@ -95,9 +87,12 @@ def check_table_row_counts(schema_name, table_name):
     print("Total Time: %s ms" % ((t2 - t1) * 1000))
     print("====================")
 
+    # cleanup
     for i in range(num_parallel_tasks):
     	cursors[i].close()
     total_row_cnt = 0
+    del threads[:]
+
     for idx in range(len(row_counts)):
       total_row_cnt = total_row_cnt + row_counts[idx]
 
@@ -105,12 +100,32 @@ def check_table_row_counts(schema_name, table_name):
     print("--------------------------------------------------------")
 
 def check_schema_table_row_counts(schema_name):
-    print("Checking table row counts for schema: " + schema_name);
+    print("Checking table row counts for schema: " + schema_name + " in database: " + dbname);
     print("--------------------------------------------------------")
     tables = []
-    results = session.execute("select tablename from pg_tables where schemaname = \'" + schema_name + "\'");
+    results = session.execute("select tablename from pg_tables where schemaname = %s", (schema_name,
+    ));
     for row in session.fetchall():
        check_table_row_counts(schema_name, row[0])
 
+parser = argparse.ArgumentParser(description='get row counts of a table using parallel driver')
+
 # Main
+parser.add_argument('--cluster', help="ip or hostname of cluster", default='127.0.0.1')
+parser.add_argument('--portname', help="portname of cluster", default='5433')
+parser.add_argument('--username', help="username of cluster", default='yugabyte')
+parser.add_argument('--password', help="password of cluster", default='yugabyte')
+parser.add_argument('--dbname', help="name of database to count", default='yugabyte')
+parser.add_argument('--schemaname', help="schema to count on", default='public')
+parser.add_argument('--tasks', help="number of tasks per table", default=4096)
+parser.add_argument('--parallel', help="number of parallel tasks", default=8)
+
+args = parser.parse_args()
+cluster = psycopg2.connect("host={} port={} dbname={} user={} password={}".format(args.cluster, args.portname, args.dbname, args.username, args.password))
+dbname = args.dbname
+num_tasks_per_table = args.tasks
+num_parallel_tasks = args.parallel
+schema_name = args.schemaname
+session = cluster.cursor()
+
 check_schema_table_row_counts(schema_name)
