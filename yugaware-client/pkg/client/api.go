@@ -2,6 +2,7 @@ package client
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/go-openapi/strfmt"
 	"github.com/yugabyte/yb-tools/yugaware-client/entity/yugaware"
@@ -108,7 +109,7 @@ func (c *YugawareClient) ConfigureKubernetesProvider(request *yugaware.Configure
 
 }
 
-func (c *YugawareClient) GetUniverseByName(name string) (*models.UniverseResp, error) {
+func (c *YugawareClient) GetUniverseByIdentifier(identifier string) (*models.UniverseResp, error) {
 
 	params := universe_management.NewListUniversesParams().
 		WithCUUID(c.CustomerUUID())
@@ -119,7 +120,11 @@ func (c *YugawareClient) GetUniverseByName(name string) (*models.UniverseResp, e
 	}
 
 	for _, universe := range universes.GetPayload() {
-		if universe.Name == name {
+		if universe.Name == identifier {
+			return universe, nil
+		}
+
+		if universe.UniverseUUID == strfmt.UUID(strings.ToLower(identifier)) {
 			return universe, nil
 		}
 	}
@@ -141,7 +146,7 @@ func (c *YugawareClient) GetCertByIdentifier(identifier string) (*models.Certifi
 			return cert, nil
 		}
 
-		if cert.UUID == strfmt.UUID(identifier) {
+		if cert.UUID == strfmt.UUID(strings.ToLower(identifier)) {
 			return cert, nil
 		}
 	}

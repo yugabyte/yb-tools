@@ -120,10 +120,12 @@ func RootInit() *cobra.Command {
 			Name:        "universe",
 			Description: "Interact with Yugabyte universes",
 			Commands: []*cobra.Command{
+				// TODO: Make these names consistent
 				universe.CreateUniverseCmd(ctx),
 				universe.DeleteUniverseCmd(ctx),
 				universe.HealthCheckCmd(ctx),
 				universe.ListCmd(ctx),
+				universe.GetCmd(ctx),
 			},
 		},
 	}
