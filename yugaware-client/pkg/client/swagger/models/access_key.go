@@ -56,6 +56,8 @@ func (m *AccessKey) validateIDKey(formats strfmt.Registry) error {
 		if err := m.IDKey.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("idKey")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("idKey")
 			}
 			return err
 		}
@@ -74,6 +76,8 @@ func (m *AccessKey) validateKeyInfo(formats strfmt.Registry) error {
 		if err := m.KeyInfo.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("keyInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("keyInfo")
 			}
 			return err
 		}
@@ -106,6 +110,8 @@ func (m *AccessKey) contextValidateIDKey(ctx context.Context, formats strfmt.Reg
 		if err := m.IDKey.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("idKey")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("idKey")
 			}
 			return err
 		}
@@ -120,6 +126,8 @@ func (m *AccessKey) contextValidateKeyInfo(ctx context.Context, formats strfmt.R
 		if err := m.KeyInfo.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("keyInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("keyInfo")
 			}
 			return err
 		}

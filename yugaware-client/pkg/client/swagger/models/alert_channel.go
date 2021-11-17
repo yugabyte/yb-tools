@@ -24,11 +24,14 @@ import (
 type AlertChannel struct {
 
 	// customer uuid
+	// Required: true
 	// Format: uuid
-	CustomerUUID strfmt.UUID `json:"customer_uuid,omitempty"`
+	CustomerUUID *strfmt.UUID `json:"customer_uuid"`
 
 	// name
 	// Required: true
+	// Max Length: 63
+	// Min Length: 1
 	Name *string `json:"name"`
 
 	paramsField AlertChannelParams
@@ -52,7 +55,7 @@ func (m *AlertChannel) SetParams(val AlertChannelParams) {
 // UnmarshalJSON unmarshals this object with a polymorphic type from a JSON structure
 func (m *AlertChannel) UnmarshalJSON(raw []byte) error {
 	var data struct {
-		CustomerUUID strfmt.UUID `json:"customer_uuid,omitempty"`
+		CustomerUUID *strfmt.UUID `json:"customer_uuid"`
 
 		Name *string `json:"name"`
 
@@ -97,7 +100,7 @@ func (m AlertChannel) MarshalJSON() ([]byte, error) {
 	var b1, b2, b3 []byte
 	var err error
 	b1, err = json.Marshal(struct {
-		CustomerUUID strfmt.UUID `json:"customer_uuid,omitempty"`
+		CustomerUUID *strfmt.UUID `json:"customer_uuid"`
 
 		Name *string `json:"name"`
 
@@ -153,8 +156,9 @@ func (m *AlertChannel) Validate(formats strfmt.Registry) error {
 }
 
 func (m *AlertChannel) validateCustomerUUID(formats strfmt.Registry) error {
-	if swag.IsZero(m.CustomerUUID) { // not required
-		return nil
+
+	if err := validate.Required("customer_uuid", "body", m.CustomerUUID); err != nil {
+		return err
 	}
 
 	if err := validate.FormatOf("customer_uuid", "body", "uuid", m.CustomerUUID.String(), formats); err != nil {
@@ -170,6 +174,14 @@ func (m *AlertChannel) validateName(formats strfmt.Registry) error {
 		return err
 	}
 
+	if err := validate.MinLength("name", "body", *m.Name, 1); err != nil {
+		return err
+	}
+
+	if err := validate.MaxLength("name", "body", *m.Name, 63); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -182,6 +194,8 @@ func (m *AlertChannel) validateParams(formats strfmt.Registry) error {
 	if err := m.Params().Validate(formats); err != nil {
 		if ve, ok := err.(*errors.Validation); ok {
 			return ve.ValidateName("params")
+		} else if ce, ok := err.(*errors.CompositeError); ok {
+			return ce.ValidateName("params")
 		}
 		return err
 	}
@@ -221,6 +235,8 @@ func (m *AlertChannel) contextValidateParams(ctx context.Context, formats strfmt
 	if err := m.Params().ContextValidate(ctx, formats); err != nil {
 		if ve, ok := err.(*errors.Validation); ok {
 			return ve.ValidateName("params")
+		} else if ce, ok := err.(*errors.CompositeError); ok {
+			return ce.ValidateName("params")
 		}
 		return err
 	}

@@ -54,6 +54,8 @@ func (m *PlacementInfo) validateCloudList(formats strfmt.Registry) error {
 			if err := m.CloudList[i].Validate(formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("cloudList" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("cloudList" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
@@ -86,6 +88,8 @@ func (m *PlacementInfo) contextValidateCloudList(ctx context.Context, formats st
 			if err := m.CloudList[i].ContextValidate(ctx, formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("cloudList" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("cloudList" + "." + strconv.Itoa(i))
 				}
 				return err
 			}

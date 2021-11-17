@@ -45,6 +45,8 @@ func (m *S3Location) validatePaths(formats strfmt.Registry) error {
 		if err := m.Paths.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("paths")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("paths")
 			}
 			return err
 		}
@@ -73,6 +75,8 @@ func (m *S3Location) contextValidatePaths(ctx context.Context, formats strfmt.Re
 		if err := m.Paths.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("paths")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("paths")
 			}
 			return err
 		}

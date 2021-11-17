@@ -14,6 +14,8 @@ import (
 	"github.com/go-openapi/runtime"
 	cr "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
+
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
 // NewCreateReadOnlyClusterParams creates a new CreateReadOnlyClusterParams object,
@@ -58,6 +60,9 @@ func NewCreateReadOnlyClusterParamsWithHTTPClient(client *http.Client) *CreateRe
    Typically these are written to a http.Request.
 */
 type CreateReadOnlyClusterParams struct {
+
+	// UniverseConfigureTaskParams.
+	UniverseConfigureTaskParams *models.UniverseDefinitionTaskParams
 
 	// CUUID.
 	//
@@ -122,6 +127,17 @@ func (o *CreateReadOnlyClusterParams) SetHTTPClient(client *http.Client) {
 	o.HTTPClient = client
 }
 
+// WithUniverseConfigureTaskParams adds the universeConfigureTaskParams to the create read only cluster params
+func (o *CreateReadOnlyClusterParams) WithUniverseConfigureTaskParams(universeConfigureTaskParams *models.UniverseDefinitionTaskParams) *CreateReadOnlyClusterParams {
+	o.SetUniverseConfigureTaskParams(universeConfigureTaskParams)
+	return o
+}
+
+// SetUniverseConfigureTaskParams adds the universeConfigureTaskParams to the create read only cluster params
+func (o *CreateReadOnlyClusterParams) SetUniverseConfigureTaskParams(universeConfigureTaskParams *models.UniverseDefinitionTaskParams) {
+	o.UniverseConfigureTaskParams = universeConfigureTaskParams
+}
+
 // WithCUUID adds the cUUID to the create read only cluster params
 func (o *CreateReadOnlyClusterParams) WithCUUID(cUUID strfmt.UUID) *CreateReadOnlyClusterParams {
 	o.SetCUUID(cUUID)
@@ -151,6 +167,11 @@ func (o *CreateReadOnlyClusterParams) WriteToRequest(r runtime.ClientRequest, re
 		return err
 	}
 	var res []error
+	if o.UniverseConfigureTaskParams != nil {
+		if err := r.SetBodyParam(o.UniverseConfigureTaskParams); err != nil {
+			return err
+		}
+	}
 
 	// path param cUUID
 	if err := r.SetPathParam("cUUID", o.CUUID.String()); err != nil {

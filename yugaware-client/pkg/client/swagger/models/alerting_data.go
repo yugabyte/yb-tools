@@ -24,12 +24,6 @@ type AlertingData struct {
 	// Alert interval, in milliseconds
 	CheckIntervalMs int64 `json:"checkIntervalMs,omitempty"`
 
-	// Enable clock skew (default is true)
-	EnableClockSkew bool `json:"enableClockSkew,omitempty"`
-
-	// Trigger an alert for backup failures
-	ReportBackupFailures bool `json:"reportBackupFailures,omitempty"`
-
 	// Trigger an alert only for errors
 	ReportOnlyErrors bool `json:"reportOnlyErrors,omitempty"`
 

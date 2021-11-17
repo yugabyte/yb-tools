@@ -44,13 +44,13 @@ func NewListUsersOK() *ListUsersOK {
 successful operation
 */
 type ListUsersOK struct {
-	Payload []*models.Users
+	Payload []*models.UserWithFeatures
 }
 
 func (o *ListUsersOK) Error() string {
 	return fmt.Sprintf("[GET /api/v1/customers/{cUUID}/users][%d] listUsersOK  %+v", 200, o.Payload)
 }
-func (o *ListUsersOK) GetPayload() []*models.Users {
+func (o *ListUsersOK) GetPayload() []*models.UserWithFeatures {
 	return o.Payload
 }
 

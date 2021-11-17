@@ -44,13 +44,13 @@ func NewGetListOfCustomerConfigOK() *GetListOfCustomerConfigOK {
 successful operation
 */
 type GetListOfCustomerConfigOK struct {
-	Payload []*models.CustomerConfig
+	Payload []*models.CustomerConfigUI
 }
 
 func (o *GetListOfCustomerConfigOK) Error() string {
 	return fmt.Sprintf("[GET /api/v1/customers/{cUUID}/configs][%d] getListOfCustomerConfigOK  %+v", 200, o.Payload)
 }
-func (o *GetListOfCustomerConfigOK) GetPayload() []*models.CustomerConfig {
+func (o *GetListOfCustomerConfigOK) GetPayload() []*models.CustomerConfigUI {
 	return o.Payload
 }
 

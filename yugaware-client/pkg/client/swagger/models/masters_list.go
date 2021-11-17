@@ -54,6 +54,8 @@ func (m *MastersList) validateMasters(formats strfmt.Registry) error {
 			if err := m.Masters[i].Validate(formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("masters" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("masters" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
@@ -86,6 +88,8 @@ func (m *MastersList) contextValidateMasters(ctx context.Context, formats strfmt
 			if err := m.Masters[i].ContextValidate(ctx, formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("masters" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("masters" + "." + strconv.Itoa(i))
 				}
 				return err
 			}

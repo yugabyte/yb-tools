@@ -30,6 +30,8 @@ type AlertChannelSlackParams struct {
 
 	// username
 	// Required: true
+	// Max Length: 2147483647
+	// Min Length: 1
 	Username *string `json:"username"`
 
 	// webhook Url
@@ -67,6 +69,8 @@ func (m *AlertChannelSlackParams) UnmarshalJSON(raw []byte) error {
 
 		// username
 		// Required: true
+		// Max Length: 2147483647
+		// Min Length: 1
 		Username *string `json:"username"`
 
 		// webhook Url
@@ -123,6 +127,8 @@ func (m AlertChannelSlackParams) MarshalJSON() ([]byte, error) {
 
 		// username
 		// Required: true
+		// Max Length: 2147483647
+		// Min Length: 1
 		Username *string `json:"username"`
 
 		// webhook Url
@@ -216,6 +222,14 @@ func (m *AlertChannelSlackParams) validateIconURL(formats strfmt.Registry) error
 func (m *AlertChannelSlackParams) validateUsername(formats strfmt.Registry) error {
 
 	if err := validate.Required("username", "body", m.Username); err != nil {
+		return err
+	}
+
+	if err := validate.MinLength("username", "body", *m.Username, 1); err != nil {
+		return err
+	}
+
+	if err := validate.MaxLength("username", "body", *m.Username, 2147483647); err != nil {
 		return err
 	}
 

@@ -179,6 +179,8 @@ func (m *CertificateParams) validateCustomCertInfo(formats strfmt.Registry) erro
 		if err := m.CustomCertInfo.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("customCertInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("customCertInfo")
 			}
 			return err
 		}
@@ -197,6 +199,8 @@ func (m *CertificateParams) validateCustomServerCertData(formats strfmt.Registry
 		if err := m.CustomServerCertData.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("customServerCertData")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("customServerCertData")
 			}
 			return err
 		}
@@ -247,6 +251,8 @@ func (m *CertificateParams) contextValidateCustomCertInfo(ctx context.Context, f
 		if err := m.CustomCertInfo.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("customCertInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("customCertInfo")
 			}
 			return err
 		}
@@ -261,6 +267,8 @@ func (m *CertificateParams) contextValidateCustomServerCertData(ctx context.Cont
 		if err := m.CustomServerCertData.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("customServerCertData")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("customServerCertData")
 			}
 			return err
 		}

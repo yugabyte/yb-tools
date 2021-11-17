@@ -260,6 +260,8 @@ func (m *AlertChannelEmailParams) validateSMTPData(formats strfmt.Registry) erro
 		if err := m.SMTPData.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("smtpData")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("smtpData")
 			}
 			return err
 		}
@@ -288,6 +290,8 @@ func (m *AlertChannelEmailParams) contextValidateSMTPData(ctx context.Context, f
 		if err := m.SMTPData.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("smtpData")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("smtpData")
 			}
 			return err
 		}

@@ -44,20 +44,22 @@ func NewDeleteBackupScheduleOK() *DeleteBackupScheduleOK {
 successful operation
 */
 type DeleteBackupScheduleOK struct {
-	Payload models.PlatformResults
+	Payload *models.YBPSuccess
 }
 
 func (o *DeleteBackupScheduleOK) Error() string {
 	return fmt.Sprintf("[DELETE /api/v1/customers/{cUUID}/schedules/{sUUID}][%d] deleteBackupScheduleOK  %+v", 200, o.Payload)
 }
-func (o *DeleteBackupScheduleOK) GetPayload() models.PlatformResults {
+func (o *DeleteBackupScheduleOK) GetPayload() *models.YBPSuccess {
 	return o.Payload
 }
 
 func (o *DeleteBackupScheduleOK) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
 
+	o.Payload = new(models.YBPSuccess)
+
 	// response payload
-	if err := consumer.Consume(response.Body(), &o.Payload); err != nil && err != io.EOF {
+	if err := consumer.Consume(response.Body(), o.Payload); err != nil && err != io.EOF {
 		return err
 	}
 

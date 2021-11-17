@@ -81,6 +81,9 @@ type MultiTableBackupRequestParams struct {
 	// Format: uuid
 	KmsConfigUUID strfmt.UUID `json:"kmsConfigUUID,omitempty"`
 
+	// Minimum number of backups to retain for a particular backup schedule
+	MinNumBackupsToRetain int32 `json:"minNumBackupsToRetain,omitempty"`
+
 	// Node details
 	// Unique: true
 	NodeDetailsSet []*NodeDetails `json:"nodeDetailsSet"`
@@ -101,9 +104,9 @@ type MultiTableBackupRequestParams struct {
 	// Frequency to run the backup, in milliseconds
 	SchedulingFrequency int64 `json:"schedulingFrequency,omitempty"`
 
-	// The source universe's sync replication relationships
+	// The source universe's xcluster replication relationships
 	// Read Only: true
-	SourceAsyncReplicationRelationships []*AsyncReplicationConfig `json:"sourceAsyncReplicationRelationships"`
+	SourceXClusterConfigs []strfmt.UUID `json:"sourceXClusterConfigs"`
 
 	// Is SSE
 	Sse bool `json:"sse,omitempty"`
@@ -129,9 +132,9 @@ type MultiTableBackupRequestParams struct {
 	// Table UUIDs
 	TableUUIDList []strfmt.UUID `json:"tableUUIDList"`
 
-	// The target universe's async replication relationships
+	// The target universe's xcluster replication relationships
 	// Read Only: true
-	TargetAsyncReplicationRelationships []*AsyncReplicationConfig `json:"targetAsyncReplicationRelationships"`
+	TargetXClusterConfigs []strfmt.UUID `json:"targetXClusterConfigs"`
 
 	// Time before deleting the backup from storage, in milliseconds
 	TimeBeforeDelete int64 `json:"timeBeforeDelete,omitempty"`
@@ -199,7 +202,7 @@ func (m *MultiTableBackupRequestParams) Validate(formats strfmt.Registry) error 
 		res = append(res, err)
 	}
 
-	if err := m.validateSourceAsyncReplicationRelationships(formats); err != nil {
+	if err := m.validateSourceXClusterConfigs(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -215,7 +218,7 @@ func (m *MultiTableBackupRequestParams) Validate(formats strfmt.Registry) error 
 		res = append(res, err)
 	}
 
-	if err := m.validateTargetAsyncReplicationRelationships(formats); err != nil {
+	if err := m.validateTargetXClusterConfigs(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -292,6 +295,8 @@ func (m *MultiTableBackupRequestParams) validateBackupList(formats strfmt.Regist
 			if err := m.BackupList[i].Validate(formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("backupList" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("backupList" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
@@ -371,6 +376,8 @@ func (m *MultiTableBackupRequestParams) validateCommunicationPorts(formats strfm
 		if err := m.CommunicationPorts.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("communicationPorts")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("communicationPorts")
 			}
 			return err
 		}
@@ -400,6 +407,8 @@ func (m *MultiTableBackupRequestParams) validateDeviceInfo(formats strfmt.Regist
 		if err := m.DeviceInfo.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("deviceInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("deviceInfo")
 			}
 			return err
 		}
@@ -417,6 +426,8 @@ func (m *MultiTableBackupRequestParams) validateEncryptionAtRestConfig(formats s
 		if err := m.EncryptionAtRestConfig.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("encryptionAtRestConfig")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("encryptionAtRestConfig")
 			}
 			return err
 		}
@@ -434,6 +445,8 @@ func (m *MultiTableBackupRequestParams) validateExtraDependencies(formats strfmt
 		if err := m.ExtraDependencies.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("extraDependencies")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("extraDependencies")
 			}
 			return err
 		}
@@ -472,6 +485,8 @@ func (m *MultiTableBackupRequestParams) validateNodeDetailsSet(formats strfmt.Re
 			if err := m.NodeDetailsSet[i].Validate(formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("nodeDetailsSet" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("nodeDetailsSet" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
@@ -494,23 +509,15 @@ func (m *MultiTableBackupRequestParams) validateScheduleUUID(formats strfmt.Regi
 	return nil
 }
 
-func (m *MultiTableBackupRequestParams) validateSourceAsyncReplicationRelationships(formats strfmt.Registry) error {
-	if swag.IsZero(m.SourceAsyncReplicationRelationships) { // not required
+func (m *MultiTableBackupRequestParams) validateSourceXClusterConfigs(formats strfmt.Registry) error {
+	if swag.IsZero(m.SourceXClusterConfigs) { // not required
 		return nil
 	}
 
-	for i := 0; i < len(m.SourceAsyncReplicationRelationships); i++ {
-		if swag.IsZero(m.SourceAsyncReplicationRelationships[i]) { // not required
-			continue
-		}
+	for i := 0; i < len(m.SourceXClusterConfigs); i++ {
 
-		if m.SourceAsyncReplicationRelationships[i] != nil {
-			if err := m.SourceAsyncReplicationRelationships[i].Validate(formats); err != nil {
-				if ve, ok := err.(*errors.Validation); ok {
-					return ve.ValidateName("sourceAsyncReplicationRelationships" + "." + strconv.Itoa(i))
-				}
-				return err
-			}
+		if err := validate.FormatOf("sourceXClusterConfigs"+"."+strconv.Itoa(i), "body", "uuid", m.SourceXClusterConfigs[i].String(), formats); err != nil {
+			return err
 		}
 
 	}
@@ -559,23 +566,15 @@ func (m *MultiTableBackupRequestParams) validateTableUUIDList(formats strfmt.Reg
 	return nil
 }
 
-func (m *MultiTableBackupRequestParams) validateTargetAsyncReplicationRelationships(formats strfmt.Registry) error {
-	if swag.IsZero(m.TargetAsyncReplicationRelationships) { // not required
+func (m *MultiTableBackupRequestParams) validateTargetXClusterConfigs(formats strfmt.Registry) error {
+	if swag.IsZero(m.TargetXClusterConfigs) { // not required
 		return nil
 	}
 
-	for i := 0; i < len(m.TargetAsyncReplicationRelationships); i++ {
-		if swag.IsZero(m.TargetAsyncReplicationRelationships[i]) { // not required
-			continue
-		}
+	for i := 0; i < len(m.TargetXClusterConfigs); i++ {
 
-		if m.TargetAsyncReplicationRelationships[i] != nil {
-			if err := m.TargetAsyncReplicationRelationships[i].Validate(formats); err != nil {
-				if ve, ok := err.(*errors.Validation); ok {
-					return ve.ValidateName("targetAsyncReplicationRelationships" + "." + strconv.Itoa(i))
-				}
-				return err
-			}
+		if err := validate.FormatOf("targetXClusterConfigs"+"."+strconv.Itoa(i), "body", "uuid", m.TargetXClusterConfigs[i].String(), formats); err != nil {
+			return err
 		}
 
 	}
@@ -623,11 +622,11 @@ func (m *MultiTableBackupRequestParams) ContextValidate(ctx context.Context, for
 		res = append(res, err)
 	}
 
-	if err := m.contextValidateSourceAsyncReplicationRelationships(ctx, formats); err != nil {
+	if err := m.contextValidateSourceXClusterConfigs(ctx, formats); err != nil {
 		res = append(res, err)
 	}
 
-	if err := m.contextValidateTargetAsyncReplicationRelationships(ctx, formats); err != nil {
+	if err := m.contextValidateTargetXClusterConfigs(ctx, formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -645,6 +644,8 @@ func (m *MultiTableBackupRequestParams) contextValidateBackupList(ctx context.Co
 			if err := m.BackupList[i].ContextValidate(ctx, formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("backupList" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("backupList" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
@@ -661,6 +662,8 @@ func (m *MultiTableBackupRequestParams) contextValidateCommunicationPorts(ctx co
 		if err := m.CommunicationPorts.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("communicationPorts")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("communicationPorts")
 			}
 			return err
 		}
@@ -675,6 +678,8 @@ func (m *MultiTableBackupRequestParams) contextValidateDeviceInfo(ctx context.Co
 		if err := m.DeviceInfo.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("deviceInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("deviceInfo")
 			}
 			return err
 		}
@@ -689,6 +694,8 @@ func (m *MultiTableBackupRequestParams) contextValidateEncryptionAtRestConfig(ct
 		if err := m.EncryptionAtRestConfig.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("encryptionAtRestConfig")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("encryptionAtRestConfig")
 			}
 			return err
 		}
@@ -703,6 +710,8 @@ func (m *MultiTableBackupRequestParams) contextValidateExtraDependencies(ctx con
 		if err := m.ExtraDependencies.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("extraDependencies")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("extraDependencies")
 			}
 			return err
 		}
@@ -719,6 +728,8 @@ func (m *MultiTableBackupRequestParams) contextValidateNodeDetailsSet(ctx contex
 			if err := m.NodeDetailsSet[i].ContextValidate(ctx, formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("nodeDetailsSet" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("nodeDetailsSet" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
@@ -729,45 +740,19 @@ func (m *MultiTableBackupRequestParams) contextValidateNodeDetailsSet(ctx contex
 	return nil
 }
 
-func (m *MultiTableBackupRequestParams) contextValidateSourceAsyncReplicationRelationships(ctx context.Context, formats strfmt.Registry) error {
+func (m *MultiTableBackupRequestParams) contextValidateSourceXClusterConfigs(ctx context.Context, formats strfmt.Registry) error {
 
-	if err := validate.ReadOnly(ctx, "sourceAsyncReplicationRelationships", "body", []*AsyncReplicationConfig(m.SourceAsyncReplicationRelationships)); err != nil {
+	if err := validate.ReadOnly(ctx, "sourceXClusterConfigs", "body", []strfmt.UUID(m.SourceXClusterConfigs)); err != nil {
 		return err
-	}
-
-	for i := 0; i < len(m.SourceAsyncReplicationRelationships); i++ {
-
-		if m.SourceAsyncReplicationRelationships[i] != nil {
-			if err := m.SourceAsyncReplicationRelationships[i].ContextValidate(ctx, formats); err != nil {
-				if ve, ok := err.(*errors.Validation); ok {
-					return ve.ValidateName("sourceAsyncReplicationRelationships" + "." + strconv.Itoa(i))
-				}
-				return err
-			}
-		}
-
 	}
 
 	return nil
 }
 
-func (m *MultiTableBackupRequestParams) contextValidateTargetAsyncReplicationRelationships(ctx context.Context, formats strfmt.Registry) error {
+func (m *MultiTableBackupRequestParams) contextValidateTargetXClusterConfigs(ctx context.Context, formats strfmt.Registry) error {
 
-	if err := validate.ReadOnly(ctx, "targetAsyncReplicationRelationships", "body", []*AsyncReplicationConfig(m.TargetAsyncReplicationRelationships)); err != nil {
+	if err := validate.ReadOnly(ctx, "targetXClusterConfigs", "body", []strfmt.UUID(m.TargetXClusterConfigs)); err != nil {
 		return err
-	}
-
-	for i := 0; i < len(m.TargetAsyncReplicationRelationships); i++ {
-
-		if m.TargetAsyncReplicationRelationships[i] != nil {
-			if err := m.TargetAsyncReplicationRelationships[i].ContextValidate(ctx, formats); err != nil {
-				if ve, ok := err.(*errors.Validation); ok {
-					return ve.ValidateName("targetAsyncReplicationRelationships" + "." + strconv.Itoa(i))
-				}
-				return err
-			}
-		}
-
 	}
 
 	return nil

@@ -63,6 +63,8 @@ func (m *PlacementCloud) validateRegionList(formats strfmt.Registry) error {
 			if err := m.RegionList[i].Validate(formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("regionList" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("regionList" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
@@ -107,6 +109,8 @@ func (m *PlacementCloud) contextValidateRegionList(ctx context.Context, formats 
 			if err := m.RegionList[i].ContextValidate(ctx, formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("regionList" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("regionList" + "." + strconv.Itoa(i))
 				}
 				return err
 			}

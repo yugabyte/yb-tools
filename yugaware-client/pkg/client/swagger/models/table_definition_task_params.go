@@ -52,9 +52,9 @@ type TableDefinitionTaskParams struct {
 	// Node exporter user
 	NodeExporterUser string `json:"nodeExporterUser,omitempty"`
 
-	// The source universe's sync replication relationships
+	// The source universe's xcluster replication relationships
 	// Read Only: true
-	SourceAsyncReplicationRelationships []*AsyncReplicationConfig `json:"sourceAsyncReplicationRelationships"`
+	SourceXClusterConfigs []strfmt.UUID `json:"sourceXClusterConfigs"`
 
 	// table details
 	// Required: true
@@ -70,9 +70,9 @@ type TableDefinitionTaskParams struct {
 	// Format: uuid
 	TableUUID *strfmt.UUID `json:"tableUUID"`
 
-	// The target universe's async replication relationships
+	// The target universe's xcluster replication relationships
 	// Read Only: true
-	TargetAsyncReplicationRelationships []*AsyncReplicationConfig `json:"targetAsyncReplicationRelationships"`
+	TargetXClusterConfigs []strfmt.UUID `json:"targetXClusterConfigs"`
 
 	// Associated universe UUID
 	// Format: uuid
@@ -106,7 +106,7 @@ func (m *TableDefinitionTaskParams) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
-	if err := m.validateSourceAsyncReplicationRelationships(formats); err != nil {
+	if err := m.validateSourceXClusterConfigs(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -122,7 +122,7 @@ func (m *TableDefinitionTaskParams) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
-	if err := m.validateTargetAsyncReplicationRelationships(formats); err != nil {
+	if err := m.validateTargetXClusterConfigs(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -145,6 +145,8 @@ func (m *TableDefinitionTaskParams) validateCommunicationPorts(formats strfmt.Re
 		if err := m.CommunicationPorts.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("communicationPorts")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("communicationPorts")
 			}
 			return err
 		}
@@ -162,6 +164,8 @@ func (m *TableDefinitionTaskParams) validateDeviceInfo(formats strfmt.Registry) 
 		if err := m.DeviceInfo.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("deviceInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("deviceInfo")
 			}
 			return err
 		}
@@ -179,6 +183,8 @@ func (m *TableDefinitionTaskParams) validateEncryptionAtRestConfig(formats strfm
 		if err := m.EncryptionAtRestConfig.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("encryptionAtRestConfig")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("encryptionAtRestConfig")
 			}
 			return err
 		}
@@ -196,6 +202,8 @@ func (m *TableDefinitionTaskParams) validateExtraDependencies(formats strfmt.Reg
 		if err := m.ExtraDependencies.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("extraDependencies")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("extraDependencies")
 			}
 			return err
 		}
@@ -222,6 +230,8 @@ func (m *TableDefinitionTaskParams) validateNodeDetailsSet(formats strfmt.Regist
 			if err := m.NodeDetailsSet[i].Validate(formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("nodeDetailsSet" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("nodeDetailsSet" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
@@ -232,23 +242,15 @@ func (m *TableDefinitionTaskParams) validateNodeDetailsSet(formats strfmt.Regist
 	return nil
 }
 
-func (m *TableDefinitionTaskParams) validateSourceAsyncReplicationRelationships(formats strfmt.Registry) error {
-	if swag.IsZero(m.SourceAsyncReplicationRelationships) { // not required
+func (m *TableDefinitionTaskParams) validateSourceXClusterConfigs(formats strfmt.Registry) error {
+	if swag.IsZero(m.SourceXClusterConfigs) { // not required
 		return nil
 	}
 
-	for i := 0; i < len(m.SourceAsyncReplicationRelationships); i++ {
-		if swag.IsZero(m.SourceAsyncReplicationRelationships[i]) { // not required
-			continue
-		}
+	for i := 0; i < len(m.SourceXClusterConfigs); i++ {
 
-		if m.SourceAsyncReplicationRelationships[i] != nil {
-			if err := m.SourceAsyncReplicationRelationships[i].Validate(formats); err != nil {
-				if ve, ok := err.(*errors.Validation); ok {
-					return ve.ValidateName("sourceAsyncReplicationRelationships" + "." + strconv.Itoa(i))
-				}
-				return err
-			}
+		if err := validate.FormatOf("sourceXClusterConfigs"+"."+strconv.Itoa(i), "body", "uuid", m.SourceXClusterConfigs[i].String(), formats); err != nil {
+			return err
 		}
 
 	}
@@ -266,6 +268,8 @@ func (m *TableDefinitionTaskParams) validateTableDetails(formats strfmt.Registry
 		if err := m.TableDetails.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("tableDetails")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("tableDetails")
 			}
 			return err
 		}
@@ -336,23 +340,15 @@ func (m *TableDefinitionTaskParams) validateTableUUID(formats strfmt.Registry) e
 	return nil
 }
 
-func (m *TableDefinitionTaskParams) validateTargetAsyncReplicationRelationships(formats strfmt.Registry) error {
-	if swag.IsZero(m.TargetAsyncReplicationRelationships) { // not required
+func (m *TableDefinitionTaskParams) validateTargetXClusterConfigs(formats strfmt.Registry) error {
+	if swag.IsZero(m.TargetXClusterConfigs) { // not required
 		return nil
 	}
 
-	for i := 0; i < len(m.TargetAsyncReplicationRelationships); i++ {
-		if swag.IsZero(m.TargetAsyncReplicationRelationships[i]) { // not required
-			continue
-		}
+	for i := 0; i < len(m.TargetXClusterConfigs); i++ {
 
-		if m.TargetAsyncReplicationRelationships[i] != nil {
-			if err := m.TargetAsyncReplicationRelationships[i].Validate(formats); err != nil {
-				if ve, ok := err.(*errors.Validation); ok {
-					return ve.ValidateName("targetAsyncReplicationRelationships" + "." + strconv.Itoa(i))
-				}
-				return err
-			}
+		if err := validate.FormatOf("targetXClusterConfigs"+"."+strconv.Itoa(i), "body", "uuid", m.TargetXClusterConfigs[i].String(), formats); err != nil {
+			return err
 		}
 
 	}
@@ -396,7 +392,7 @@ func (m *TableDefinitionTaskParams) ContextValidate(ctx context.Context, formats
 		res = append(res, err)
 	}
 
-	if err := m.contextValidateSourceAsyncReplicationRelationships(ctx, formats); err != nil {
+	if err := m.contextValidateSourceXClusterConfigs(ctx, formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -404,7 +400,7 @@ func (m *TableDefinitionTaskParams) ContextValidate(ctx context.Context, formats
 		res = append(res, err)
 	}
 
-	if err := m.contextValidateTargetAsyncReplicationRelationships(ctx, formats); err != nil {
+	if err := m.contextValidateTargetXClusterConfigs(ctx, formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -420,6 +416,8 @@ func (m *TableDefinitionTaskParams) contextValidateCommunicationPorts(ctx contex
 		if err := m.CommunicationPorts.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("communicationPorts")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("communicationPorts")
 			}
 			return err
 		}
@@ -434,6 +432,8 @@ func (m *TableDefinitionTaskParams) contextValidateDeviceInfo(ctx context.Contex
 		if err := m.DeviceInfo.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("deviceInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("deviceInfo")
 			}
 			return err
 		}
@@ -448,6 +448,8 @@ func (m *TableDefinitionTaskParams) contextValidateEncryptionAtRestConfig(ctx co
 		if err := m.EncryptionAtRestConfig.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("encryptionAtRestConfig")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("encryptionAtRestConfig")
 			}
 			return err
 		}
@@ -462,6 +464,8 @@ func (m *TableDefinitionTaskParams) contextValidateExtraDependencies(ctx context
 		if err := m.ExtraDependencies.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("extraDependencies")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("extraDependencies")
 			}
 			return err
 		}
@@ -478,6 +482,8 @@ func (m *TableDefinitionTaskParams) contextValidateNodeDetailsSet(ctx context.Co
 			if err := m.NodeDetailsSet[i].ContextValidate(ctx, formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("nodeDetailsSet" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("nodeDetailsSet" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
@@ -488,23 +494,10 @@ func (m *TableDefinitionTaskParams) contextValidateNodeDetailsSet(ctx context.Co
 	return nil
 }
 
-func (m *TableDefinitionTaskParams) contextValidateSourceAsyncReplicationRelationships(ctx context.Context, formats strfmt.Registry) error {
+func (m *TableDefinitionTaskParams) contextValidateSourceXClusterConfigs(ctx context.Context, formats strfmt.Registry) error {
 
-	if err := validate.ReadOnly(ctx, "sourceAsyncReplicationRelationships", "body", []*AsyncReplicationConfig(m.SourceAsyncReplicationRelationships)); err != nil {
+	if err := validate.ReadOnly(ctx, "sourceXClusterConfigs", "body", []strfmt.UUID(m.SourceXClusterConfigs)); err != nil {
 		return err
-	}
-
-	for i := 0; i < len(m.SourceAsyncReplicationRelationships); i++ {
-
-		if m.SourceAsyncReplicationRelationships[i] != nil {
-			if err := m.SourceAsyncReplicationRelationships[i].ContextValidate(ctx, formats); err != nil {
-				if ve, ok := err.(*errors.Validation); ok {
-					return ve.ValidateName("sourceAsyncReplicationRelationships" + "." + strconv.Itoa(i))
-				}
-				return err
-			}
-		}
-
 	}
 
 	return nil
@@ -516,6 +509,8 @@ func (m *TableDefinitionTaskParams) contextValidateTableDetails(ctx context.Cont
 		if err := m.TableDetails.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("tableDetails")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("tableDetails")
 			}
 			return err
 		}
@@ -524,23 +519,10 @@ func (m *TableDefinitionTaskParams) contextValidateTableDetails(ctx context.Cont
 	return nil
 }
 
-func (m *TableDefinitionTaskParams) contextValidateTargetAsyncReplicationRelationships(ctx context.Context, formats strfmt.Registry) error {
+func (m *TableDefinitionTaskParams) contextValidateTargetXClusterConfigs(ctx context.Context, formats strfmt.Registry) error {
 
-	if err := validate.ReadOnly(ctx, "targetAsyncReplicationRelationships", "body", []*AsyncReplicationConfig(m.TargetAsyncReplicationRelationships)); err != nil {
+	if err := validate.ReadOnly(ctx, "targetXClusterConfigs", "body", []strfmt.UUID(m.TargetXClusterConfigs)); err != nil {
 		return err
-	}
-
-	for i := 0; i < len(m.TargetAsyncReplicationRelationships); i++ {
-
-		if m.TargetAsyncReplicationRelationships[i] != nil {
-			if err := m.TargetAsyncReplicationRelationships[i].ContextValidate(ctx, formats); err != nil {
-				if ve, ok := err.(*errors.Validation); ok {
-					return ve.ValidateName("targetAsyncReplicationRelationships" + "." + strconv.Itoa(i))
-				}
-				return err
-			}
-		}
-
 	}
 
 	return nil

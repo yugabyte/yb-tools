@@ -26,7 +26,7 @@ type Customer struct {
 	Code *string `json:"code"`
 
 	// Creation time
-	// Example: 2021-06-17 15:00:05
+	// Example: 2021-06-17T15:00:05-0400
 	// Read Only: true
 	// Format: date-time
 	CreationDate strfmt.DateTime `json:"creationDate,omitempty"`

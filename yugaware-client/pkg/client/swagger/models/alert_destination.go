@@ -21,7 +21,10 @@ import (
 type AlertDestination struct {
 
 	// channels
+	// Required: true
 	// Read Only: true
+	// Max Items: 2147483647
+	// Min Items: 1
 	Channels []strfmt.UUID `json:"channels"`
 
 	// customer UUID
@@ -35,6 +38,8 @@ type AlertDestination struct {
 
 	// name
 	// Required: true
+	// Max Length: 63
+	// Min Length: 1
 	Name *string `json:"name"`
 
 	// uuid
@@ -74,8 +79,19 @@ func (m *AlertDestination) Validate(formats strfmt.Registry) error {
 }
 
 func (m *AlertDestination) validateChannels(formats strfmt.Registry) error {
-	if swag.IsZero(m.Channels) { // not required
-		return nil
+
+	if err := validate.Required("channels", "body", m.Channels); err != nil {
+		return err
+	}
+
+	iChannelsSize := int64(len(m.Channels))
+
+	if err := validate.MinItems("channels", "body", iChannelsSize, 1); err != nil {
+		return err
+	}
+
+	if err := validate.MaxItems("channels", "body", iChannelsSize, 2147483647); err != nil {
+		return err
 	}
 
 	for i := 0; i < len(m.Channels); i++ {
@@ -114,6 +130,14 @@ func (m *AlertDestination) validateDefaultDestination(formats strfmt.Registry) e
 func (m *AlertDestination) validateName(formats strfmt.Registry) error {
 
 	if err := validate.Required("name", "body", m.Name); err != nil {
+		return err
+	}
+
+	if err := validate.MinLength("name", "body", *m.Name, 1); err != nil {
+		return err
+	}
+
+	if err := validate.MaxLength("name", "body", *m.Name, 63); err != nil {
 		return err
 	}
 

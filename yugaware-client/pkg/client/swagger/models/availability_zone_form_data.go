@@ -54,6 +54,8 @@ func (m *AvailabilityZoneFormData) validateAvailabilityZones(formats strfmt.Regi
 			if err := m.AvailabilityZones[i].Validate(formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("availabilityZones" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("availabilityZones" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
@@ -86,6 +88,8 @@ func (m *AvailabilityZoneFormData) contextValidateAvailabilityZones(ctx context.
 			if err := m.AvailabilityZones[i].ContextValidate(ctx, formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("availabilityZones" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("availabilityZones" + "." + strconv.Itoa(i))
 				}
 				return err
 			}

@@ -87,7 +87,7 @@ func (a *Client) CreateAllClusters(params *CreateAllClustersParams, authInfo run
 /*
   CreateReadOnlyCluster creates read only cluster
 
-  This will add a readonly cluster to existing universe.
+  This will add a readonly cluster to existing universe. Just fill in the userIntent for ASYNC cluster.
 */
 func (a *Client) CreateReadOnlyCluster(params *CreateReadOnlyClusterParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateReadOnlyClusterOK, error) {
 	// TODO: Validate the params before sending
@@ -169,7 +169,7 @@ func (a *Client) DeleteReadonlyCluster(params *DeleteReadonlyClusterParams, auth
 /*
   UpdatePrimaryCluster updates primary cluster
 
-  This will update primary cluster of existing universe.Just fill in the userIntent for PRIMARY cluster
+  This will update primary cluster of existing universe.Use API to GET current universe. Lookup universeDetails attribute of the universe resource returned. Update the necessary field (e.g. numNodes) Use this updated universeDetails as request body. See https://github.com/yugabyte/yugabyte-db/blob/master/managed/api-examples/python-simple/edit-universe.ipynb
 */
 func (a *Client) UpdatePrimaryCluster(params *UpdatePrimaryClusterParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpdatePrimaryClusterOK, error) {
 	// TODO: Validate the params before sending
@@ -210,7 +210,7 @@ func (a *Client) UpdatePrimaryCluster(params *UpdatePrimaryClusterParams, authIn
 /*
   UpdateReadOnlyCluster updates readonly cluster
 
-  This will update readonly cluster of existing universe.Just fill in the userIntent for ASYNC cluster
+  This will update readonly cluster of existing universe.Use API to GET current universe. Lookup universeDetails attribute of the universe resource returned. Update the necessary field (e.g. numNodes) Use this updated universeDetails as request body. See https://github.com/yugabyte/yugabyte-db/blob/master/managed/api-examples/python-simple/edit-universe.ipynb
 */
 func (a *Client) UpdateReadOnlyCluster(params *UpdateReadOnlyClusterParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpdateReadOnlyClusterOK, error) {
 	// TODO: Validate the params before sending

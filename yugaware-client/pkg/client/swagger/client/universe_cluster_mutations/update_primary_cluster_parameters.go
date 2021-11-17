@@ -14,6 +14,8 @@ import (
 	"github.com/go-openapi/runtime"
 	cr "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
+
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
 // NewUpdatePrimaryClusterParams creates a new UpdatePrimaryClusterParams object,
@@ -58,6 +60,9 @@ func NewUpdatePrimaryClusterParamsWithHTTPClient(client *http.Client) *UpdatePri
    Typically these are written to a http.Request.
 */
 type UpdatePrimaryClusterParams struct {
+
+	// UniverseConfigureTaskParams.
+	UniverseConfigureTaskParams *models.UniverseConfigureTaskParams
 
 	// CUUID.
 	//
@@ -122,6 +127,17 @@ func (o *UpdatePrimaryClusterParams) SetHTTPClient(client *http.Client) {
 	o.HTTPClient = client
 }
 
+// WithUniverseConfigureTaskParams adds the universeConfigureTaskParams to the update primary cluster params
+func (o *UpdatePrimaryClusterParams) WithUniverseConfigureTaskParams(universeConfigureTaskParams *models.UniverseConfigureTaskParams) *UpdatePrimaryClusterParams {
+	o.SetUniverseConfigureTaskParams(universeConfigureTaskParams)
+	return o
+}
+
+// SetUniverseConfigureTaskParams adds the universeConfigureTaskParams to the update primary cluster params
+func (o *UpdatePrimaryClusterParams) SetUniverseConfigureTaskParams(universeConfigureTaskParams *models.UniverseConfigureTaskParams) {
+	o.UniverseConfigureTaskParams = universeConfigureTaskParams
+}
+
 // WithCUUID adds the cUUID to the update primary cluster params
 func (o *UpdatePrimaryClusterParams) WithCUUID(cUUID strfmt.UUID) *UpdatePrimaryClusterParams {
 	o.SetCUUID(cUUID)
@@ -151,6 +167,11 @@ func (o *UpdatePrimaryClusterParams) WriteToRequest(r runtime.ClientRequest, reg
 		return err
 	}
 	var res []error
+	if o.UniverseConfigureTaskParams != nil {
+		if err := r.SetBodyParam(o.UniverseConfigureTaskParams); err != nil {
+			return err
+		}
+	}
 
 	// path param cUUID
 	if err := r.SetPathParam("cUUID", o.CUUID.String()); err != nil {

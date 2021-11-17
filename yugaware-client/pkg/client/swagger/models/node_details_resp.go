@@ -85,7 +85,7 @@ type NodeDetailsResp struct {
 
 	// Node state
 	// Example: Provisioned
-	// Enum: [ToBeAdded ToJoinCluster Provisioned SoftwareInstalled UpgradeSoftware UpdateGFlags Live Stopping Starting Stopped Unreachable ToBeRemoved Removing Removed Adding BeingDecommissioned Decommissioned UpdateCert ToggleTls Resizing]
+	// Enum: [ToBeAdded ToJoinCluster Provisioned SoftwareInstalled UpgradeSoftware UpdateGFlags Live Stopping Starting Stopped Unreachable ToBeRemoved Removing Removed Adding BeingDecommissioned Decommissioned UpdateCert ToggleTls Resizing SystemdUpgrade]
 	State string `json:"state,omitempty"`
 
 	// Tablet server HTTP port
@@ -145,7 +145,7 @@ var nodeDetailsRespAllowedActionsItemsEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["ADD","REMOVE","START","STOP","DELETE","QUERY","RELEASE","START_MASTER"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["ADD","REMOVE","START","STOP","DELETE","QUERY","RELEASE","START_MASTER","PRECHECK_DETACHED"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -202,6 +202,8 @@ func (m *NodeDetailsResp) validateCloudInfo(formats strfmt.Registry) error {
 		if err := m.CloudInfo.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("cloudInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("cloudInfo")
 			}
 			return err
 		}
@@ -238,7 +240,7 @@ var nodeDetailsRespTypeStatePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["ToBeAdded","ToJoinCluster","Provisioned","SoftwareInstalled","UpgradeSoftware","UpdateGFlags","Live","Stopping","Starting","Stopped","Unreachable","ToBeRemoved","Removing","Removed","Adding","BeingDecommissioned","Decommissioned","UpdateCert","ToggleTls","Resizing"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["ToBeAdded","ToJoinCluster","Provisioned","SoftwareInstalled","UpgradeSoftware","UpdateGFlags","Live","Stopping","Starting","Stopped","Unreachable","ToBeRemoved","Removing","Removed","Adding","BeingDecommissioned","Decommissioned","UpdateCert","ToggleTls","Resizing","SystemdUpgrade"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -307,6 +309,9 @@ const (
 
 	// NodeDetailsRespStateResizing captures enum value "Resizing"
 	NodeDetailsRespStateResizing string = "Resizing"
+
+	// NodeDetailsRespStateSystemdUpgrade captures enum value "SystemdUpgrade"
+	NodeDetailsRespStateSystemdUpgrade string = "SystemdUpgrade"
 )
 
 // prop value enum
@@ -363,6 +368,8 @@ func (m *NodeDetailsResp) contextValidateCloudInfo(ctx context.Context, formats 
 		if err := m.CloudInfo.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("cloudInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("cloudInfo")
 			}
 			return err
 		}

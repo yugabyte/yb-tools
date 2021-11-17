@@ -30,16 +30,14 @@ type Backup struct {
 
 	// create time
 	// Required: true
-	// Format: date-time
-	CreateTime *strfmt.DateTime `json:"createTime"`
+	CreateTime *int64 `json:"createTime"`
 
 	// Customer UUID that owns this backup
 	// Format: uuid
 	CustomerUUID strfmt.UUID `json:"customerUUID,omitempty"`
 
 	// Expiry time (unix timestamp) of the backup
-	// Format: date-time
-	Expiry strfmt.DateTime `json:"expiry,omitempty"`
+	Expiry int64 `json:"expiry,omitempty"`
 
 	// Schedule UUID, if this backup is part of a schedule
 	// Format: uuid
@@ -58,8 +56,7 @@ type Backup struct {
 
 	// update time
 	// Required: true
-	// Format: date-time
-	UpdateTime *strfmt.DateTime `json:"updateTime"`
+	UpdateTime *int64 `json:"updateTime"`
 }
 
 // Validate validates this backup
@@ -79,10 +76,6 @@ func (m *Backup) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateCustomerUUID(formats); err != nil {
-		res = append(res, err)
-	}
-
-	if err := m.validateExpiry(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -117,6 +110,8 @@ func (m *Backup) validateBackupInfo(formats strfmt.Registry) error {
 		if err := m.BackupInfo.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("backupInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("backupInfo")
 			}
 			return err
 		}
@@ -143,10 +138,6 @@ func (m *Backup) validateCreateTime(formats strfmt.Registry) error {
 		return err
 	}
 
-	if err := validate.FormatOf("createTime", "body", "date-time", m.CreateTime.String(), formats); err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -156,18 +147,6 @@ func (m *Backup) validateCustomerUUID(formats strfmt.Registry) error {
 	}
 
 	if err := validate.FormatOf("customerUUID", "body", "uuid", m.CustomerUUID.String(), formats); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (m *Backup) validateExpiry(formats strfmt.Registry) error {
-	if swag.IsZero(m.Expiry) { // not required
-		return nil
-	}
-
-	if err := validate.FormatOf("expiry", "body", "date-time", m.Expiry.String(), formats); err != nil {
 		return err
 	}
 
@@ -261,10 +240,6 @@ func (m *Backup) validateUpdateTime(formats strfmt.Registry) error {
 		return err
 	}
 
-	if err := validate.FormatOf("updateTime", "body", "date-time", m.UpdateTime.String(), formats); err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -300,6 +275,8 @@ func (m *Backup) contextValidateBackupInfo(ctx context.Context, formats strfmt.R
 		if err := m.BackupInfo.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("backupInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("backupInfo")
 			}
 			return err
 		}

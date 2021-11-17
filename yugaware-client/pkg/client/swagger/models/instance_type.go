@@ -99,6 +99,8 @@ func (m *InstanceType) validateIDKey(formats strfmt.Registry) error {
 		if err := m.IDKey.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("idKey")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("idKey")
 			}
 			return err
 		}
@@ -126,6 +128,8 @@ func (m *InstanceType) validateInstanceTypeDetails(formats strfmt.Registry) erro
 		if err := m.InstanceTypeDetails.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("instanceTypeDetails")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("instanceTypeDetails")
 			}
 			return err
 		}
@@ -144,6 +148,8 @@ func (m *InstanceType) validateProvider(formats strfmt.Registry) error {
 		if err := m.Provider.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("provider")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("provider")
 			}
 			return err
 		}
@@ -215,6 +221,8 @@ func (m *InstanceType) contextValidateIDKey(ctx context.Context, formats strfmt.
 		if err := m.IDKey.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("idKey")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("idKey")
 			}
 			return err
 		}
@@ -229,6 +237,8 @@ func (m *InstanceType) contextValidateInstanceTypeDetails(ctx context.Context, f
 		if err := m.InstanceTypeDetails.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("instanceTypeDetails")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("instanceTypeDetails")
 			}
 			return err
 		}
@@ -243,6 +253,8 @@ func (m *InstanceType) contextValidateProvider(ctx context.Context, formats strf
 		if err := m.Provider.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("provider")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("provider")
 			}
 			return err
 		}

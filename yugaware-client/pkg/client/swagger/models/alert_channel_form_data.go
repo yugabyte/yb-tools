@@ -166,6 +166,8 @@ func (m *AlertChannelFormData) validateParams(formats strfmt.Registry) error {
 	if err := m.Params().Validate(formats); err != nil {
 		if ve, ok := err.(*errors.Validation); ok {
 			return ve.ValidateName("params")
+		} else if ce, ok := err.(*errors.CompositeError); ok {
+			return ce.ValidateName("params")
 		}
 		return err
 	}
@@ -192,6 +194,8 @@ func (m *AlertChannelFormData) contextValidateParams(ctx context.Context, format
 	if err := m.Params().ContextValidate(ctx, formats); err != nil {
 		if ve, ok := err.(*errors.Validation); ok {
 			return ve.ValidateName("params")
+		} else if ce, ok := err.(*errors.CompositeError); ok {
+			return ce.ValidateName("params")
 		}
 		return err
 	}

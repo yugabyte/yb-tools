@@ -127,6 +127,8 @@ func (m *Cluster) validatePlacementInfo(formats strfmt.Registry) error {
 		if err := m.PlacementInfo.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("placementInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("placementInfo")
 			}
 			return err
 		}
@@ -149,6 +151,8 @@ func (m *Cluster) validateRegions(formats strfmt.Registry) error {
 			if err := m.Regions[i].Validate(formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("regions" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("regions" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
@@ -169,6 +173,8 @@ func (m *Cluster) validateUserIntent(formats strfmt.Registry) error {
 		if err := m.UserIntent.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("userIntent")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("userIntent")
 			}
 			return err
 		}
@@ -217,6 +223,8 @@ func (m *Cluster) contextValidatePlacementInfo(ctx context.Context, formats strf
 		if err := m.PlacementInfo.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("placementInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("placementInfo")
 			}
 			return err
 		}
@@ -237,6 +245,8 @@ func (m *Cluster) contextValidateRegions(ctx context.Context, formats strfmt.Reg
 			if err := m.Regions[i].ContextValidate(ctx, formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("regions" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("regions" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
@@ -253,6 +263,8 @@ func (m *Cluster) contextValidateUserIntent(ctx context.Context, formats strfmt.
 		if err := m.UserIntent.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("userIntent")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("userIntent")
 			}
 			return err
 		}

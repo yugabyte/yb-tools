@@ -86,6 +86,8 @@ func (m *CustomerAlertData) validateAlertingData(formats strfmt.Registry) error 
 		if err := m.AlertingData.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("alertingData")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("alertingData")
 			}
 			return err
 		}
@@ -113,6 +115,8 @@ func (m *CustomerAlertData) validateSMTPData(formats strfmt.Registry) error {
 		if err := m.SMTPData.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("smtpData")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("smtpData")
 			}
 			return err
 		}
@@ -145,6 +149,8 @@ func (m *CustomerAlertData) contextValidateAlertingData(ctx context.Context, for
 		if err := m.AlertingData.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("alertingData")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("alertingData")
 			}
 			return err
 		}
@@ -159,6 +165,8 @@ func (m *CustomerAlertData) contextValidateSMTPData(ctx context.Context, formats
 		if err := m.SMTPData.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("smtpData")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("smtpData")
 			}
 			return err
 		}

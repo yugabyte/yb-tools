@@ -27,41 +27,52 @@ type Alert struct {
 	AcknowledgedTime strfmt.DateTime `json:"acknowledgedTime,omitempty"`
 
 	// Alert configuration type
+	// Required: true
 	// Read Only: true
 	// Enum: [PLATFORM UNIVERSE]
-	ConfigurationType string `json:"configurationType,omitempty"`
+	ConfigurationType string `json:"configurationType"`
 
 	// Alert configuration UUID
+	// Required: true
 	// Read Only: true
 	// Format: uuid
-	ConfigurationUUID strfmt.UUID `json:"configurationUuid,omitempty"`
+	ConfigurationUUID strfmt.UUID `json:"configurationUuid"`
 
 	// Alert creation timestamp
+	// Required: true
 	// Read Only: true
 	// Format: date-time
-	CreateTime strfmt.DateTime `json:"createTime,omitempty"`
+	CreateTime strfmt.DateTime `json:"createTime"`
 
-	// Cutomer UUID
+	// Customer UUID
+	// Required: true
 	// Read Only: true
 	// Format: uuid
-	CustomerUUID strfmt.UUID `json:"customerUUID,omitempty"`
+	CustomerUUID strfmt.UUID `json:"customerUUID"`
 
 	// Alert definition UUID
+	// Required: true
 	// Read Only: true
 	// Format: uuid
-	DefinitionUUID strfmt.UUID `json:"definitionUuid,omitempty"`
+	DefinitionUUID strfmt.UUID `json:"definitionUuid"`
 
 	// labels
 	// Required: true
 	Labels []*AlertLabel `json:"labels"`
 
 	// The alert's message text
+	// Required: true
 	// Read Only: true
-	Message string `json:"message,omitempty"`
+	// Max Length: 2147483647
+	// Min Length: 1
+	Message string `json:"message"`
 
 	// The alert's name
+	// Required: true
 	// Read Only: true
-	Name string `json:"name,omitempty"`
+	// Max Length: 1000
+	// Min Length: 1
+	Name string `json:"name"`
 
 	// Time of the next notification attempt
 	// Read Only: true
@@ -88,22 +99,25 @@ type Alert struct {
 	ResolvedTime strfmt.DateTime `json:"resolvedTime,omitempty"`
 
 	// Alert configuration severity
+	// Required: true
 	// Read Only: true
 	// Enum: [SEVERE WARNING]
-	Severity string `json:"severity,omitempty"`
+	Severity string `json:"severity"`
 
 	// severity index
 	// Required: true
 	SeverityIndex *int32 `json:"severityIndex"`
 
 	// The source of the alert
+	// Required: true
 	// Read Only: true
-	SourceName string `json:"sourceName,omitempty"`
+	SourceName string `json:"sourceName"`
 
 	// The alert's state
+	// Required: true
 	// Read Only: true
-	// Enum: [firing acknowledged resolved]
-	State string `json:"state,omitempty"`
+	// Enum: [ACTIVE ACKNOWLEDGED RESOLVED]
+	State string `json:"state"`
 
 	// state index
 	// Required: true
@@ -147,6 +161,14 @@ func (m *Alert) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
+	if err := m.validateMessage(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateName(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validateNextNotificationTime(formats); err != nil {
 		res = append(res, err)
 	}
@@ -168,6 +190,10 @@ func (m *Alert) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateSeverityIndex(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateSourceName(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -231,8 +257,9 @@ func (m *Alert) validateConfigurationTypeEnum(path, location string, value strin
 }
 
 func (m *Alert) validateConfigurationType(formats strfmt.Registry) error {
-	if swag.IsZero(m.ConfigurationType) { // not required
-		return nil
+
+	if err := validate.RequiredString("configurationType", "body", m.ConfigurationType); err != nil {
+		return err
 	}
 
 	// value enum
@@ -244,8 +271,9 @@ func (m *Alert) validateConfigurationType(formats strfmt.Registry) error {
 }
 
 func (m *Alert) validateConfigurationUUID(formats strfmt.Registry) error {
-	if swag.IsZero(m.ConfigurationUUID) { // not required
-		return nil
+
+	if err := validate.Required("configurationUuid", "body", strfmt.UUID(m.ConfigurationUUID)); err != nil {
+		return err
 	}
 
 	if err := validate.FormatOf("configurationUuid", "body", "uuid", m.ConfigurationUUID.String(), formats); err != nil {
@@ -256,8 +284,9 @@ func (m *Alert) validateConfigurationUUID(formats strfmt.Registry) error {
 }
 
 func (m *Alert) validateCreateTime(formats strfmt.Registry) error {
-	if swag.IsZero(m.CreateTime) { // not required
-		return nil
+
+	if err := validate.Required("createTime", "body", strfmt.DateTime(m.CreateTime)); err != nil {
+		return err
 	}
 
 	if err := validate.FormatOf("createTime", "body", "date-time", m.CreateTime.String(), formats); err != nil {
@@ -268,8 +297,9 @@ func (m *Alert) validateCreateTime(formats strfmt.Registry) error {
 }
 
 func (m *Alert) validateCustomerUUID(formats strfmt.Registry) error {
-	if swag.IsZero(m.CustomerUUID) { // not required
-		return nil
+
+	if err := validate.Required("customerUUID", "body", strfmt.UUID(m.CustomerUUID)); err != nil {
+		return err
 	}
 
 	if err := validate.FormatOf("customerUUID", "body", "uuid", m.CustomerUUID.String(), formats); err != nil {
@@ -280,8 +310,9 @@ func (m *Alert) validateCustomerUUID(formats strfmt.Registry) error {
 }
 
 func (m *Alert) validateDefinitionUUID(formats strfmt.Registry) error {
-	if swag.IsZero(m.DefinitionUUID) { // not required
-		return nil
+
+	if err := validate.Required("definitionUuid", "body", strfmt.UUID(m.DefinitionUUID)); err != nil {
+		return err
 	}
 
 	if err := validate.FormatOf("definitionUuid", "body", "uuid", m.DefinitionUUID.String(), formats); err != nil {
@@ -306,11 +337,47 @@ func (m *Alert) validateLabels(formats strfmt.Registry) error {
 			if err := m.Labels[i].Validate(formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("labels" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("labels" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
 		}
 
+	}
+
+	return nil
+}
+
+func (m *Alert) validateMessage(formats strfmt.Registry) error {
+
+	if err := validate.RequiredString("message", "body", m.Message); err != nil {
+		return err
+	}
+
+	if err := validate.MinLength("message", "body", m.Message, 1); err != nil {
+		return err
+	}
+
+	if err := validate.MaxLength("message", "body", m.Message, 2147483647); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *Alert) validateName(formats strfmt.Registry) error {
+
+	if err := validate.RequiredString("name", "body", m.Name); err != nil {
+		return err
+	}
+
+	if err := validate.MinLength("name", "body", m.Name, 1); err != nil {
+		return err
+	}
+
+	if err := validate.MaxLength("name", "body", m.Name, 1000); err != nil {
+		return err
 	}
 
 	return nil
@@ -427,8 +494,9 @@ func (m *Alert) validateSeverityEnum(path, location string, value string) error 
 }
 
 func (m *Alert) validateSeverity(formats strfmt.Registry) error {
-	if swag.IsZero(m.Severity) { // not required
-		return nil
+
+	if err := validate.RequiredString("severity", "body", m.Severity); err != nil {
+		return err
 	}
 
 	// value enum
@@ -448,11 +516,20 @@ func (m *Alert) validateSeverityIndex(formats strfmt.Registry) error {
 	return nil
 }
 
+func (m *Alert) validateSourceName(formats strfmt.Registry) error {
+
+	if err := validate.RequiredString("sourceName", "body", m.SourceName); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 var alertTypeStatePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["firing","acknowledged","resolved"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["ACTIVE","ACKNOWLEDGED","RESOLVED"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -462,14 +539,14 @@ func init() {
 
 const (
 
-	// AlertStateFiring captures enum value "firing"
-	AlertStateFiring string = "firing"
+	// AlertStateACTIVE captures enum value "ACTIVE"
+	AlertStateACTIVE string = "ACTIVE"
 
-	// AlertStateAcknowledged captures enum value "acknowledged"
-	AlertStateAcknowledged string = "acknowledged"
+	// AlertStateACKNOWLEDGED captures enum value "ACKNOWLEDGED"
+	AlertStateACKNOWLEDGED string = "ACKNOWLEDGED"
 
-	// AlertStateResolved captures enum value "resolved"
-	AlertStateResolved string = "resolved"
+	// AlertStateRESOLVED captures enum value "RESOLVED"
+	AlertStateRESOLVED string = "RESOLVED"
 )
 
 // prop value enum
@@ -481,8 +558,9 @@ func (m *Alert) validateStateEnum(path, location string, value string) error {
 }
 
 func (m *Alert) validateState(formats strfmt.Registry) error {
-	if swag.IsZero(m.State) { // not required
-		return nil
+
+	if err := validate.RequiredString("state", "body", m.State); err != nil {
+		return err
 	}
 
 	// value enum
@@ -658,6 +736,8 @@ func (m *Alert) contextValidateLabels(ctx context.Context, formats strfmt.Regist
 			if err := m.Labels[i].ContextValidate(ctx, formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("labels" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("labels" + "." + strconv.Itoa(i))
 				}
 				return err
 			}

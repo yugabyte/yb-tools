@@ -52,11 +52,20 @@ type UserIntent struct {
 	// enable volume encryption
 	EnableVolumeEncryption bool `json:"enableVolumeEncryption,omitempty"`
 
+	// enable y c q l
+	EnableYCQL bool `json:"enableYCQL,omitempty"`
+
+	// enable y c q l auth
+	EnableYCQLAuth bool `json:"enableYCQLAuth,omitempty"`
+
 	// enable y e d i s
 	EnableYEDIS bool `json:"enableYEDIS,omitempty"`
 
 	// enable y SQL
 	EnableYSQL bool `json:"enableYSQL,omitempty"`
+
+	// enable y SQL auth
+	EnableYSQLAuth bool `json:"enableYSQLAuth,omitempty"`
 
 	// instance tags
 	InstanceTags map[string]string `json:"instanceTags,omitempty"`
@@ -104,6 +113,12 @@ type UserIntent struct {
 
 	// yb software version
 	YbSoftwareVersion string `json:"ybSoftwareVersion,omitempty"`
+
+	// ycql password
+	YcqlPassword string `json:"ycqlPassword,omitempty"`
+
+	// ysql password
+	YsqlPassword string `json:"ysqlPassword,omitempty"`
 }
 
 // Validate validates this user intent
@@ -145,6 +160,8 @@ func (m *UserIntent) validateDeviceInfo(formats strfmt.Registry) error {
 		if err := m.DeviceInfo.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("deviceInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("deviceInfo")
 			}
 			return err
 		}
@@ -309,6 +326,8 @@ func (m *UserIntent) contextValidateDeviceInfo(ctx context.Context, formats strf
 		if err := m.DeviceInfo.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("deviceInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("deviceInfo")
 			}
 			return err
 		}

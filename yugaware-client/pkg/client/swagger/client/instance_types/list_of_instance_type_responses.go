@@ -50,13 +50,13 @@ func NewListOfInstanceTypeOK() *ListOfInstanceTypeOK {
 successful operation
 */
 type ListOfInstanceTypeOK struct {
-	Payload []models.PlatformResults
+	Payload []*models.InstanceType
 }
 
 func (o *ListOfInstanceTypeOK) Error() string {
 	return fmt.Sprintf("[GET /api/v1/customers/{cUUID}/providers/{pUUID}/instance_types][%d] listOfInstanceTypeOK  %+v", 200, o.Payload)
 }
-func (o *ListOfInstanceTypeOK) GetPayload() []models.PlatformResults {
+func (o *ListOfInstanceTypeOK) GetPayload() []*models.InstanceType {
 	return o.Payload
 }
 

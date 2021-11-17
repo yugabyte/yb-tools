@@ -8,7 +8,6 @@ package models
 import (
 	"context"
 	"encoding/json"
-	"strconv"
 
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/strfmt"
@@ -23,7 +22,10 @@ type CustomerConfig struct {
 
 	// Config name
 	// Example: backup20-01-2021
-	ConfigName string `json:"configName,omitempty"`
+	// Required: true
+	// Max Length: 50
+	// Min Length: 1
+	ConfigName *string `json:"configName"`
 
 	// Config UUID
 	// Read Only: true
@@ -31,35 +33,37 @@ type CustomerConfig struct {
 	ConfigUUID strfmt.UUID `json:"configUUID,omitempty"`
 
 	// Customer UUID
+	// Required: true
 	// Read Only: true
 	// Format: uuid
-	CustomerUUID strfmt.UUID `json:"customerUUID,omitempty"`
+	CustomerUUID strfmt.UUID `json:"customerUUID"`
 
 	// Configuration data
 	// Example: {\"AWS_ACCESS_KEY_ID\": \"AK****************ZD\"}
 	// Required: true
 	Data interface{} `json:"data"`
 
-	// True if there is an in use reference to the object
-	InUse bool `json:"inUse,omitempty"`
-
 	// Name
 	// Example: S3
-	Name string `json:"name,omitempty"`
+	// Required: true
+	// Max Length: 50
+	// Min Length: 1
+	Name *string `json:"name"`
 
 	// Config type
 	// Example: STORAGE
+	// Required: true
 	// Enum: [STORAGE ALERTS CALLHOME PASSWORD_POLICY OTHER]
-	Type string `json:"type,omitempty"`
-
-	// Universe details
-	// Example: {\"name\": \"jd-aws-21-6-21-test4\"}
-	UniverseDetails []*UniverseDetailSubset `json:"universeDetails"`
+	Type *string `json:"type"`
 }
 
 // Validate validates this customer config
 func (m *CustomerConfig) Validate(formats strfmt.Registry) error {
 	var res []error
+
+	if err := m.validateConfigName(formats); err != nil {
+		res = append(res, err)
+	}
 
 	if err := m.validateConfigUUID(formats); err != nil {
 		res = append(res, err)
@@ -73,17 +77,34 @@ func (m *CustomerConfig) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
-	if err := m.validateType(formats); err != nil {
+	if err := m.validateName(formats); err != nil {
 		res = append(res, err)
 	}
 
-	if err := m.validateUniverseDetails(formats); err != nil {
+	if err := m.validateType(formats); err != nil {
 		res = append(res, err)
 	}
 
 	if len(res) > 0 {
 		return errors.CompositeValidationError(res...)
 	}
+	return nil
+}
+
+func (m *CustomerConfig) validateConfigName(formats strfmt.Registry) error {
+
+	if err := validate.Required("configName", "body", m.ConfigName); err != nil {
+		return err
+	}
+
+	if err := validate.MinLength("configName", "body", *m.ConfigName, 1); err != nil {
+		return err
+	}
+
+	if err := validate.MaxLength("configName", "body", *m.ConfigName, 50); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -100,8 +121,9 @@ func (m *CustomerConfig) validateConfigUUID(formats strfmt.Registry) error {
 }
 
 func (m *CustomerConfig) validateCustomerUUID(formats strfmt.Registry) error {
-	if swag.IsZero(m.CustomerUUID) { // not required
-		return nil
+
+	if err := validate.Required("customerUUID", "body", strfmt.UUID(m.CustomerUUID)); err != nil {
+		return err
 	}
 
 	if err := validate.FormatOf("customerUUID", "body", "uuid", m.CustomerUUID.String(), formats); err != nil {
@@ -115,6 +137,23 @@ func (m *CustomerConfig) validateData(formats strfmt.Registry) error {
 
 	if m.Data == nil {
 		return errors.Required("data", "body", nil)
+	}
+
+	return nil
+}
+
+func (m *CustomerConfig) validateName(formats strfmt.Registry) error {
+
+	if err := validate.Required("name", "body", m.Name); err != nil {
+		return err
+	}
+
+	if err := validate.MinLength("name", "body", *m.Name, 1); err != nil {
+		return err
+	}
+
+	if err := validate.MaxLength("name", "body", *m.Name, 50); err != nil {
+		return err
 	}
 
 	return nil
@@ -159,37 +198,14 @@ func (m *CustomerConfig) validateTypeEnum(path, location string, value string) e
 }
 
 func (m *CustomerConfig) validateType(formats strfmt.Registry) error {
-	if swag.IsZero(m.Type) { // not required
-		return nil
-	}
 
-	// value enum
-	if err := m.validateTypeEnum("type", "body", m.Type); err != nil {
+	if err := validate.Required("type", "body", m.Type); err != nil {
 		return err
 	}
 
-	return nil
-}
-
-func (m *CustomerConfig) validateUniverseDetails(formats strfmt.Registry) error {
-	if swag.IsZero(m.UniverseDetails) { // not required
-		return nil
-	}
-
-	for i := 0; i < len(m.UniverseDetails); i++ {
-		if swag.IsZero(m.UniverseDetails[i]) { // not required
-			continue
-		}
-
-		if m.UniverseDetails[i] != nil {
-			if err := m.UniverseDetails[i].Validate(formats); err != nil {
-				if ve, ok := err.(*errors.Validation); ok {
-					return ve.ValidateName("universeDetails" + "." + strconv.Itoa(i))
-				}
-				return err
-			}
-		}
-
+	// value enum
+	if err := m.validateTypeEnum("type", "body", *m.Type); err != nil {
+		return err
 	}
 
 	return nil
@@ -204,10 +220,6 @@ func (m *CustomerConfig) ContextValidate(ctx context.Context, formats strfmt.Reg
 	}
 
 	if err := m.contextValidateCustomerUUID(ctx, formats); err != nil {
-		res = append(res, err)
-	}
-
-	if err := m.contextValidateUniverseDetails(ctx, formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -230,24 +242,6 @@ func (m *CustomerConfig) contextValidateCustomerUUID(ctx context.Context, format
 
 	if err := validate.ReadOnly(ctx, "customerUUID", "body", strfmt.UUID(m.CustomerUUID)); err != nil {
 		return err
-	}
-
-	return nil
-}
-
-func (m *CustomerConfig) contextValidateUniverseDetails(ctx context.Context, formats strfmt.Registry) error {
-
-	for i := 0; i < len(m.UniverseDetails); i++ {
-
-		if m.UniverseDetails[i] != nil {
-			if err := m.UniverseDetails[i].ContextValidate(ctx, formats); err != nil {
-				if ve, ok := err.(*errors.Validation); ok {
-					return ve.ValidateName("universeDetails" + "." + strconv.Itoa(i))
-				}
-				return err
-			}
-		}
-
 	}
 
 	return nil

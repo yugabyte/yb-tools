@@ -22,7 +22,7 @@ type NodeActionFormData struct {
 
 	// node action
 	// Required: true
-	// Enum: [ADD REMOVE START STOP DELETE QUERY RELEASE START_MASTER]
+	// Enum: [ADD REMOVE START STOP DELETE QUERY RELEASE START_MASTER PRECHECK_DETACHED]
 	NodeAction *string `json:"nodeAction"`
 }
 
@@ -44,7 +44,7 @@ var nodeActionFormDataTypeNodeActionPropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["ADD","REMOVE","START","STOP","DELETE","QUERY","RELEASE","START_MASTER"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["ADD","REMOVE","START","STOP","DELETE","QUERY","RELEASE","START_MASTER","PRECHECK_DETACHED"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -77,6 +77,9 @@ const (
 
 	// NodeActionFormDataNodeActionSTARTMASTER captures enum value "START_MASTER"
 	NodeActionFormDataNodeActionSTARTMASTER string = "START_MASTER"
+
+	// NodeActionFormDataNodeActionPRECHECKDETACHED captures enum value "PRECHECK_DETACHED"
+	NodeActionFormDataNodeActionPRECHECKDETACHED string = "PRECHECK_DETACHED"
 )
 
 // prop value enum

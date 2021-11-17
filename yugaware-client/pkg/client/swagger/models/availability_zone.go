@@ -27,6 +27,9 @@ type AvailabilityZone struct {
 	// Example: AWS
 	Code string `json:"code,omitempty"`
 
+	// AZ configuration values
+	Config map[string]string `json:"config,omitempty"`
+
 	// Path to Kubernetes configuration file
 	// Read Only: true
 	KubeconfigPath string `json:"kubeconfigPath,omitempty"`

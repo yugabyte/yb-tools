@@ -15,10 +15,10 @@ import (
 	"github.com/go-openapi/validate"
 )
 
-// Users A user associated with a customer
+// UserWithFeatures A user with set of features, associated with a customer
 //
-// swagger:model Users
-type Users struct {
+// swagger:model UserWithFeatures
+type UserWithFeatures struct {
 
 	// API token creation date
 	// Example: 1624255408795
@@ -55,8 +55,8 @@ type Users struct {
 	UUID strfmt.UUID `json:"uuid,omitempty"`
 }
 
-// Validate validates this users
-func (m *Users) Validate(formats strfmt.Registry) error {
+// Validate validates this user with features
+func (m *UserWithFeatures) Validate(formats strfmt.Registry) error {
 	var res []error
 
 	if err := m.validateAuthTokenIssueDate(formats); err != nil {
@@ -89,7 +89,7 @@ func (m *Users) Validate(formats strfmt.Registry) error {
 	return nil
 }
 
-func (m *Users) validateAuthTokenIssueDate(formats strfmt.Registry) error {
+func (m *UserWithFeatures) validateAuthTokenIssueDate(formats strfmt.Registry) error {
 	if swag.IsZero(m.AuthTokenIssueDate) { // not required
 		return nil
 	}
@@ -101,7 +101,7 @@ func (m *Users) validateAuthTokenIssueDate(formats strfmt.Registry) error {
 	return nil
 }
 
-func (m *Users) validateCreationDate(formats strfmt.Registry) error {
+func (m *UserWithFeatures) validateCreationDate(formats strfmt.Registry) error {
 	if swag.IsZero(m.CreationDate) { // not required
 		return nil
 	}
@@ -113,7 +113,7 @@ func (m *Users) validateCreationDate(formats strfmt.Registry) error {
 	return nil
 }
 
-func (m *Users) validateCustomerUUID(formats strfmt.Registry) error {
+func (m *UserWithFeatures) validateCustomerUUID(formats strfmt.Registry) error {
 	if swag.IsZero(m.CustomerUUID) { // not required
 		return nil
 	}
@@ -125,7 +125,7 @@ func (m *Users) validateCustomerUUID(formats strfmt.Registry) error {
 	return nil
 }
 
-func (m *Users) validateEmail(formats strfmt.Registry) error {
+func (m *UserWithFeatures) validateEmail(formats strfmt.Registry) error {
 
 	if err := validate.Required("email", "body", m.Email); err != nil {
 		return err
@@ -134,7 +134,7 @@ func (m *Users) validateEmail(formats strfmt.Registry) error {
 	return nil
 }
 
-var usersTypeRolePropEnum []interface{}
+var userWithFeaturesTypeRolePropEnum []interface{}
 
 func init() {
 	var res []string
@@ -142,34 +142,34 @@ func init() {
 		panic(err)
 	}
 	for _, v := range res {
-		usersTypeRolePropEnum = append(usersTypeRolePropEnum, v)
+		userWithFeaturesTypeRolePropEnum = append(userWithFeaturesTypeRolePropEnum, v)
 	}
 }
 
 const (
 
-	// UsersRoleAdmin captures enum value "Admin"
-	UsersRoleAdmin string = "Admin"
+	// UserWithFeaturesRoleAdmin captures enum value "Admin"
+	UserWithFeaturesRoleAdmin string = "Admin"
 
-	// UsersRoleReadOnly captures enum value "ReadOnly"
-	UsersRoleReadOnly string = "ReadOnly"
+	// UserWithFeaturesRoleReadOnly captures enum value "ReadOnly"
+	UserWithFeaturesRoleReadOnly string = "ReadOnly"
 
-	// UsersRoleSuperAdmin captures enum value "SuperAdmin"
-	UsersRoleSuperAdmin string = "SuperAdmin"
+	// UserWithFeaturesRoleSuperAdmin captures enum value "SuperAdmin"
+	UserWithFeaturesRoleSuperAdmin string = "SuperAdmin"
 
-	// UsersRoleBackupAdmin captures enum value "BackupAdmin"
-	UsersRoleBackupAdmin string = "BackupAdmin"
+	// UserWithFeaturesRoleBackupAdmin captures enum value "BackupAdmin"
+	UserWithFeaturesRoleBackupAdmin string = "BackupAdmin"
 )
 
 // prop value enum
-func (m *Users) validateRoleEnum(path, location string, value string) error {
-	if err := validate.EnumCase(path, location, value, usersTypeRolePropEnum, true); err != nil {
+func (m *UserWithFeatures) validateRoleEnum(path, location string, value string) error {
+	if err := validate.EnumCase(path, location, value, userWithFeaturesTypeRolePropEnum, true); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (m *Users) validateRole(formats strfmt.Registry) error {
+func (m *UserWithFeatures) validateRole(formats strfmt.Registry) error {
 	if swag.IsZero(m.Role) { // not required
 		return nil
 	}
@@ -182,7 +182,7 @@ func (m *Users) validateRole(formats strfmt.Registry) error {
 	return nil
 }
 
-func (m *Users) validateUUID(formats strfmt.Registry) error {
+func (m *UserWithFeatures) validateUUID(formats strfmt.Registry) error {
 	if swag.IsZero(m.UUID) { // not required
 		return nil
 	}
@@ -194,8 +194,8 @@ func (m *Users) validateUUID(formats strfmt.Registry) error {
 	return nil
 }
 
-// ContextValidate validate this users based on the context it is used
-func (m *Users) ContextValidate(ctx context.Context, formats strfmt.Registry) error {
+// ContextValidate validate this user with features based on the context it is used
+func (m *UserWithFeatures) ContextValidate(ctx context.Context, formats strfmt.Registry) error {
 	var res []error
 
 	if err := m.contextValidateAuthTokenIssueDate(ctx, formats); err != nil {
@@ -220,7 +220,7 @@ func (m *Users) ContextValidate(ctx context.Context, formats strfmt.Registry) er
 	return nil
 }
 
-func (m *Users) contextValidateAuthTokenIssueDate(ctx context.Context, formats strfmt.Registry) error {
+func (m *UserWithFeatures) contextValidateAuthTokenIssueDate(ctx context.Context, formats strfmt.Registry) error {
 
 	if err := validate.ReadOnly(ctx, "authTokenIssueDate", "body", strfmt.DateTime(m.AuthTokenIssueDate)); err != nil {
 		return err
@@ -229,7 +229,7 @@ func (m *Users) contextValidateAuthTokenIssueDate(ctx context.Context, formats s
 	return nil
 }
 
-func (m *Users) contextValidateCreationDate(ctx context.Context, formats strfmt.Registry) error {
+func (m *UserWithFeatures) contextValidateCreationDate(ctx context.Context, formats strfmt.Registry) error {
 
 	if err := validate.ReadOnly(ctx, "creationDate", "body", strfmt.DateTime(m.CreationDate)); err != nil {
 		return err
@@ -238,7 +238,7 @@ func (m *Users) contextValidateCreationDate(ctx context.Context, formats strfmt.
 	return nil
 }
 
-func (m *Users) contextValidateCustomerUUID(ctx context.Context, formats strfmt.Registry) error {
+func (m *UserWithFeatures) contextValidateCustomerUUID(ctx context.Context, formats strfmt.Registry) error {
 
 	if err := validate.ReadOnly(ctx, "customerUUID", "body", strfmt.UUID(m.CustomerUUID)); err != nil {
 		return err
@@ -247,7 +247,7 @@ func (m *Users) contextValidateCustomerUUID(ctx context.Context, formats strfmt.
 	return nil
 }
 
-func (m *Users) contextValidateUUID(ctx context.Context, formats strfmt.Registry) error {
+func (m *UserWithFeatures) contextValidateUUID(ctx context.Context, formats strfmt.Registry) error {
 
 	if err := validate.ReadOnly(ctx, "uuid", "body", strfmt.UUID(m.UUID)); err != nil {
 		return err
@@ -257,7 +257,7 @@ func (m *Users) contextValidateUUID(ctx context.Context, formats strfmt.Registry
 }
 
 // MarshalBinary interface implementation
-func (m *Users) MarshalBinary() ([]byte, error) {
+func (m *UserWithFeatures) MarshalBinary() ([]byte, error) {
 	if m == nil {
 		return nil, nil
 	}
@@ -265,8 +265,8 @@ func (m *Users) MarshalBinary() ([]byte, error) {
 }
 
 // UnmarshalBinary interface implementation
-func (m *Users) UnmarshalBinary(b []byte) error {
-	var res Users
+func (m *UserWithFeatures) UnmarshalBinary(b []byte) error {
+	var res UserWithFeatures
 	if err := swag.ReadJSON(b, &res); err != nil {
 		return err
 	}

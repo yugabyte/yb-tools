@@ -171,6 +171,8 @@ func (m *CertificateInfo) validateCustomCertInfo(formats strfmt.Registry) error 
 		if err := m.CustomCertInfo.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("customCertInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("customCertInfo")
 			}
 			return err
 		}
@@ -189,6 +191,8 @@ func (m *CertificateInfo) validateCustomServerCertInfo(formats strfmt.Registry) 
 		if err := m.CustomServerCertInfo.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("customServerCertInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("customServerCertInfo")
 			}
 			return err
 		}
@@ -247,6 +251,8 @@ func (m *CertificateInfo) validateUniverseDetails(formats strfmt.Registry) error
 			if err := m.UniverseDetails[i].Validate(formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("universeDetails" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("universeDetails" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
@@ -318,6 +324,8 @@ func (m *CertificateInfo) contextValidateCustomCertInfo(ctx context.Context, for
 		if err := m.CustomCertInfo.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("customCertInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("customCertInfo")
 			}
 			return err
 		}
@@ -332,6 +340,8 @@ func (m *CertificateInfo) contextValidateCustomServerCertInfo(ctx context.Contex
 		if err := m.CustomServerCertInfo.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("customServerCertInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("customServerCertInfo")
 			}
 			return err
 		}
@@ -361,6 +371,8 @@ func (m *CertificateInfo) contextValidateUniverseDetails(ctx context.Context, fo
 			if err := m.UniverseDetails[i].ContextValidate(ctx, formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("universeDetails" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("universeDetails" + "." + strconv.Itoa(i))
 				}
 				return err
 			}

@@ -44,19 +44,19 @@ func NewGetUserDetailsOK() *GetUserDetailsOK {
 successful operation
 */
 type GetUserDetailsOK struct {
-	Payload *models.Users
+	Payload *models.UserWithFeatures
 }
 
 func (o *GetUserDetailsOK) Error() string {
 	return fmt.Sprintf("[GET /api/v1/customers/{cUUID}/users/{uUUID}][%d] getUserDetailsOK  %+v", 200, o.Payload)
 }
-func (o *GetUserDetailsOK) GetPayload() *models.Users {
+func (o *GetUserDetailsOK) GetPayload() *models.UserWithFeatures {
 	return o.Payload
 }
 
 func (o *GetUserDetailsOK) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
 
-	o.Payload = new(models.Users)
+	o.Payload = new(models.UserWithFeatures)
 
 	// response payload
 	if err := consumer.Consume(response.Body(), o.Payload); err != nil && err != io.EOF {

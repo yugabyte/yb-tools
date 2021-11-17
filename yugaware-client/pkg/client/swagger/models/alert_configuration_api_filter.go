@@ -25,6 +25,11 @@ type AlertConfigurationAPIFilter struct {
 	// Required: true
 	Active *bool `json:"active"`
 
+	// destination type
+	// Required: true
+	// Enum: [NO_DESTINATION DEFAULT_DESTINATION SELECTED_DESTINATION]
+	DestinationType *string `json:"destinationType"`
+
 	// destination Uuid
 	// Required: true
 	// Format: uuid
@@ -41,7 +46,7 @@ type AlertConfigurationAPIFilter struct {
 
 	// template
 	// Required: true
-	// Enum: [REPLICATION_LAG CLOCK_SKEW MEMORY_CONSUMPTION HEALTH_CHECK_ERROR HEALTH_CHECK_NOTIFICATION_ERROR BACKUP_FAILURE BACKUP_SCHEDULE_FAILURE INACTIVE_CRON_NODES ALERT_QUERY_FAILED ALERT_CONFIG_WRITING_FAILED ALERT_NOTIFICATION_ERROR ALERT_NOTIFICATION_CHANNEL_ERROR NODE_DOWN NODE_RESTART NODE_CPU_USAGE NODE_DISK_USAGE NODE_FILE_DESCRIPTORS_USAGE DB_VERSION_MISMATCH DB_INSTANCE_DOWN DB_INSTANCE_RESTART DB_FATAL_LOGS DB_CORE_FILES DB_YSQL_CONNECTION DB_YCQL_CONNECTION DB_REDIS_CONNECTION NODE_TO_NODE_CA_CERT_EXPIRY NODE_TO_NODE_CERT_EXPIRY CLIENT_TO_NODE_CA_CERT_EXPIRY CLIENT_TO_NODE_CERT_EXPIRY YSQL_OP_AVG_LATENCY YCQL_OP_AVG_LATENCY YSQL_OP_P99_LATENCY YCQL_OP_P99_LATENCY HIGH_NUM_YCQL_CONNECTIONS HIGH_NUM_YEDIS_CONNECTIONS YSQL_THROUGHPUT YCQL_THROUGHPUT]
+	// Enum: [REPLICATION_LAG CLOCK_SKEW MEMORY_CONSUMPTION HEALTH_CHECK_ERROR HEALTH_CHECK_NOTIFICATION_ERROR BACKUP_FAILURE BACKUP_SCHEDULE_FAILURE INACTIVE_CRON_NODES ALERT_QUERY_FAILED ALERT_CONFIG_WRITING_FAILED ALERT_NOTIFICATION_ERROR ALERT_NOTIFICATION_CHANNEL_ERROR NODE_DOWN NODE_RESTART NODE_CPU_USAGE NODE_DISK_USAGE NODE_FILE_DESCRIPTORS_USAGE DB_VERSION_MISMATCH DB_INSTANCE_DOWN DB_INSTANCE_RESTART DB_FATAL_LOGS DB_ERROR_LOGS DB_CORE_FILES DB_YSQL_CONNECTION DB_YCQL_CONNECTION DB_REDIS_CONNECTION NODE_TO_NODE_CA_CERT_EXPIRY NODE_TO_NODE_CERT_EXPIRY CLIENT_TO_NODE_CA_CERT_EXPIRY CLIENT_TO_NODE_CERT_EXPIRY YSQL_OP_AVG_LATENCY YCQL_OP_AVG_LATENCY YSQL_OP_P99_LATENCY YCQL_OP_P99_LATENCY HIGH_NUM_YCQL_CONNECTIONS HIGH_NUM_YEDIS_CONNECTIONS YSQL_THROUGHPUT YCQL_THROUGHPUT]
 	Template *string `json:"template"`
 
 	// uuids
@@ -55,6 +60,10 @@ func (m *AlertConfigurationAPIFilter) Validate(formats strfmt.Registry) error {
 	var res []error
 
 	if err := m.validateActive(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateDestinationType(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -87,6 +96,52 @@ func (m *AlertConfigurationAPIFilter) Validate(formats strfmt.Registry) error {
 func (m *AlertConfigurationAPIFilter) validateActive(formats strfmt.Registry) error {
 
 	if err := validate.Required("active", "body", m.Active); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+var alertConfigurationApiFilterTypeDestinationTypePropEnum []interface{}
+
+func init() {
+	var res []string
+	if err := json.Unmarshal([]byte(`["NO_DESTINATION","DEFAULT_DESTINATION","SELECTED_DESTINATION"]`), &res); err != nil {
+		panic(err)
+	}
+	for _, v := range res {
+		alertConfigurationApiFilterTypeDestinationTypePropEnum = append(alertConfigurationApiFilterTypeDestinationTypePropEnum, v)
+	}
+}
+
+const (
+
+	// AlertConfigurationAPIFilterDestinationTypeNODESTINATION captures enum value "NO_DESTINATION"
+	AlertConfigurationAPIFilterDestinationTypeNODESTINATION string = "NO_DESTINATION"
+
+	// AlertConfigurationAPIFilterDestinationTypeDEFAULTDESTINATION captures enum value "DEFAULT_DESTINATION"
+	AlertConfigurationAPIFilterDestinationTypeDEFAULTDESTINATION string = "DEFAULT_DESTINATION"
+
+	// AlertConfigurationAPIFilterDestinationTypeSELECTEDDESTINATION captures enum value "SELECTED_DESTINATION"
+	AlertConfigurationAPIFilterDestinationTypeSELECTEDDESTINATION string = "SELECTED_DESTINATION"
+)
+
+// prop value enum
+func (m *AlertConfigurationAPIFilter) validateDestinationTypeEnum(path, location string, value string) error {
+	if err := validate.EnumCase(path, location, value, alertConfigurationApiFilterTypeDestinationTypePropEnum, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *AlertConfigurationAPIFilter) validateDestinationType(formats strfmt.Registry) error {
+
+	if err := validate.Required("destinationType", "body", m.DestinationType); err != nil {
+		return err
+	}
+
+	// value enum
+	if err := m.validateDestinationTypeEnum("destinationType", "body", *m.DestinationType); err != nil {
 		return err
 	}
 
@@ -162,7 +217,7 @@ var alertConfigurationApiFilterTypeTemplatePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["REPLICATION_LAG","CLOCK_SKEW","MEMORY_CONSUMPTION","HEALTH_CHECK_ERROR","HEALTH_CHECK_NOTIFICATION_ERROR","BACKUP_FAILURE","BACKUP_SCHEDULE_FAILURE","INACTIVE_CRON_NODES","ALERT_QUERY_FAILED","ALERT_CONFIG_WRITING_FAILED","ALERT_NOTIFICATION_ERROR","ALERT_NOTIFICATION_CHANNEL_ERROR","NODE_DOWN","NODE_RESTART","NODE_CPU_USAGE","NODE_DISK_USAGE","NODE_FILE_DESCRIPTORS_USAGE","DB_VERSION_MISMATCH","DB_INSTANCE_DOWN","DB_INSTANCE_RESTART","DB_FATAL_LOGS","DB_CORE_FILES","DB_YSQL_CONNECTION","DB_YCQL_CONNECTION","DB_REDIS_CONNECTION","NODE_TO_NODE_CA_CERT_EXPIRY","NODE_TO_NODE_CERT_EXPIRY","CLIENT_TO_NODE_CA_CERT_EXPIRY","CLIENT_TO_NODE_CERT_EXPIRY","YSQL_OP_AVG_LATENCY","YCQL_OP_AVG_LATENCY","YSQL_OP_P99_LATENCY","YCQL_OP_P99_LATENCY","HIGH_NUM_YCQL_CONNECTIONS","HIGH_NUM_YEDIS_CONNECTIONS","YSQL_THROUGHPUT","YCQL_THROUGHPUT"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["REPLICATION_LAG","CLOCK_SKEW","MEMORY_CONSUMPTION","HEALTH_CHECK_ERROR","HEALTH_CHECK_NOTIFICATION_ERROR","BACKUP_FAILURE","BACKUP_SCHEDULE_FAILURE","INACTIVE_CRON_NODES","ALERT_QUERY_FAILED","ALERT_CONFIG_WRITING_FAILED","ALERT_NOTIFICATION_ERROR","ALERT_NOTIFICATION_CHANNEL_ERROR","NODE_DOWN","NODE_RESTART","NODE_CPU_USAGE","NODE_DISK_USAGE","NODE_FILE_DESCRIPTORS_USAGE","DB_VERSION_MISMATCH","DB_INSTANCE_DOWN","DB_INSTANCE_RESTART","DB_FATAL_LOGS","DB_ERROR_LOGS","DB_CORE_FILES","DB_YSQL_CONNECTION","DB_YCQL_CONNECTION","DB_REDIS_CONNECTION","NODE_TO_NODE_CA_CERT_EXPIRY","NODE_TO_NODE_CERT_EXPIRY","CLIENT_TO_NODE_CA_CERT_EXPIRY","CLIENT_TO_NODE_CERT_EXPIRY","YSQL_OP_AVG_LATENCY","YCQL_OP_AVG_LATENCY","YSQL_OP_P99_LATENCY","YCQL_OP_P99_LATENCY","HIGH_NUM_YCQL_CONNECTIONS","HIGH_NUM_YEDIS_CONNECTIONS","YSQL_THROUGHPUT","YCQL_THROUGHPUT"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -234,6 +289,9 @@ const (
 
 	// AlertConfigurationAPIFilterTemplateDBFATALLOGS captures enum value "DB_FATAL_LOGS"
 	AlertConfigurationAPIFilterTemplateDBFATALLOGS string = "DB_FATAL_LOGS"
+
+	// AlertConfigurationAPIFilterTemplateDBERRORLOGS captures enum value "DB_ERROR_LOGS"
+	AlertConfigurationAPIFilterTemplateDBERRORLOGS string = "DB_ERROR_LOGS"
 
 	// AlertConfigurationAPIFilterTemplateDBCOREFILES captures enum value "DB_CORE_FILES"
 	AlertConfigurationAPIFilterTemplateDBCOREFILES string = "DB_CORE_FILES"

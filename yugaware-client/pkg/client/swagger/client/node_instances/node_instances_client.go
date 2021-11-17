@@ -34,6 +34,8 @@ type ClientService interface {
 
 	DeleteInstance(params *DeleteInstanceParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) error
 
+	DetachedNodeAction(params *DetachedNodeActionParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DetachedNodeActionOK, error)
+
 	GetNodeInstance(params *GetNodeInstanceParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetNodeInstanceOK, error)
 
 	ListByProvider(params *ListByProviderParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListByProviderOK, error)
@@ -114,6 +116,45 @@ func (a *Client) DeleteInstance(params *DeleteInstanceParams, authInfo runtime.C
 		return err
 	}
 	return nil
+}
+
+/*
+  DetachedNodeAction detacheds node action
+*/
+func (a *Client) DetachedNodeAction(params *DetachedNodeActionParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DetachedNodeActionOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewDetachedNodeActionParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "detachedNodeAction",
+		Method:             "POST",
+		PathPattern:        "/api/v1/customers/{cUUID}/providers/{pUUID}/instances/{instanceIP}",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &DetachedNodeActionReader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*DetachedNodeActionOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for detachedNodeAction: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
 }
 
 /*

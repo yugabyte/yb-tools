@@ -20,12 +20,16 @@ import (
 type CustomerTaskData struct {
 
 	// Customer task completion time
-	// Example: 1624295417405
-	CompletionTime int64 `json:"completionTime,omitempty"`
+	// Example: 2021-06-17T15:00:05-0400
+	// Pattern: /([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})+([0-9]{4})/
+	// Format: date-time
+	CompletionTime strfmt.DateTime `json:"completionTime,omitempty"`
 
 	// Customer task creation time
-	// Example: 1624295417405
-	CreateTime int64 `json:"createTime,omitempty"`
+	// Example: 2021-06-17T15:00:05-0400
+	// Pattern: /([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})+([0-9]{4})/
+	// Format: date-time
+	CreateTime strfmt.DateTime `json:"createTime,omitempty"`
 
 	// Customer task UUID
 	// Format: uuid
@@ -54,11 +58,23 @@ type CustomerTaskData struct {
 	// Customer task type
 	// Example: Delete
 	Type string `json:"type,omitempty"`
+
+	// Customer task type name
+	// Example: Software Upgrade
+	TypeName string `json:"typeName,omitempty"`
 }
 
 // Validate validates this customer task data
 func (m *CustomerTaskData) Validate(formats strfmt.Registry) error {
 	var res []error
+
+	if err := m.validateCompletionTime(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateCreateTime(formats); err != nil {
+		res = append(res, err)
+	}
 
 	if err := m.validateID(formats); err != nil {
 		res = append(res, err)
@@ -71,6 +87,38 @@ func (m *CustomerTaskData) Validate(formats strfmt.Registry) error {
 	if len(res) > 0 {
 		return errors.CompositeValidationError(res...)
 	}
+	return nil
+}
+
+func (m *CustomerTaskData) validateCompletionTime(formats strfmt.Registry) error {
+	if swag.IsZero(m.CompletionTime) { // not required
+		return nil
+	}
+
+	if err := validate.Pattern("completionTime", "body", m.CompletionTime.String(), `/([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})+([0-9]{4})/`); err != nil {
+		return err
+	}
+
+	if err := validate.FormatOf("completionTime", "body", "date-time", m.CompletionTime.String(), formats); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *CustomerTaskData) validateCreateTime(formats strfmt.Registry) error {
+	if swag.IsZero(m.CreateTime) { // not required
+		return nil
+	}
+
+	if err := validate.Pattern("createTime", "body", m.CreateTime.String(), `/([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})+([0-9]{4})/`); err != nil {
+		return err
+	}
+
+	if err := validate.FormatOf("createTime", "body", "date-time", m.CreateTime.String(), formats); err != nil {
+		return err
+	}
+
 	return nil
 }
 

@@ -51,6 +51,8 @@ func (m *RuntimeConfigData) validateScopedConfigList(formats strfmt.Registry) er
 			if err := m.ScopedConfigList[i].Validate(formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("scopedConfigList" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("scopedConfigList" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
@@ -83,6 +85,8 @@ func (m *RuntimeConfigData) contextValidateScopedConfigList(ctx context.Context,
 			if err := m.ScopedConfigList[i].ContextValidate(ctx, formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("scopedConfigList" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("scopedConfigList" + "." + strconv.Itoa(i))
 				}
 				return err
 			}

@@ -21,11 +21,13 @@ import (
 type AlertConfigurationThreshold struct {
 
 	// Threshold condition (greater than, or less than)
-	// Enum: [> <]
-	Condition string `json:"condition,omitempty"`
+	// Required: true
+	// Enum: [GREATER_THAN LESS_THAN]
+	Condition *string `json:"condition"`
 
 	// Threshold value
-	Threshold float64 `json:"threshold,omitempty"`
+	// Required: true
+	Threshold *float64 `json:"threshold"`
 }
 
 // Validate validates this alert configuration threshold
@@ -33,6 +35,10 @@ func (m *AlertConfigurationThreshold) Validate(formats strfmt.Registry) error {
 	var res []error
 
 	if err := m.validateCondition(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateThreshold(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -46,7 +52,7 @@ var alertConfigurationThresholdTypeConditionPropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["\u003e","\u003c"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["GREATER_THAN","LESS_THAN"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -56,11 +62,11 @@ func init() {
 
 const (
 
-	// AlertConfigurationThresholdCondition captures enum value ">"
-	AlertConfigurationThresholdConditionGt string = ">"
+	// AlertConfigurationThresholdConditionGREATERTHAN captures enum value "GREATER_THAN"
+	AlertConfigurationThresholdConditionGREATERTHAN string = "GREATER_THAN"
 
-	// AlertConfigurationThresholdCondition captures enum value "<"
-	AlertConfigurationThresholdConditionLt string = "<"
+	// AlertConfigurationThresholdConditionLESSTHAN captures enum value "LESS_THAN"
+	AlertConfigurationThresholdConditionLESSTHAN string = "LESS_THAN"
 )
 
 // prop value enum
@@ -72,12 +78,22 @@ func (m *AlertConfigurationThreshold) validateConditionEnum(path, location strin
 }
 
 func (m *AlertConfigurationThreshold) validateCondition(formats strfmt.Registry) error {
-	if swag.IsZero(m.Condition) { // not required
-		return nil
+
+	if err := validate.Required("condition", "body", m.Condition); err != nil {
+		return err
 	}
 
 	// value enum
-	if err := m.validateConditionEnum("condition", "body", m.Condition); err != nil {
+	if err := m.validateConditionEnum("condition", "body", *m.Condition); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *AlertConfigurationThreshold) validateThreshold(formats strfmt.Registry) error {
+
+	if err := validate.Required("threshold", "body", m.Threshold); err != nil {
 		return err
 	}
 

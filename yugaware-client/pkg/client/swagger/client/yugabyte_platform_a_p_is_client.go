@@ -23,6 +23,7 @@ import (
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/customer_tasks"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/encryption_at_rest"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/instance_types"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/logging_config"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/metrics"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/node_instances"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/region_management"
@@ -39,7 +40,6 @@ import (
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/universe_management"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/universe_node_metadata_metamaster"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/user_management"
-	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/x_cluster_replication"
 )
 
 // Default yugabyte platform a p is HTTP client.
@@ -97,6 +97,7 @@ func New(transport runtime.ClientTransport, formats strfmt.Registry) *YugabytePl
 	cli.CustomerTasks = customer_tasks.New(transport, formats)
 	cli.EncryptionAtRest = encryption_at_rest.New(transport, formats)
 	cli.InstanceTypes = instance_types.New(transport, formats)
+	cli.LoggingConfig = logging_config.New(transport, formats)
 	cli.Metrics = metrics.New(transport, formats)
 	cli.NodeInstances = node_instances.New(transport, formats)
 	cli.RegionManagement = region_management.New(transport, formats)
@@ -113,7 +114,6 @@ func New(transport runtime.ClientTransport, formats strfmt.Registry) *YugabytePl
 	cli.UniverseManagement = universe_management.New(transport, formats)
 	cli.UniverseNodeMetadataMetamaster = universe_node_metadata_metamaster.New(transport, formats)
 	cli.UserManagement = user_management.New(transport, formats)
-	cli.XClusterReplication = x_cluster_replication.New(transport, formats)
 	return cli
 }
 
@@ -184,6 +184,8 @@ type YugabytePlatformAPIs struct {
 
 	InstanceTypes instance_types.ClientService
 
+	LoggingConfig logging_config.ClientService
+
 	Metrics metrics.ClientService
 
 	NodeInstances node_instances.ClientService
@@ -216,8 +218,6 @@ type YugabytePlatformAPIs struct {
 
 	UserManagement user_management.ClientService
 
-	XClusterReplication x_cluster_replication.ClientService
-
 	Transport runtime.ClientTransport
 }
 
@@ -237,6 +237,7 @@ func (c *YugabytePlatformAPIs) SetTransport(transport runtime.ClientTransport) {
 	c.CustomerTasks.SetTransport(transport)
 	c.EncryptionAtRest.SetTransport(transport)
 	c.InstanceTypes.SetTransport(transport)
+	c.LoggingConfig.SetTransport(transport)
 	c.Metrics.SetTransport(transport)
 	c.NodeInstances.SetTransport(transport)
 	c.RegionManagement.SetTransport(transport)
@@ -253,5 +254,4 @@ func (c *YugabytePlatformAPIs) SetTransport(transport runtime.ClientTransport) {
 	c.UniverseManagement.SetTransport(transport)
 	c.UniverseNodeMetadataMetamaster.SetTransport(transport)
 	c.UserManagement.SetTransport(transport)
-	c.XClusterReplication.SetTransport(transport)
 }

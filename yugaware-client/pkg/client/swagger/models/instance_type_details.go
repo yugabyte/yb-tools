@@ -110,6 +110,8 @@ func (m *InstanceTypeDetails) validateVolumeDetailsList(formats strfmt.Registry)
 			if err := m.VolumeDetailsList[i].Validate(formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("volumeDetailsList" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("volumeDetailsList" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
@@ -142,6 +144,8 @@ func (m *InstanceTypeDetails) contextValidateVolumeDetailsList(ctx context.Conte
 			if err := m.VolumeDetailsList[i].ContextValidate(ctx, formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("volumeDetailsList" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("volumeDetailsList" + "." + strconv.Itoa(i))
 				}
 				return err
 			}

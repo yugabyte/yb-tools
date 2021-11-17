@@ -72,6 +72,8 @@ func (m *ScopedConfig) validateConfigEntries(formats strfmt.Registry) error {
 			if err := m.ConfigEntries[i].Validate(formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("configEntries" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("configEntries" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
@@ -164,6 +166,8 @@ func (m *ScopedConfig) contextValidateConfigEntries(ctx context.Context, formats
 			if err := m.ConfigEntries[i].ContextValidate(ctx, formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("configEntries" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("configEntries" + "." + strconv.Itoa(i))
 				}
 				return err
 			}

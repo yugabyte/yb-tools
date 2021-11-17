@@ -21,51 +21,69 @@ import (
 type AlertConfiguration struct {
 
 	// Is configured alerts raised or not
-	Active bool `json:"active,omitempty"`
+	// Required: true
+	Active *bool `json:"active"`
 
 	// Creation time
+	// Required: true
 	// Read Only: true
 	// Format: date-time
-	CreateTime strfmt.DateTime `json:"createTime,omitempty"`
+	CreateTime strfmt.DateTime `json:"createTime"`
 
 	// Customer UUID
+	// Required: true
 	// Read Only: true
 	// Format: uuid
-	CustomerUUID strfmt.UUID `json:"customerUUID,omitempty"`
+	CustomerUUID strfmt.UUID `json:"customerUUID"`
+
+	// Is default destination used for this config
+	// Required: true
+	DefaultDestination *bool `json:"defaultDestination"`
 
 	// Description
-	Description string `json:"description,omitempty"`
+	// Required: true
+	Description *string `json:"description"`
 
-	// Alert destination IIOD
+	// Alert destination UUID
 	// Format: uuid
 	DestinationUUID strfmt.UUID `json:"destinationUUID,omitempty"`
 
 	// Duration in seconds, while condition is met to raise an alert
-	DurationSec int32 `json:"durationSec,omitempty"`
+	// Required: true
+	// Minimum: 0
+	DurationSec *int32 `json:"durationSec"`
 
 	// Name
-	Name string `json:"name,omitempty"`
+	// Required: true
+	// Max Length: 1000
+	// Min Length: 1
+	Name *string `json:"name"`
 
 	// Target
-	Target *AlertConfigurationTarget `json:"target,omitempty"`
+	// Required: true
+	Target *AlertConfigurationTarget `json:"target"`
 
 	// Target type
+	// Required: true
 	// Read Only: true
 	// Enum: [PLATFORM UNIVERSE]
-	TargetType string `json:"targetType,omitempty"`
+	TargetType string `json:"targetType"`
 
 	// Template name
+	// Required: true
 	// Read Only: true
-	// Enum: [REPLICATION_LAG CLOCK_SKEW MEMORY_CONSUMPTION HEALTH_CHECK_ERROR HEALTH_CHECK_NOTIFICATION_ERROR BACKUP_FAILURE BACKUP_SCHEDULE_FAILURE INACTIVE_CRON_NODES ALERT_QUERY_FAILED ALERT_CONFIG_WRITING_FAILED ALERT_NOTIFICATION_ERROR ALERT_NOTIFICATION_CHANNEL_ERROR NODE_DOWN NODE_RESTART NODE_CPU_USAGE NODE_DISK_USAGE NODE_FILE_DESCRIPTORS_USAGE DB_VERSION_MISMATCH DB_INSTANCE_DOWN DB_INSTANCE_RESTART DB_FATAL_LOGS DB_CORE_FILES DB_YSQL_CONNECTION DB_YCQL_CONNECTION DB_REDIS_CONNECTION NODE_TO_NODE_CA_CERT_EXPIRY NODE_TO_NODE_CERT_EXPIRY CLIENT_TO_NODE_CA_CERT_EXPIRY CLIENT_TO_NODE_CERT_EXPIRY YSQL_OP_AVG_LATENCY YCQL_OP_AVG_LATENCY YSQL_OP_P99_LATENCY YCQL_OP_P99_LATENCY HIGH_NUM_YCQL_CONNECTIONS HIGH_NUM_YEDIS_CONNECTIONS YSQL_THROUGHPUT YCQL_THROUGHPUT]
-	Template string `json:"template,omitempty"`
+	// Enum: [REPLICATION_LAG CLOCK_SKEW MEMORY_CONSUMPTION HEALTH_CHECK_ERROR HEALTH_CHECK_NOTIFICATION_ERROR BACKUP_FAILURE BACKUP_SCHEDULE_FAILURE INACTIVE_CRON_NODES ALERT_QUERY_FAILED ALERT_CONFIG_WRITING_FAILED ALERT_NOTIFICATION_ERROR ALERT_NOTIFICATION_CHANNEL_ERROR NODE_DOWN NODE_RESTART NODE_CPU_USAGE NODE_DISK_USAGE NODE_FILE_DESCRIPTORS_USAGE DB_VERSION_MISMATCH DB_INSTANCE_DOWN DB_INSTANCE_RESTART DB_FATAL_LOGS DB_ERROR_LOGS DB_CORE_FILES DB_YSQL_CONNECTION DB_YCQL_CONNECTION DB_REDIS_CONNECTION NODE_TO_NODE_CA_CERT_EXPIRY NODE_TO_NODE_CERT_EXPIRY CLIENT_TO_NODE_CA_CERT_EXPIRY CLIENT_TO_NODE_CERT_EXPIRY YSQL_OP_AVG_LATENCY YCQL_OP_AVG_LATENCY YSQL_OP_P99_LATENCY YCQL_OP_P99_LATENCY HIGH_NUM_YCQL_CONNECTIONS HIGH_NUM_YEDIS_CONNECTIONS YSQL_THROUGHPUT YCQL_THROUGHPUT]
+	Template string `json:"template"`
 
 	// Threshold unit
+	// Required: true
 	// Read Only: true
 	// Enum: [STATUS COUNT PERCENT MILLISECOND SECOND DAY]
-	ThresholdUnit string `json:"thresholdUnit,omitempty"`
+	ThresholdUnit string `json:"thresholdUnit"`
 
 	// Thresholds
-	Thresholds map[string]AlertConfigurationThreshold `json:"thresholds,omitempty"`
+	// Required: true
+	Thresholds map[string]AlertConfigurationThreshold `json:"thresholds"`
 
 	// Configuration UUID
 	// Read Only: true
@@ -77,6 +95,10 @@ type AlertConfiguration struct {
 func (m *AlertConfiguration) Validate(formats strfmt.Registry) error {
 	var res []error
 
+	if err := m.validateActive(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validateCreateTime(formats); err != nil {
 		res = append(res, err)
 	}
@@ -85,7 +107,23 @@ func (m *AlertConfiguration) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
+	if err := m.validateDefaultDestination(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateDescription(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validateDestinationUUID(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateDurationSec(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateName(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -119,9 +157,19 @@ func (m *AlertConfiguration) Validate(formats strfmt.Registry) error {
 	return nil
 }
 
+func (m *AlertConfiguration) validateActive(formats strfmt.Registry) error {
+
+	if err := validate.Required("active", "body", m.Active); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (m *AlertConfiguration) validateCreateTime(formats strfmt.Registry) error {
-	if swag.IsZero(m.CreateTime) { // not required
-		return nil
+
+	if err := validate.Required("createTime", "body", strfmt.DateTime(m.CreateTime)); err != nil {
+		return err
 	}
 
 	if err := validate.FormatOf("createTime", "body", "date-time", m.CreateTime.String(), formats); err != nil {
@@ -132,11 +180,30 @@ func (m *AlertConfiguration) validateCreateTime(formats strfmt.Registry) error {
 }
 
 func (m *AlertConfiguration) validateCustomerUUID(formats strfmt.Registry) error {
-	if swag.IsZero(m.CustomerUUID) { // not required
-		return nil
+
+	if err := validate.Required("customerUUID", "body", strfmt.UUID(m.CustomerUUID)); err != nil {
+		return err
 	}
 
 	if err := validate.FormatOf("customerUUID", "body", "uuid", m.CustomerUUID.String(), formats); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *AlertConfiguration) validateDefaultDestination(formats strfmt.Registry) error {
+
+	if err := validate.Required("defaultDestination", "body", m.DefaultDestination); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *AlertConfiguration) validateDescription(formats strfmt.Registry) error {
+
+	if err := validate.Required("description", "body", m.Description); err != nil {
 		return err
 	}
 
@@ -155,15 +222,48 @@ func (m *AlertConfiguration) validateDestinationUUID(formats strfmt.Registry) er
 	return nil
 }
 
+func (m *AlertConfiguration) validateDurationSec(formats strfmt.Registry) error {
+
+	if err := validate.Required("durationSec", "body", m.DurationSec); err != nil {
+		return err
+	}
+
+	if err := validate.MinimumInt("durationSec", "body", int64(*m.DurationSec), 0, false); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *AlertConfiguration) validateName(formats strfmt.Registry) error {
+
+	if err := validate.Required("name", "body", m.Name); err != nil {
+		return err
+	}
+
+	if err := validate.MinLength("name", "body", *m.Name, 1); err != nil {
+		return err
+	}
+
+	if err := validate.MaxLength("name", "body", *m.Name, 1000); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (m *AlertConfiguration) validateTarget(formats strfmt.Registry) error {
-	if swag.IsZero(m.Target) { // not required
-		return nil
+
+	if err := validate.Required("target", "body", m.Target); err != nil {
+		return err
 	}
 
 	if m.Target != nil {
 		if err := m.Target.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("target")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("target")
 			}
 			return err
 		}
@@ -202,8 +302,9 @@ func (m *AlertConfiguration) validateTargetTypeEnum(path, location string, value
 }
 
 func (m *AlertConfiguration) validateTargetType(formats strfmt.Registry) error {
-	if swag.IsZero(m.TargetType) { // not required
-		return nil
+
+	if err := validate.RequiredString("targetType", "body", m.TargetType); err != nil {
+		return err
 	}
 
 	// value enum
@@ -218,7 +319,7 @@ var alertConfigurationTypeTemplatePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["REPLICATION_LAG","CLOCK_SKEW","MEMORY_CONSUMPTION","HEALTH_CHECK_ERROR","HEALTH_CHECK_NOTIFICATION_ERROR","BACKUP_FAILURE","BACKUP_SCHEDULE_FAILURE","INACTIVE_CRON_NODES","ALERT_QUERY_FAILED","ALERT_CONFIG_WRITING_FAILED","ALERT_NOTIFICATION_ERROR","ALERT_NOTIFICATION_CHANNEL_ERROR","NODE_DOWN","NODE_RESTART","NODE_CPU_USAGE","NODE_DISK_USAGE","NODE_FILE_DESCRIPTORS_USAGE","DB_VERSION_MISMATCH","DB_INSTANCE_DOWN","DB_INSTANCE_RESTART","DB_FATAL_LOGS","DB_CORE_FILES","DB_YSQL_CONNECTION","DB_YCQL_CONNECTION","DB_REDIS_CONNECTION","NODE_TO_NODE_CA_CERT_EXPIRY","NODE_TO_NODE_CERT_EXPIRY","CLIENT_TO_NODE_CA_CERT_EXPIRY","CLIENT_TO_NODE_CERT_EXPIRY","YSQL_OP_AVG_LATENCY","YCQL_OP_AVG_LATENCY","YSQL_OP_P99_LATENCY","YCQL_OP_P99_LATENCY","HIGH_NUM_YCQL_CONNECTIONS","HIGH_NUM_YEDIS_CONNECTIONS","YSQL_THROUGHPUT","YCQL_THROUGHPUT"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["REPLICATION_LAG","CLOCK_SKEW","MEMORY_CONSUMPTION","HEALTH_CHECK_ERROR","HEALTH_CHECK_NOTIFICATION_ERROR","BACKUP_FAILURE","BACKUP_SCHEDULE_FAILURE","INACTIVE_CRON_NODES","ALERT_QUERY_FAILED","ALERT_CONFIG_WRITING_FAILED","ALERT_NOTIFICATION_ERROR","ALERT_NOTIFICATION_CHANNEL_ERROR","NODE_DOWN","NODE_RESTART","NODE_CPU_USAGE","NODE_DISK_USAGE","NODE_FILE_DESCRIPTORS_USAGE","DB_VERSION_MISMATCH","DB_INSTANCE_DOWN","DB_INSTANCE_RESTART","DB_FATAL_LOGS","DB_ERROR_LOGS","DB_CORE_FILES","DB_YSQL_CONNECTION","DB_YCQL_CONNECTION","DB_REDIS_CONNECTION","NODE_TO_NODE_CA_CERT_EXPIRY","NODE_TO_NODE_CERT_EXPIRY","CLIENT_TO_NODE_CA_CERT_EXPIRY","CLIENT_TO_NODE_CERT_EXPIRY","YSQL_OP_AVG_LATENCY","YCQL_OP_AVG_LATENCY","YSQL_OP_P99_LATENCY","YCQL_OP_P99_LATENCY","HIGH_NUM_YCQL_CONNECTIONS","HIGH_NUM_YEDIS_CONNECTIONS","YSQL_THROUGHPUT","YCQL_THROUGHPUT"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -291,6 +392,9 @@ const (
 	// AlertConfigurationTemplateDBFATALLOGS captures enum value "DB_FATAL_LOGS"
 	AlertConfigurationTemplateDBFATALLOGS string = "DB_FATAL_LOGS"
 
+	// AlertConfigurationTemplateDBERRORLOGS captures enum value "DB_ERROR_LOGS"
+	AlertConfigurationTemplateDBERRORLOGS string = "DB_ERROR_LOGS"
+
 	// AlertConfigurationTemplateDBCOREFILES captures enum value "DB_CORE_FILES"
 	AlertConfigurationTemplateDBCOREFILES string = "DB_CORE_FILES"
 
@@ -349,8 +453,9 @@ func (m *AlertConfiguration) validateTemplateEnum(path, location string, value s
 }
 
 func (m *AlertConfiguration) validateTemplate(formats strfmt.Registry) error {
-	if swag.IsZero(m.Template) { // not required
-		return nil
+
+	if err := validate.RequiredString("template", "body", m.Template); err != nil {
+		return err
 	}
 
 	// value enum
@@ -403,8 +508,9 @@ func (m *AlertConfiguration) validateThresholdUnitEnum(path, location string, va
 }
 
 func (m *AlertConfiguration) validateThresholdUnit(formats strfmt.Registry) error {
-	if swag.IsZero(m.ThresholdUnit) { // not required
-		return nil
+
+	if err := validate.RequiredString("thresholdUnit", "body", m.ThresholdUnit); err != nil {
+		return err
 	}
 
 	// value enum
@@ -416,8 +522,9 @@ func (m *AlertConfiguration) validateThresholdUnit(formats strfmt.Registry) erro
 }
 
 func (m *AlertConfiguration) validateThresholds(formats strfmt.Registry) error {
-	if swag.IsZero(m.Thresholds) { // not required
-		return nil
+
+	if err := validate.Required("thresholds", "body", m.Thresholds); err != nil {
+		return err
 	}
 
 	for k := range m.Thresholds {
@@ -514,6 +621,8 @@ func (m *AlertConfiguration) contextValidateTarget(ctx context.Context, formats 
 		if err := m.Target.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("target")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("target")
 			}
 			return err
 		}
@@ -550,6 +659,10 @@ func (m *AlertConfiguration) contextValidateThresholdUnit(ctx context.Context, f
 }
 
 func (m *AlertConfiguration) contextValidateThresholds(ctx context.Context, formats strfmt.Registry) error {
+
+	if err := validate.Required("thresholds", "body", m.Thresholds); err != nil {
+		return err
+	}
 
 	for k := range m.Thresholds {
 

@@ -45,6 +45,8 @@ func (m *HTTPLocation) validatePaths(formats strfmt.Registry) error {
 		if err := m.Paths.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("paths")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("paths")
 			}
 			return err
 		}
@@ -73,6 +75,8 @@ func (m *HTTPLocation) contextValidatePaths(ctx context.Context, formats strfmt.
 		if err := m.Paths.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
 				return ve.ValidateName("paths")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("paths")
 			}
 			return err
 		}

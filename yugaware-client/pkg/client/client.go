@@ -27,6 +27,11 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
+func init() {
+	// This is needed in order to parse the time format used by CustomerTasks
+	strfmt.DateTimeFormats = append(strfmt.DateTimeFormats, "2006-01-02T15:04:05Z0700")
+}
+
 type YugawareClient struct {
 	session   *http.Client
 	cookiejar *cookiejar.Jar

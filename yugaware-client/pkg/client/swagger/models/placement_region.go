@@ -66,6 +66,8 @@ func (m *PlacementRegion) validateAzList(formats strfmt.Registry) error {
 			if err := m.AzList[i].Validate(formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("azList" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("azList" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
@@ -110,6 +112,8 @@ func (m *PlacementRegion) contextValidateAzList(ctx context.Context, formats str
 			if err := m.AzList[i].ContextValidate(ctx, formats); err != nil {
 				if ve, ok := err.(*errors.Validation); ok {
 					return ve.ValidateName("azList" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("azList" + "." + strconv.Itoa(i))
 				}
 				return err
 			}

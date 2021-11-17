@@ -34,6 +34,8 @@ type ClientService interface {
 
 	CustomerCount(params *CustomerCountParams, opts ...ClientOption) (*CustomerCountOK, error)
 
+	GetFilteredLogs(params *GetFilteredLogsParams, opts ...ClientOption) (*GetFilteredLogsOK, error)
+
 	GetLogs(params *GetLogsParams, opts ...ClientOption) (*GetLogsOK, error)
 
 	GetPasswordPolicy(params *GetPasswordPolicyParams, opts ...ClientOption) error
@@ -116,6 +118,44 @@ func (a *Client) CustomerCount(params *CustomerCountParams, opts ...ClientOption
 	// unexpected success response
 	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
 	msg := fmt.Sprintf("unexpected success response for customerCount: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  GetFilteredLogs gets filtered logs
+*/
+func (a *Client) GetFilteredLogs(params *GetFilteredLogsParams, opts ...ClientOption) (*GetFilteredLogsOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewGetFilteredLogsParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "getFilteredLogs",
+		Method:             "GET",
+		PathPattern:        "/api/v1/logs",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &GetFilteredLogsReader{formats: a.formats},
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*GetFilteredLogsOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for getFilteredLogs: API contract not enforced by server. Client expected to get an error, but got: %T", result)
 	panic(msg)
 }
 
