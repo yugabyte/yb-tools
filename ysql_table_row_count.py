@@ -71,7 +71,7 @@ def check_table_row_counts(schema_name, table_name):
     cursors = []
     indices = []
     for i in range(num_parallel_tasks):
-      t_cluster = psycopg2.connect("host=127.0.0.1 port=5433 dbname=yugabyte user=yugabyte password=yugabyte")
+      t_cluster = psycopg2.connect("host={} port={} dbname={} user={} password={}".format(args.cluster, args.portname, args.dbname, args.username, args.password))
       indices.append(i)
       cursors.append(t_cluster.cursor())
 
