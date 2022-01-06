@@ -61,12 +61,12 @@ func (o *InitProducerOptions) Validate() error {
 
 var _ cmdutil.CommandOptions = &InitProducerOptions{}
 
-func getTablesToBootstrap(ctx *cmdutil.YugatoolContext, o *InitProducerOptions) (*master.ListTablesResponsePB, error) {
+func getTablesToBootstrap(ctx *cmdutil.YugatoolContext, keyspaceName string) (*master.ListTablesResponsePB, error) {
 	var namespacevar *master.NamespaceIdentifierPB
 
-	if o.KeyspaceName != "" {
+	if keyspaceName != "" {
 		namespacevar = &master.NamespaceIdentifierPB{
-			Name:         NewString(o.KeyspaceName),
+			Name:         NewString(keyspaceName),
 			DatabaseType: common.YQLDatabase_YQL_DATABASE_CQL.Enum(),
 		}
 	}
@@ -74,7 +74,10 @@ func getTablesToBootstrap(ctx *cmdutil.YugatoolContext, o *InitProducerOptions) 
 	tables, err := ctx.Client.Master.MasterService.ListTables(&master.ListTablesRequestPB{
 		Namespace:           namespacevar,
 		ExcludeSystemTables: NewBool(true),
-		RelationTypeFilter:  []master.RelationType{master.RelationType_USER_TABLE_RELATION},
+		RelationTypeFilter: []master.RelationType{
+			master.RelationType_USER_TABLE_RELATION,
+			master.RelationType_INDEX_TABLE_RELATION,
+		},
 	})
 	if err != nil {
 		return tables, err
@@ -87,7 +90,7 @@ func getTablesToBootstrap(ctx *cmdutil.YugatoolContext, o *InitProducerOptions) 
 }
 
 func initProducer(ctx *cmdutil.YugatoolContext, o *InitProducerOptions) error {
-	tables, err := getTablesToBootstrap(ctx, o)
+	tables, err := getTablesToBootstrap(ctx, o.KeyspaceName)
 	if err != nil {
 		return err
 	}

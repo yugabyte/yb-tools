@@ -19,72 +19,70 @@ import (
 	"bytes"
 	fmt "fmt"
 
-	"github.com/go-logr/logr"
 	. "github.com/icza/gox/gox"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/master"
-	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/cmdutil"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/util"
 )
 
 func InitConsumerCmd(ctx *cmdutil.YugatoolContext) *cobra.Command {
+	options := &InitConsumerOptions{}
 	cmd := &cobra.Command{
 		Use:   "init_consumer",
 		Short: "Generate commands to init xCluster replication",
 		Long:  `Generate commands to init xCluster replication`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := ctx.WithCmd(cmd).Setup()
+			err := ctx.WithCmd(cmd).WithOptions(options).Setup()
 			if err != nil {
 				return err
 			}
 			defer ctx.Client.Close()
 
-			return runInitConsumer(ctx.Log, ctx.Client)
+			return runInitConsumer(ctx, options)
 		},
 	}
+	options.AddFlags(cmd)
 
 	return cmd
 }
 
-func runInitConsumer(log logr.Logger, c *client.YBClient) error {
-	tables, err := c.Master.MasterService.ListTables(&master.ListTablesRequestPB{
-		ExcludeSystemTables: NewBool(true),
-		RelationTypeFilter:  []master.RelationType{master.RelationType_USER_TABLE_RELATION},
-	})
+type InitConsumerOptions struct {
+	KeyspaceName string `mapstructure:"keyspace"`
+}
+
+func (o *InitConsumerOptions) AddFlags(cmd *cobra.Command) {
+	flags := cmd.Flags()
+	flags.StringVar(&o.KeyspaceName, "keyspace", "", "keyspace to replicate")
+}
+
+func (o *InitConsumerOptions) Validate() error {
+	return nil
+}
+
+var _ cmdutil.CommandOptions = &InitConsumerOptions{}
+
+func runInitConsumer(ctx *cmdutil.YugatoolContext, options *InitConsumerOptions) error {
+	tables, err := getTablesToBootstrap(ctx, options.KeyspaceName)
 	if err != nil {
 		return err
 	}
 
-	clusterInfoCmd, err := c.Master.MasterService.GetMasterClusterConfig(&master.GetMasterClusterConfigRequestPB{})
+	clusterInfoCmd, err := ctx.Client.Master.MasterService.GetMasterClusterConfig(&master.GetMasterClusterConfigRequestPB{})
 	if err != nil {
 		return err
 	}
-
-	//masters, err := c.Master.MasterService.ListMasters(&master.ListMastersRequestPB{})
-	//if err != nil {
-	//	return err
-	//}
 
 	var initCDCCommand bytes.Buffer
 
 	initCDCCommand.WriteString("yb-admin -master_addresses ")
 	initCDCCommand.WriteString("$CONSUMER_MASTERS")
-	//for i, master := range masters.GetMasters() {
-	//	hostports := master.Registration.GetPrivateRpcAddresses()
-	//	initCDCCommand.WriteString(hostports[0].GetHost())
-	//	initCDCCommand.WriteRune(':')
-	//	initCDCCommand.WriteString(strconv.Itoa(int(hostports[0].GetPort())))
-	//	if i+1 < len(masters.GetMasters()) {
-	//		initCDCCommand.WriteRune(',')
-	//	}
-	//}
 
 	initCDCCommand.WriteRune(' ')
 
-	if util.HasTLS(c.Config.GetTlsOpts()) {
+	if util.HasTLS(ctx.Client.Config.GetTlsOpts()) {
 		initCDCCommand.WriteString("-certs_dir_name $CERTS_DIR ")
 	}
 
@@ -106,7 +104,7 @@ func runInitConsumer(log logr.Logger, c *client.YBClient) error {
 
 	for i, table := range tables.GetTables() {
 		if table.TableType.Number() == common.TableType_YQL_TABLE_TYPE.Number() {
-			streams, err := c.Master.MasterService.ListCDCStreams(&master.ListCDCStreamsRequestPB{
+			streams, err := ctx.Client.Master.MasterService.ListCDCStreams(&master.ListCDCStreamsRequestPB{
 				TableId: NewString(string(table.GetId())),
 			})
 			if err != nil {
