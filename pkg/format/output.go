@@ -3,6 +3,7 @@ package format
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -78,6 +79,23 @@ func init() {
 				return nil, err
 			}
 			return ajson.StringNode("", string(decoded)), nil
+		}
+		return node, fmt.Errorf("base64_decode: unknown data type %d", node.Type())
+
+	})
+
+	ajson.AddFunction("base64_to_hex", func(node *ajson.Node) (result *ajson.Node, err error) {
+		if node.IsString() {
+			decoded, err := base64.StdEncoding.DecodeString(node.MustString())
+			if err != nil {
+				return nil, err
+			}
+
+			var str string
+			if len(decoded) > 0 {
+				str = fmt.Sprintf("0x%s", hex.EncodeToString(decoded))
+			}
+			return ajson.StringNode("", str), nil
 		}
 		return node, fmt.Errorf("base64_decode: unknown data type %d", node.Type())
 
