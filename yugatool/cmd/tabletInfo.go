@@ -19,12 +19,14 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/go-logr/logr"
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/cdc"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/consensus"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/tserver"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
+	"github.com/yugabyte/yb-tools/yugatool/pkg/client/session"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/cmdutil"
 	"google.golang.org/protobuf/encoding/prototext"
 )
@@ -45,15 +47,26 @@ func TabletInfoCmd(ctx *cmdutil.YugatoolContext) *cobra.Command {
 			// Positional argument
 			tablet := args[0]
 
-			return tabletInfo(ctx.Client, tablet)
+			return tabletInfo(ctx.Log, ctx.Client, tablet)
 		},
 	}
 
 	return cmd
 }
 
-func tabletInfo(c *client.YBClient, tablet string) error {
-	for _, host := range c.TServersHostMap {
+func tabletInfo(log logr.Logger, c *client.YBClient, tablet string) error {
+	hosts, errors := c.AllTservers()
+	if len(errors) > 0 {
+		for _, err := range errors {
+			if x, ok := err.(session.DialError); ok {
+				log.Error(x.Err, "could not dial host", "hostport", x.Host)
+			} else {
+				return err
+			}
+		}
+	}
+
+	for _, host := range hosts {
 		tablets, err := host.TabletServerService.ListTablets(&tserver.ListTabletsRequestPB{})
 		if err != nil {
 			return err

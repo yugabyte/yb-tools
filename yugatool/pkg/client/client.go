@@ -28,14 +28,14 @@ type YBClient struct {
 
 	Master *HostState
 
-	TServersUUIDMap map[uuid.UUID]*HostState
-	TServersHostMap map[string]*HostState
+	tServersUUIDMap map[uuid.UUID]*HostState
 	dialer          dial.Dialer
+
+	tabletServers *master.ListTabletServersResponsePB
 }
 
 func (c *YBClient) Connect() error {
-	c.TServersUUIDMap = make(map[uuid.UUID]*HostState)
-	c.TServersHostMap = make(map[string]*HostState)
+	c.tServersUUIDMap = make(map[uuid.UUID]*HostState)
 
 	dialer, err := c.GetDialer()
 	if err != nil {
@@ -67,23 +67,8 @@ func (c *YBClient) Connect() error {
 		}
 
 		c.Master = hostState
+		c.tabletServers = tabletServers
 
-		for _, server := range tabletServers.GetServers() {
-			rpcAddress := server.GetRegistration().Common.GetPrivateRpcAddresses()[0]
-
-			hostState, err := NewHostState(c.Log, rpcAddress, dialer)
-			if err != nil {
-				return err
-			}
-
-			tserverUUID, err := uuid.ParseBytes(server.GetInstanceId().GetPermanentUuid())
-			if err != nil {
-				return err
-			}
-
-			c.TServersUUIDMap[tserverUUID] = hostState
-			c.TServersHostMap[rpcAddress.GetHost()] = hostState
-		}
 	}
 	if c.Master == nil {
 		return errors.Errorf("could not connect to master leader")
@@ -91,10 +76,71 @@ func (c *YBClient) Connect() error {
 	return err
 }
 
+func (c *YBClient) AllTservers() ([]*HostState, []error) {
+	var hostStates []*HostState
+	var errors []error
+	for _, host := range c.tabletServers.GetServers() {
+		hostState, err := c.GetHostByUUID(host.GetInstanceId().GetPermanentUuid())
+		if err != nil {
+			errors = append(errors, err)
+		} else {
+			hostStates = append(hostStates, hostState)
+		}
+	}
+	return hostStates, errors
+}
+
+func (c *YBClient) TserverCount() int {
+	return len(c.tabletServers.GetServers())
+}
+
+func (c *YBClient) GetHostByUUID(permanentUUID []byte) (*HostState, error) {
+	tserverUUID, err := uuid.ParseBytes(permanentUUID)
+	if err != nil {
+		return nil, err
+	}
+
+	hoststate, ok := c.tServersUUIDMap[tserverUUID]
+	if !ok {
+		return c.dialTserver(tserverUUID)
+	}
+
+	return hoststate, nil
+}
+
+func (c *YBClient) dialTserver(tserverUUID uuid.UUID) (*HostState, error) {
+	dialer, err := c.GetDialer()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, server := range c.tabletServers.GetServers() {
+		tsuuid, err := uuid.ParseBytes(server.GetInstanceId().GetPermanentUuid())
+		if err != nil {
+			return nil, err
+		}
+
+		if tsuuid.String() == tserverUUID.String() {
+			rpcAddress := server.GetRegistration().Common.GetPrivateRpcAddresses()[0]
+
+			hostState, err := NewHostState(c.Log, rpcAddress, dialer)
+			if err != nil {
+				return nil, err
+			}
+
+			c.tServersUUIDMap[tserverUUID] = hostState
+
+			return hostState, nil
+		}
+	}
+
+	return nil, fmt.Errorf("host %s not found in known tserver list", tserverUUID.String())
+}
+
 // TODO: Log errors
 func (c *YBClient) Close() {
 	c.Master.Close()
-	for _, tserver := range c.TServersUUIDMap {
+	for _, tserver := range c.tServersUUIDMap {
 		tserver.Close()
 	}
 }

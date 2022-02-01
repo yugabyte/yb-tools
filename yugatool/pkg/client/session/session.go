@@ -66,7 +66,10 @@ func (s *Session) Connect(host *common.HostPortPB) error {
 	s.Log.V(1).Info("connecting to host")
 	s.conn, err = s.Dialer.Dial("tcp", util.HostPortString(host))
 	if err != nil {
-		return err
+		return DialError{
+			HostPortPB: host,
+			Err:        err,
+		}
 	}
 
 	err = writeHello(s.conn)
@@ -98,4 +101,13 @@ func writeHello(conn io.ReadWriteCloser) error {
 		return errors.New("hello did not write 3 bytes")
 	}
 	return nil
+}
+
+type DialError struct {
+	*common.HostPortPB
+	Err error
+}
+
+func (e DialError) Error() string {
+	return "session.Dial " + e.String() + ": " + e.Err.Error()
 }

@@ -156,7 +156,13 @@ func clusterInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) erro
 	}
 
 	if options.TabletReport {
-		for _, host := range c.TServersHostMap {
+		for _, server := range tabletServers.GetServers() {
+			host, err := c.GetHostByUUID(server.GetInstanceId().GetPermanentUuid())
+			if err != nil {
+				ctx.Log.Error(err, "host connection failed", "server", server.InstanceId)
+				continue
+			}
+
 			tablets, err := host.TabletServerService.ListTablets(&tserver.ListTabletsRequestPB{})
 			if err != nil {
 				return err

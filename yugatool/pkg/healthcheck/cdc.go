@@ -7,7 +7,6 @@ import (
 
 	"github.com/blang/vfs"
 	"github.com/go-logr/logr"
-	"github.com/google/uuid"
 	. "github.com/icza/gox/gox"
 	"github.com/pkg/errors"
 	diff "github.com/yudai/gojsondiff"
@@ -310,14 +309,11 @@ func GetReplicatedIndexes(log logr.Logger, client *client.YBClient, streamID str
 		if len(tablet.Replicas) > 0 {
 			for _, replica := range tablet.Replicas {
 				if replica.GetRole() == common.RaftPeerPB_LEADER {
-					tserverUUID, err := uuid.ParseBytes(replica.GetTsInfo().GetPermanentUuid())
+					host, err := client.GetHostByUUID(replica.GetTsInfo().GetPermanentUuid())
 					if err != nil {
 						return replicatedIndexes, err
 					}
-					host, ok := client.TServersUUIDMap[tserverUUID]
-					if !ok {
-						return replicatedIndexes, errors.Errorf("did not find server %s in client UUID map: %v", tserverUUID, client.TServersUUIDMap)
-					}
+
 					checkpoint, err := host.CDCService.GetCheckpoint(&cdc.GetCheckpointRequestPB{
 						StreamId: []byte(streamID),
 						TabletId: tablet.TabletId,

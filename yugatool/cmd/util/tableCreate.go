@@ -23,12 +23,12 @@ import (
 
 	"github.com/go-logr/logr"
 	. "github.com/icza/gox/gox"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/gocql"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/server"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
+	"github.com/yugabyte/yb-tools/yugatool/pkg/client/session"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/cmdutil"
 	util2 "github.com/yugabyte/yb-tools/yugatool/pkg/util"
 )
@@ -81,7 +81,7 @@ func (o *CreateOptions) Validate() error {
 
 func tableCreate(log logr.Logger, c *client.YBClient, options *CreateOptions, globalOptions *cmdutil.GlobalOptions) error {
 	log.Info("getting cql hosts...")
-	cqlHosts, err := getCqlHosts(c)
+	cqlHosts, err := getCqlHosts(log, c)
 	if err != nil {
 		return err
 	}
@@ -116,7 +116,7 @@ func tableCreate(log logr.Logger, c *client.YBClient, options *CreateOptions, gl
 	}
 	defer session.Close()
 
-	err = RunTableCreate(log, session, options.TableCount, options.TabletCount*uint(len(c.TServersUUIDMap)))
+	err = RunTableCreate(log, session, options.TableCount, options.TabletCount*uint(c.TserverCount()))
 	if err != nil {
 		return err
 	}
@@ -127,13 +127,24 @@ func tableCreate(log logr.Logger, c *client.YBClient, options *CreateOptions, gl
 	return err
 }
 
-func getCqlHosts(ybClient *client.YBClient) ([]string, error) {
+func getCqlHosts(log logr.Logger, ybClient *client.YBClient) ([]string, error) {
 	getHostsError := func(err error) ([]string, error) {
 		return []string{}, fmt.Errorf("could not get cql bind address: %w", err)
 	}
 
 	var cqlHosts []string
-	for _, host := range ybClient.TServersUUIDMap {
+	hosts, errors := ybClient.AllTservers()
+	if len(errors) > 0 {
+		for _, err := range errors {
+			if x, ok := err.(session.DialError); ok {
+				log.Error(x.Err, "could not dial host", "hostport", x.Host)
+			} else {
+				return getHostsError(err)
+			}
+		}
+	}
+
+	for _, host := range hosts {
 		flag, err := host.GenericService.GetFlag(&server.GetFlagRequestPB{
 			Flag: NewString("cql_proxy_bind_address"),
 		})
@@ -141,7 +152,7 @@ func getCqlHosts(ybClient *client.YBClient) ([]string, error) {
 			return getHostsError(err)
 		}
 		if !flag.GetValid() {
-			return getHostsError(errors.Errorf("invalid flag request: %s", flag))
+			return getHostsError(fmt.Errorf("invalid flag request: %s", flag))
 		}
 
 		hostname, port, err := cmdutil.SplitHostPort(flag.GetValue(), client.DefaultCsqlPort)
