@@ -261,7 +261,7 @@ func (f *Output) outputTable() error {
 	for _, ajsonRow := range f.root.MustArray() {
 		row, err := f.formatPathRow(ajsonRow)
 		if err != nil {
-			return err
+			return fmt.Errorf("unable to format path row %s: %w", ajsonRow.String(), err)
 		}
 		table.Body.Cells = append(table.Body.Cells, row)
 	}
@@ -279,7 +279,10 @@ func (f *Output) checkMeetsFilter(root *ajson.Node) (bool, error) {
 	if f.Filter != "" {
 		node, err := ajson.Eval(root, f.Filter)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("filter `%s`: %w", f.Filter, err)
+		}
+		if !node.IsBool() {
+			return false, nil
 		}
 		return node.GetBool()
 	}

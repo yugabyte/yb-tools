@@ -18,6 +18,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/pkg/format"
@@ -50,13 +51,21 @@ func ClusterInfoCmd(ctx *cmdutil.YugatoolContext) *cobra.Command {
 }
 
 type ClusterInfoOptions struct {
-	TabletReport bool
+	TabletReport         bool
+	TableFilter          string
+	NamespaceFilter      string
+	LeadersOnlyFilter    bool
+	ShowTombstonedFilter bool
 }
 
 func (o *ClusterInfoOptions) AddFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 
 	flags.BoolVar(&o.TabletReport, "tablet-report", false, "display tablet information")
+	flags.StringVar(&o.TableFilter, "table", "", "in tablet report mode, display only tablets from this table")
+	flags.StringVar(&o.NamespaceFilter, "namespace", "", "in tablet report mode, display only tablets from this namespace")
+	flags.BoolVar(&o.LeadersOnlyFilter, "leaders-only", false, "in tablet report mode, display only tablet leaders")
+	flags.BoolVar(&o.ShowTombstonedFilter, "show-tombstoned", false, "in tablet report mode, display tombstoned tablets")
 }
 
 func (o *ClusterInfoOptions) Validate() error {
@@ -190,6 +199,23 @@ func clusterInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) erro
 				})
 			}
 
+			filter := &strings.Builder{}
+			if !options.ShowTombstonedFilter {
+				addFilter(filter, fmt.Sprintf(`@.tablet.tablet_status.tabletDataState != "%s"`, common.TabletDataState_TABLET_DATA_TOMBSTONED.String()))
+			}
+
+			if options.TableFilter != "" {
+				addFilter(filter, fmt.Sprintf(`@.tablet.tablet_status.tableName == "%s"`, options.TableFilter))
+			}
+
+			if options.NamespaceFilter != "" {
+				addFilter(filter, fmt.Sprintf(`@.tablet.tablet_status.namespaceName == "%s"`, options.NamespaceFilter))
+			}
+
+			if options.LeadersOnlyFilter {
+				addFilter(filter, fmt.Sprintf(`@.consensus_state.leaderLeaseStatus == "%s"`, consensus.LeaderLeaseStatus_HAS_LEASE.String()))
+			}
+
 			tabletReport := format.Output{
 				OutputMessage: fmt.Sprintf("Tablet Report: %s (%s)", host.Status.GetBoundRpcAddresses(), string(host.Status.GetNodeInstance().GetPermanentUuid())),
 				JSONObject:    tabletinfos,
@@ -209,6 +235,7 @@ func clusterInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) erro
 					{Name: "LEADER", JSONPath: "$.consensus_state.cstate.leaderUuid"},
 					{Name: "LEASE_STATUS", JSONPath: "$.consensus_state.leaderLeaseStatus"},
 				},
+				Filter: filter.String(),
 			}
 
 			err = tabletReport.Println()
@@ -219,4 +246,11 @@ func clusterInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) erro
 		}
 	}
 	return nil
+}
+
+func addFilter(buf *strings.Builder, filter string) {
+	if buf.Len() > 0 {
+		buf.WriteString(" && ")
+	}
+	buf.WriteString(filter)
 }
