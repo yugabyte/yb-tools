@@ -77,10 +77,9 @@ func RootInit() *cobra.Command {
 	globalOptions := &cmdutil.YWGlobalOptions{}
 
 	cmd := &cobra.Command{
-		Use:     "yugaware-client",
-		Short:   `A tool to deploy/configure yugaware`,
-		Long:    `A tool to deploy/configure yugaware`,
-		Version: Version,
+		Use:   "yugaware-client",
+		Short: `A tool to deploy/configure yugaware`,
+		Long:  `A tool to deploy/configure yugaware`,
 	}
 
 	cmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.yugatool.yaml)")
@@ -90,6 +89,7 @@ func RootInit() *cobra.Command {
 		WithGlobalOptions(globalOptions)
 
 	// Top level commands
+	cmd.AddCommand(VersionCmd(ctx))
 	cmd.AddCommand(RegisterCmd(ctx))
 	cmd.AddCommand(LoginCmd(ctx))
 

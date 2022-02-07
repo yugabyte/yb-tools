@@ -94,7 +94,15 @@ func (ctx *YWClientContext) WithOptions(options CommandOptions) *YWClientContext
 	return ctx
 }
 
+func (ctx *YWClientContext) SetupNoClient() error {
+	return ctx.setup(false)
+}
+
 func (ctx *YWClientContext) Setup() error {
+	return ctx.setup(true)
+}
+
+func (ctx *YWClientContext) setup(useClient bool) error {
 	if ctx.Cmd == nil ||
 		ctx.GlobalOptions == nil {
 		panic("command context is not set")
@@ -116,9 +124,11 @@ func (ctx *YWClientContext) Setup() error {
 		return setupError(err)
 	}
 
-	ctx.Client, err = ConnectToYugaware(ctx)
-	if err != nil {
-		return setupError(err)
+	if useClient {
+		ctx.Client, err = ConnectToYugaware(ctx)
+		if err != nil {
+			return setupError(err)
+		}
 	}
 
 	err = flag.ValidateRequiredFlags(ctx.Cmd.Flags())
