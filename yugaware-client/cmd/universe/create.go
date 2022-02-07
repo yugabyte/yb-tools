@@ -29,6 +29,7 @@ import (
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/instance_types"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/region_management"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/release_management"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/session_management"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/universe_cluster_mutations"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/cmdutil"
@@ -37,7 +38,7 @@ import (
 func CreateUniverseCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 	options := &CreateOptions{}
 	cmd := &cobra.Command{
-		Use:   "create UNIVERSE_NAME --provider <provider> --regions <region> --instance-type <size> --version <version>",
+		Use:   "create UNIVERSE_NAME --provider <provider> --regions <region> --instance-type <size>",
 		Short: "Create a Yugabyte universe",
 		Long:  `Create a Yugabyte universe`,
 		Args:  cobra.ExactArgs(1),
@@ -135,7 +136,7 @@ func (o *CreateOptions) AddFlags(cmd *cobra.Command) {
 	flags.StringVar(&o.Provider, "provider", "", "the Yugaware provider to be used for deployment")
 	flags.StringArrayVar(&o.Regions, "regions", []string{}, "list of regions to deploy yugabyte")
 	flags.StringVar(&o.PreferredRegion, "preferred-region", "", "preferred region for tablet leaders")
-	flags.StringVar(&o.Version, "version", "", "the version of Yugabyte to deploy")
+	flags.StringVar(&o.Version, "version", "", "the version of Yugabyte to deploy (defaults to yugaware version)")
 	flags.Int32Var(&o.NodeCount, "node-count", 3, "number of nodes to deploy")
 	flags.Int32Var(&o.ReplicationFactor, "replication-factor", 3, "replication factor for the cluster")
 	flags.BoolVar(&o.DisableYSQL, "disable-ysql", false, "disable ysql")
@@ -429,7 +430,7 @@ func (o *CreateOptions) validateVolumeSize(_ *cmdutil.YWClientContext) error {
 	return nil
 }
 
-func (o CreateOptions) validateVersion(ctx *cmdutil.YWClientContext) error {
+func (o *CreateOptions) validateVersion(ctx *cmdutil.YWClientContext) error {
 	validateReleaseError := func(releases map[string]interface{}, err error) error {
 		var expectedReleaseNames []string
 		if releases != nil {
@@ -455,7 +456,19 @@ func (o CreateOptions) validateVersion(ctx *cmdutil.YWClientContext) error {
 	ctx.Log.V(1).Info("got releases", "releases", releases.GetPayload())
 
 	if o.Version == "" {
-		return validateReleaseError(releases.GetPayload(), fmt.Errorf(`required flag "version" is not set`))
+		// If the version was not set via the command line, default to the same version as the application server
+		appVersionParams := session_management.NewAppVersionParams().
+			WithDefaults()
+		appVersionResponse, err := ctx.Client.PlatformAPIs.SessionManagement.AppVersion(appVersionParams)
+		if err != nil {
+			return validateReleaseError(releases.GetPayload(), fmt.Errorf("unable to retrieve yugaware server version"))
+		}
+
+		if version, ok := appVersionResponse.GetPayload()["version"]; ok {
+			o.Version = version
+		} else {
+			return validateReleaseError(releases.GetPayload(), fmt.Errorf("app version response did not contain version string"))
+		}
 	}
 
 	for release := range releases.GetPayload() {
