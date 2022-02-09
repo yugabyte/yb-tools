@@ -11,24 +11,6 @@ import (
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
-func (c *YugawareClient) CustomerCount() (*yugaware.CustomerCountResponse, error) {
-
-	CustomerCountPath := "/api/v1/customer_count"
-	response := &yugaware.CustomerCountResponse{}
-
-	_, err := c.newRequest().
-		Get().
-		Path(CustomerCountPath).
-		DecodeResponseInto(response).
-		Do()
-
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
-}
-
 func (c *YugawareClient) RegisterYugaware(request *yugaware.RegisterYugawareRequest) (*yugaware.RegisterYugawareResponse, error) {
 
 	RegisterPath := "/api/v1/register"

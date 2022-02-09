@@ -2088,6 +2088,15 @@
       },
       "type" : "object"
     },
+    "DummyBody" : {
+      "properties" : {
+        "dummy" : {
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "type" : "object"
+    },
     "EditProviderRequest" : {
       "properties" : {
         "config" : {
@@ -5928,6 +5937,46 @@
         } ],
         "summary" : "Update an empty certificate",
         "tags" : [ "Certificate Info" ]
+      }
+    },
+    "/api/v1/customers/{cUUID}/api_token" : {
+      "put": {
+        "description" : "UNOFFICIAL API ADDITION - Requires a DUMMY body to work around issue https://yugabyte.atlassian.net/browse/PLAT-2076",
+        "operationId": "generateAPIToken",
+        "parameters": [
+          {
+            "format": "uuid",
+            "in": "path",
+            "name": "cUUID",
+            "required": true,
+            "type": "string"
+          }, {
+            "description" : "Dummy value to work around platform bug PLAT-2076",
+            "in" : "body",
+            "name" : "Dummy",
+            "required" : true,
+            "schema" : {
+              "$ref" : "#/definitions/DummyBody"
+            }
+          }
+        ],
+        "responses": {
+          "200" : {
+            "description" : "successful operation",
+            "schema" : {
+              "$ref" : "#/definitions/SessionInfo"
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Generate an API token for the current user",
+        "tags": [
+          "Customer Configuration"
+        ]
       }
     },
     "/api/v1/customers/{cUUID}/configs" : {

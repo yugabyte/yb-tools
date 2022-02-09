@@ -34,6 +34,8 @@ type ClientService interface {
 
 	DeleteCustomerConfig(params *DeleteCustomerConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteCustomerConfigOK, error)
 
+	GenerateAPIToken(params *GenerateAPITokenParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GenerateAPITokenOK, error)
+
 	GetCustomerConfig(params *GetCustomerConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetCustomerConfigOK, error)
 
 	GetListOfCustomerConfig(params *GetListOfCustomerConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetListOfCustomerConfigOK, error)
@@ -116,6 +118,47 @@ func (a *Client) DeleteCustomerConfig(params *DeleteCustomerConfigParams, authIn
 	// unexpected success response
 	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
 	msg := fmt.Sprintf("unexpected success response for deleteCustomerConfig: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  GenerateAPIToken generates an API token for the current user
+
+  UNOFFICIAL API ADDITION - Requires a DUMMY body to work around issue https://yugabyte.atlassian.net/browse/PLAT-2076
+*/
+func (a *Client) GenerateAPIToken(params *GenerateAPITokenParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GenerateAPITokenOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewGenerateAPITokenParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "generateAPIToken",
+		Method:             "PUT",
+		PathPattern:        "/api/v1/customers/{cUUID}/api_token",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &GenerateAPITokenReader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*GenerateAPITokenOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for generateAPIToken: API contract not enforced by server. Client expected to get an error, but got: %T", result)
 	panic(msg)
 }
 
