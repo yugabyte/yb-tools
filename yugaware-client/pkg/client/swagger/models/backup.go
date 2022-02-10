@@ -15,7 +15,7 @@ import (
 	"github.com/go-openapi/validate"
 )
 
-// Backup A single backup. Includes the backup's status, expiration time, and configuration.
+// Backup A single backup. Includes the backup's status, expiration time, and configuration. Changes from upstream: PLAT-2132: time data types are changed from string to integer
 //
 // swagger:model Backup
 type Backup struct {

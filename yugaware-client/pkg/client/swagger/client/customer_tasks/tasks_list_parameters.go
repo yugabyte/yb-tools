@@ -64,9 +64,12 @@ type TasksListParams struct {
 	// Format: uuid
 	CUUID strfmt.UUID
 
-	// UUUID.
-	//
-	// Format: uuid
+	/* UUUID.
+
+	   Changes from upstream: datatype changed to null
+
+	   Format: uuid
+	*/
 	UUUID *strfmt.UUID
 
 	timeout    time.Duration

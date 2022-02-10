@@ -124,7 +124,7 @@ func (a *Client) CustomerCount(params *CustomerCountParams, opts ...ClientOption
 /*
   GetFilteredLogs gets filtered logs
 
-  Adds security key (missing in upstream swagger.json)
+  PLAT-3091: Adds security key (missing in upstream swagger.json)
 */
 func (a *Client) GetFilteredLogs(params *GetFilteredLogsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetFilteredLogsOK, error) {
 	// TODO: Validate the params before sending
@@ -165,7 +165,7 @@ func (a *Client) GetFilteredLogs(params *GetFilteredLogsParams, authInfo runtime
 /*
   GetLogs gets logs
 
-  Adds security key (missing in upstream swagger.json)
+  PLAT-3091: Adds security key (missing in upstream swagger.json)
 */
 func (a *Client) GetLogs(params *GetLogsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetLogsOK, error) {
 	// TODO: Validate the params before sending

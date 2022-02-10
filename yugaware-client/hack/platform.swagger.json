@@ -972,7 +972,7 @@
       "type" : "object"
     },
     "Backup" : {
-      "description" : "A single backup. Includes the backup's status, expiration time, and configuration.",
+      "description" : "A single backup. Includes the backup's status, expiration time, and configuration. Changes from upstream: PLAT-2132: time data types are changed from string to integer",
       "properties" : {
         "backupInfo" : {
           "$ref" : "#/definitions/BackupTableParams",
@@ -1989,7 +1989,7 @@
       "type" : "object"
     },
     "CustomerTaskData" : {
-      "description" : "Customer task data",
+      "description" : "Customer task data. Changes from upstream:  Adds date patterns. If you want to use a date-time without a pattern, you MUST use the date format as defined in RFC3339. https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.0.3.md#data-types",
       "properties" : {
         "completionTime" : {
           "description" : "Customer task completion time",
@@ -2412,7 +2412,7 @@
       "type" : "object"
     },
     "MultiTableBackupParams" : {
-      "description" : "Multi-table backup parameters",
+      "description" : "Multi-table backup parameters. Changes from upstream: removes duplicate field",
       "properties" : {
         "actionType" : {
           "description" : "Action type",
@@ -2608,7 +2608,7 @@
       "type" : "object"
     },
     "MultiTableBackupRequestParams" : {
-      "description" : "Multi-table backup parameters",
+      "description" : "Multi-table backup parameters. Changes from upstream: removes duplicate field",
       "properties" : {
         "actionType" : {
           "description" : "Action type",
@@ -6633,7 +6633,7 @@
     },
     "/api/v1/customers/{cUUID}/providers/{pUUID}/instance_types" : {
       "get" : {
-        "description" : "",
+        "description" : "Changes from upstream: Changes datatype of field",
         "operationId" : "listOfInstanceType",
         "parameters" : [ {
           "format" : "uuid",
@@ -7741,6 +7741,7 @@
           "required" : true,
           "type" : "string"
         }, {
+          "description": "Changes from upstream: datatype changed to null",
           "default" : null,
           "format" : "uuid",
           "in" : "query",
@@ -9963,7 +9964,7 @@
     },
     "/api/v1/logs" : {
       "get" : {
-        "description" : "Adds security key (missing in upstream swagger.json)",
+        "description" : "PLAT-3091: Adds security key (missing in upstream swagger.json)",
         "operationId" : "getFilteredLogs",
         "parameters" : [ {
           "default" : 10000,
@@ -10002,7 +10003,7 @@
     },
     "/api/v1/logs/{maxLines}" : {
       "get" : {
-        "description" : "Adds security key (missing in upstream swagger.json)",
+        "description" : "PLAT-3091: Adds security key (missing in upstream swagger.json)",
         "operationId" : "getLogs",
         "parameters" : [ {
           "format" : "int32",

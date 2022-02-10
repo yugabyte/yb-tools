@@ -14,7 +14,7 @@ import (
 	"github.com/go-openapi/validate"
 )
 
-// CustomerTaskData Customer task data
+// CustomerTaskData Customer task data. Changes from upstream:  Adds date patterns. If you want to use a date-time without a pattern, you MUST use the date format as defined in RFC3339. https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.0.3.md#data-types
 //
 // swagger:model CustomerTaskData
 type CustomerTaskData struct {

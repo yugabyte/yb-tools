@@ -283,6 +283,8 @@ func (a *Client) InstanceTypeDetail(params *InstanceTypeDetailParams, authInfo r
 
 /*
   ListOfInstanceType lists a provider s instance types
+
+  Changes from upstream: Changes datatype of field
 */
 func (a *Client) ListOfInstanceType(params *ListOfInstanceTypeParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListOfInstanceTypeOK, error) {
 	// TODO: Validate the params before sending

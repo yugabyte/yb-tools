@@ -16,7 +16,7 @@ import (
 	"github.com/go-openapi/validate"
 )
 
-// MultiTableBackupParams Multi-table backup parameters
+// MultiTableBackupParams Multi-table backup parameters. Changes from upstream: removes duplicate field
 //
 // swagger:model MultiTableBackupParams
 type MultiTableBackupParams struct {
