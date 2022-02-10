@@ -34,9 +34,9 @@ type ClientService interface {
 
 	CustomerCount(params *CustomerCountParams, opts ...ClientOption) (*CustomerCountOK, error)
 
-	GetFilteredLogs(params *GetFilteredLogsParams, opts ...ClientOption) (*GetFilteredLogsOK, error)
+	GetFilteredLogs(params *GetFilteredLogsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetFilteredLogsOK, error)
 
-	GetLogs(params *GetLogsParams, opts ...ClientOption) (*GetLogsOK, error)
+	GetLogs(params *GetLogsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetLogsOK, error)
 
 	GetPasswordPolicy(params *GetPasswordPolicyParams, opts ...ClientOption) error
 
@@ -123,8 +123,10 @@ func (a *Client) CustomerCount(params *CustomerCountParams, opts ...ClientOption
 
 /*
   GetFilteredLogs gets filtered logs
+
+  Adds security key (missing in upstream swagger.json)
 */
-func (a *Client) GetFilteredLogs(params *GetFilteredLogsParams, opts ...ClientOption) (*GetFilteredLogsOK, error) {
+func (a *Client) GetFilteredLogs(params *GetFilteredLogsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetFilteredLogsOK, error) {
 	// TODO: Validate the params before sending
 	if params == nil {
 		params = NewGetFilteredLogsParams()
@@ -138,6 +140,7 @@ func (a *Client) GetFilteredLogs(params *GetFilteredLogsParams, opts ...ClientOp
 		Schemes:            []string{"http", "https"},
 		Params:             params,
 		Reader:             &GetFilteredLogsReader{formats: a.formats},
+		AuthInfo:           authInfo,
 		Context:            params.Context,
 		Client:             params.HTTPClient,
 	}
@@ -161,8 +164,10 @@ func (a *Client) GetFilteredLogs(params *GetFilteredLogsParams, opts ...ClientOp
 
 /*
   GetLogs gets logs
+
+  Adds security key (missing in upstream swagger.json)
 */
-func (a *Client) GetLogs(params *GetLogsParams, opts ...ClientOption) (*GetLogsOK, error) {
+func (a *Client) GetLogs(params *GetLogsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetLogsOK, error) {
 	// TODO: Validate the params before sending
 	if params == nil {
 		params = NewGetLogsParams()
@@ -176,6 +181,7 @@ func (a *Client) GetLogs(params *GetLogsParams, opts ...ClientOption) (*GetLogsO
 		Schemes:            []string{"http", "https"},
 		Params:             params,
 		Reader:             &GetLogsReader{formats: a.formats},
+		AuthInfo:           authInfo,
 		Context:            params.Context,
 		Client:             params.HTTPClient,
 	}

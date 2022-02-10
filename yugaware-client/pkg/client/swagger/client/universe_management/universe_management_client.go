@@ -252,6 +252,8 @@ func (a *Client) PauseUniverse(params *PauseUniverseParams, authInfo runtime.Cli
 
 /*
   ResetUniverseVersion resets universe version
+
+  Requires a DUMMY body to work around issue https://yugabyte.atlassian.net/browse/PLAT-2076
 */
 func (a *Client) ResetUniverseVersion(params *ResetUniverseVersionParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ResetUniverseVersionOK, error) {
 	// TODO: Validate the params before sending

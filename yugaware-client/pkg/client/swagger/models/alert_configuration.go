@@ -534,6 +534,11 @@ func (m *AlertConfiguration) validateThresholds(formats strfmt.Registry) error {
 		}
 		if val, ok := m.Thresholds[k]; ok {
 			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("thresholds" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("thresholds" + "." + k)
+				}
 				return err
 			}
 		}

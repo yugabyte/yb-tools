@@ -8877,7 +8877,7 @@
     },
     "/api/v1/customers/{cUUID}/universes/{uniUUID}/setup_universe_2dc" : {
       "put" : {
-        "description" : "",
+        "description" : "Requires a DUMMY body to work around issue https://yugabyte.atlassian.net/browse/PLAT-2076",
         "operationId" : "resetUniverseVersion",
         "parameters" : [ {
           "format" : "uuid",
@@ -8891,6 +8891,14 @@
           "name" : "uniUUID",
           "required" : true,
           "type" : "string"
+        }, {
+          "description" : "Dummy value to work around platform bug PLAT-2076",
+          "in" : "body",
+          "name" : "Dummy",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/definitions/DummyBody"
+          }
         } ],
         "responses" : {
           "200" : {
@@ -9955,7 +9963,7 @@
     },
     "/api/v1/logs" : {
       "get" : {
-        "description" : "",
+        "description" : "Adds security key (missing in upstream swagger.json)",
         "operationId" : "getFilteredLogs",
         "parameters" : [ {
           "default" : 10000,
@@ -9977,6 +9985,9 @@
           "required" : false,
           "type" : "string"
         } ],
+        "security" : [ {
+          "apiKeyAuth" : [ ]
+        } ],
         "responses" : {
           "200" : {
             "description" : "successful operation",
@@ -9991,7 +10002,7 @@
     },
     "/api/v1/logs/{maxLines}" : {
       "get" : {
-        "description" : "",
+        "description" : "Adds security key (missing in upstream swagger.json)",
         "operationId" : "getLogs",
         "parameters" : [ {
           "format" : "int32",
@@ -9999,6 +10010,9 @@
           "name" : "maxLines",
           "required" : true,
           "type" : "integer"
+        } ],
+        "security" : [ {
+          "apiKeyAuth" : [ ]
         } ],
         "responses" : {
           "200" : {

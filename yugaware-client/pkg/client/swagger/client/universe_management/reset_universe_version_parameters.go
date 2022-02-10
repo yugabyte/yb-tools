@@ -14,6 +14,8 @@ import (
 	"github.com/go-openapi/runtime"
 	cr "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
+
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
 // NewResetUniverseVersionParams creates a new ResetUniverseVersionParams object,
@@ -58,6 +60,12 @@ func NewResetUniverseVersionParamsWithHTTPClient(client *http.Client) *ResetUniv
    Typically these are written to a http.Request.
 */
 type ResetUniverseVersionParams struct {
+
+	/* Dummy.
+
+	   Dummy value to work around platform bug PLAT-2076
+	*/
+	Dummy *models.DummyBody
 
 	// CUUID.
 	//
@@ -122,6 +130,17 @@ func (o *ResetUniverseVersionParams) SetHTTPClient(client *http.Client) {
 	o.HTTPClient = client
 }
 
+// WithDummy adds the dummy to the reset universe version params
+func (o *ResetUniverseVersionParams) WithDummy(dummy *models.DummyBody) *ResetUniverseVersionParams {
+	o.SetDummy(dummy)
+	return o
+}
+
+// SetDummy adds the dummy to the reset universe version params
+func (o *ResetUniverseVersionParams) SetDummy(dummy *models.DummyBody) {
+	o.Dummy = dummy
+}
+
 // WithCUUID adds the cUUID to the reset universe version params
 func (o *ResetUniverseVersionParams) WithCUUID(cUUID strfmt.UUID) *ResetUniverseVersionParams {
 	o.SetCUUID(cUUID)
@@ -151,6 +170,11 @@ func (o *ResetUniverseVersionParams) WriteToRequest(r runtime.ClientRequest, reg
 		return err
 	}
 	var res []error
+	if o.Dummy != nil {
+		if err := r.SetBodyParam(o.Dummy); err != nil {
+			return err
+		}
+	}
 
 	// path param cUUID
 	if err := r.SetPathParam("cUUID", o.CUUID.String()); err != nil {
