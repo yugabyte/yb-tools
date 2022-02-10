@@ -80,7 +80,7 @@ func createUniverse(ctx *cmdutil.YWClientContext, options *CreateOptions) error 
 	log.V(1).Info("create universe task", "task", task.GetPayload())
 
 	if options.Wait {
-		err = cmdutil.WaitForTaskCompletion(ctx, task.GetPayload())
+		err = cmdutil.WaitForTaskCompletion(ctx, ctx.Client, task.GetPayload())
 		if err != nil {
 			return err
 		}

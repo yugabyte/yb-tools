@@ -17,22 +17,23 @@ limitations under the License.
 package cmdutil
 
 import (
+	"context"
 	"fmt"
 	"time"
 
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/customer_tasks"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
-func WaitForTaskCompletion(ctx *YWClientContext, waitTask *models.YBPTask) error {
+func WaitForTaskCompletion(ctx context.Context, ywclient *client.YugawareClient, waitTask *models.YBPTask) error {
 	params := customer_tasks.NewTasksListParams().
-		WithContext(ctx).
-		WithCUUID(ctx.Client.CustomerUUID())
+		WithCUUID(ywclient.CustomerUUID())
 
 	for {
 		select {
 		case <-time.After(1 * time.Second):
-			resp, err := ctx.Client.PlatformAPIs.CustomerTasks.TasksList(params, ctx.Client.SwaggerAuth)
+			resp, err := ywclient.PlatformAPIs.CustomerTasks.TasksList(params, ywclient.SwaggerAuth)
 			if err != nil {
 				return err
 			}
@@ -44,12 +45,12 @@ func WaitForTaskCompletion(ctx *YWClientContext, waitTask *models.YBPTask) error
 						return fmt.Errorf("task failed: %s", task.Status)
 					}
 
-					ctx.Log.V(1).Info("task not complete", "task", task)
+					ywclient.Log.V(1).Info("task not complete", "task", task)
 					break
 				}
 			}
 		case <-ctx.Done():
-			ctx.Log.Info("wait cancelled")
+			ywclient.Log.Info("wait cancelled")
 			return nil
 		}
 	}

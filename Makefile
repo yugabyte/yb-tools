@@ -11,3 +11,7 @@ ${YBTOOLS}:
 clean:
 	rm -rf bin/
 	rm -rf out/
+
+.PHONY: integration
+integration: ginkgo
+	ginkgo test ./integration/...

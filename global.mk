@@ -38,20 +38,25 @@ ${GOBIN}/protoc-gen-ybrpc:
 ####################################
 #             TOOLS
 ####################################
-.PHONY: tools
-tools: ${GOBIN_DIR}/golangci-lint ${GOBIN}/ginkgo ${GOBIN}/cobra ${GOBIN}/swagger ${GOBIN}/protoc-gen-go
+.PHONY: tools golangci-lint ginkgo cobra swagger protoc-gen-go
+tools: golangci-lint ginkgo cobra swagger protoc-gen-go
 
+golangci-lint: ${GOBIN_DIR}/golangci-lint
 ${GOBIN_DIR}/golangci-lint:
 	go install -modfile=${TOP_BUILDDIR}/go.mod github.com/golangci/golangci-lint/cmd/golangci-lint
 
+ginkgo: ${GOBIN}/ginkgo
 ${GOBIN}/ginkgo:
 	go install -modfile=${TOP_BUILDDIR}/go.mod github.com/onsi/ginkgo/ginkgo
 
+cobra: ${GOBIN}/cobra
 ${GOBIN}/cobra:
 	go install -modfile=${TOP_BUILDDIR}/go.mod github.com/spf13/cobra/cobra
 
+swagger: ${GOBIN}/swagger
 ${GOBIN}/swagger:
 	go install -modfile=${TOP_BUILDDIR}/go.mod github.com/go-swagger/go-swagger/cmd/swagger
 
+protoc-gen-go: ${GOBIN}/protoc-gen-go
 ${GOBIN}/protoc-gen-go:
 	go install google.golang.org/protobuf/cmd/protoc-gen-go

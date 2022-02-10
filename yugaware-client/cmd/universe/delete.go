@@ -78,7 +78,7 @@ func deleteUniverse(ctx *cmdutil.YWClientContext, options *DeleteOptions) error 
 	log.V(1).Info("delete universe task", "task", task.GetPayload())
 
 	if options.Wait {
-		err = cmdutil.WaitForTaskCompletion(ctx, task.GetPayload())
+		err = cmdutil.WaitForTaskCompletion(ctx, ctx.Client, task.GetPayload())
 		if err != nil {
 			return err
 		}
