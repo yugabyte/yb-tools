@@ -41,6 +41,10 @@ type UserRegistrationData struct {
 	// Required: true
 	// Enum: [Admin ReadOnly SuperAdmin BackupAdmin]
 	Role *string `json:"role"`
+
+	// User timezone
+	// Example: America/Toronto
+	Timezone string `json:"timezone,omitempty"`
 }
 
 // Validate validates this user registration data

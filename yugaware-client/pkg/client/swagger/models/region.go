@@ -20,6 +20,10 @@ import (
 // swagger:model Region
 type Region struct {
 
+	// active
+	// Read Only: true
+	Active *bool `json:"active,omitempty"`
+
 	// Cloud provider region code
 	// Example: us-west-2
 	// Read Only: true
@@ -123,6 +127,10 @@ func (m *Region) validateZones(formats strfmt.Registry) error {
 func (m *Region) ContextValidate(ctx context.Context, formats strfmt.Registry) error {
 	var res []error
 
+	if err := m.contextValidateActive(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.contextValidateCode(ctx, formats); err != nil {
 		res = append(res, err)
 	}
@@ -146,6 +154,15 @@ func (m *Region) ContextValidate(ctx context.Context, formats strfmt.Registry) e
 	if len(res) > 0 {
 		return errors.CompositeValidationError(res...)
 	}
+	return nil
+}
+
+func (m *Region) contextValidateActive(ctx context.Context, formats strfmt.Registry) error {
+
+	if err := validate.ReadOnly(ctx, "active", "body", m.Active); err != nil {
+		return err
+	}
+
 	return nil
 }
 

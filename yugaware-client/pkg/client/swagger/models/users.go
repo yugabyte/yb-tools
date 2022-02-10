@@ -27,7 +27,7 @@ type Users struct {
 	AuthTokenIssueDate strfmt.DateTime `json:"authTokenIssueDate,omitempty"`
 
 	// User creation date
-	// Example: 2021-06-17 15:00:05
+	// Example: 2021-06-17T15:00:05-0400
 	// Read Only: true
 	// Format: date-time
 	CreationDate strfmt.DateTime `json:"creationDate,omitempty"`
@@ -45,9 +45,19 @@ type Users struct {
 	// True if the user is the primary user
 	IsPrimary bool `json:"isPrimary,omitempty"`
 
+	// LDAP Specified Role
+	LdapSpecifiedRole bool `json:"ldapSpecifiedRole,omitempty"`
+
 	// User role
 	// Enum: [Admin ReadOnly SuperAdmin BackupAdmin]
 	Role string `json:"role,omitempty"`
+
+	// User timezone
+	Timezone string `json:"timezone,omitempty"`
+
+	// User Type
+	// Enum: [local ldap]
+	UserType string `json:"userType,omitempty"`
 
 	// User UUID
 	// Read Only: true
@@ -76,6 +86,10 @@ func (m *Users) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateRole(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateUserType(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -176,6 +190,48 @@ func (m *Users) validateRole(formats strfmt.Registry) error {
 
 	// value enum
 	if err := m.validateRoleEnum("role", "body", m.Role); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+var usersTypeUserTypePropEnum []interface{}
+
+func init() {
+	var res []string
+	if err := json.Unmarshal([]byte(`["local","ldap"]`), &res); err != nil {
+		panic(err)
+	}
+	for _, v := range res {
+		usersTypeUserTypePropEnum = append(usersTypeUserTypePropEnum, v)
+	}
+}
+
+const (
+
+	// UsersUserTypeLocal captures enum value "local"
+	UsersUserTypeLocal string = "local"
+
+	// UsersUserTypeLdap captures enum value "ldap"
+	UsersUserTypeLdap string = "ldap"
+)
+
+// prop value enum
+func (m *Users) validateUserTypeEnum(path, location string, value string) error {
+	if err := validate.EnumCase(path, location, value, usersTypeUserTypePropEnum, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *Users) validateUserType(formats strfmt.Registry) error {
+	if swag.IsZero(m.UserType) { // not required
+		return nil
+	}
+
+	// value enum
+	if err := m.validateUserTypeEnum("userType", "body", m.UserType); err != nil {
 		return err
 	}
 
