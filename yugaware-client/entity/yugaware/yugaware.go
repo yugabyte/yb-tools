@@ -21,75 +21,10 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-type YWSuccess struct {
-	Message string `json:"message"`
-	Success bool   `json:"success"`
-}
-
-type YWError struct {
-	Error   interface{} `json:"error"`
-	Success bool        `json:"success,omitempty"`
-}
-
-type NodeDetails struct {
-	NodeIdx   int    `json:"nodeIdx"`
-	NodeName  string `json:"nodeName"`
-	CloudInfo struct {
-		PrivateIP string `json:"private_ip"`
-		PublicIP  string `json:"public_ip"`
-	} `json:"cloudInfo"`
-	IsMaster  bool `json:"isMaster"`
-	Master    bool `json:"master"`
-	IsTserver bool `json:"isTserver"`
-	Tserver   bool `json:"tserver"`
-}
-
-type Cluster struct {
-	UUID       string `json:"uui"`
-	UserIntent struct {
-		Provider string `json:"provider"`
-	} `json:"userIntent"`
-}
-
-type Universe struct {
-	UniverseUUID string `json:"universeUUID"`
-	Name         string `json:"name"`
-	Resources    struct {
-		NumNodes int `json:"numNodes"`
-	} `json:"resources"`
-	UniverseDetails struct {
-		NodeDetailsSet []NodeDetails `json:"nodeDetailsSet"`
-		Clusters       []Cluster     `json:"clusters"`
-	} `json:"universeDetails"`
-}
-
-type AccessKey struct {
-	//IdKey struct {
-	//	KeyCode string `json:"keyCode"`
-	//	ProviderUUID string `json:"providerUUID"`
-	//} `json:"idKey"`
-	KeyInfo struct {
-		PublicKey              string `json:"publicKey"`
-		PrivateKey             string `json:"privateKey"`
-		SSHUser                string `json:"sshUser"`
-		SSHPort                int    `json:"sshPort"`
-		PasswordlessSudoAccess bool   `json:"passwordlessSudoAccess"`
-	} `json:"keyInfo"`
-}
-
-type LogFile struct {
-	File     string
-	Bytesize string
-}
-
 type AuthToken struct {
 	AuthToken    string `json:"authToken"`
 	CustomerUUID string `json:"customerUUID"`
 	UserUUID     string `json:"userUUID"`
-}
-
-type CustomerCountResponse struct {
-	Count int `json:"count"`
 }
 
 type LoginRequest struct {
