@@ -70,10 +70,6 @@ func get(ctx *cmdutil.YWClientContext, certificateInfo *models.CertificateInfo) 
 		return err
 	}
 
-	type Cert struct {
-		Root string `json:"root.crt"`
-	}
-
 	certJSON, err := json.MarshalIndent(certificate.GetPayload(), " ", " ")
 	if err != nil {
 		return err
@@ -88,13 +84,7 @@ func get(ctx *cmdutil.YWClientContext, certificateInfo *models.CertificateInfo) 
 		}
 		fmt.Print(string(certYAML))
 	} else {
-		cert := &Cert{}
-		err = json.Unmarshal(certJSON, cert)
-		if err != nil {
-			return err
-		}
-
-		fmt.Print(cert.Root)
+		fmt.Print(certificate.GetPayload().RootCrt)
 	}
 
 	return nil

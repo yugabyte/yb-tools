@@ -11,6 +11,8 @@ import (
 
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/strfmt"
+
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
 // GetRootCertReader is a Reader for the GetRootCert structure.
@@ -42,20 +44,22 @@ func NewGetRootCertOK() *GetRootCertOK {
 successful operation
 */
 type GetRootCertOK struct {
-	Payload interface{}
+	Payload *models.CertificateRoot
 }
 
 func (o *GetRootCertOK) Error() string {
 	return fmt.Sprintf("[GET /api/v1/customers/{cUUID}/certificates/{rUUID}/download][%d] getRootCertOK  %+v", 200, o.Payload)
 }
-func (o *GetRootCertOK) GetPayload() interface{} {
+func (o *GetRootCertOK) GetPayload() *models.CertificateRoot {
 	return o.Payload
 }
 
 func (o *GetRootCertOK) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
 
+	o.Payload = new(models.CertificateRoot)
+
 	// response payload
-	if err := consumer.Consume(response.Body(), &o.Payload); err != nil && err != io.EOF {
+	if err := consumer.Consume(response.Body(), o.Payload); err != nil && err != io.EOF {
 		return err
 	}
 

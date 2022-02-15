@@ -1444,6 +1444,15 @@
       "required" : [ "certContent", "certExpiry", "certStart", "certType", "customCertInfo", "customServerCertData", "keyContent", "label" ],
       "type" : "object"
     },
+    "CertificateRoot" : {
+      "description": "UNOFFICIAL ADDITION: Root certificate for a universe",
+      "properties" : {
+        "root.crt" : {
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
     "ClientCertParams" : {
       "properties" : {
         "certExpiry" : {
@@ -5940,7 +5949,7 @@
     },
     "/api/v1/customers/{cUUID}/certificates/{rUUID}/download" : {
       "get" : {
-        "description" : "",
+        "description" : "UNOFFICIAL ADDITION: Add root certificate to return value",
         "operationId" : "getRootCert",
         "parameters" : [ {
           "format" : "uuid",
@@ -5959,7 +5968,7 @@
           "200" : {
             "description" : "successful operation",
             "schema" : {
-              "type" : "object"
+              "$ref": "#/definitions/CertificateRoot"
             }
           }
         },

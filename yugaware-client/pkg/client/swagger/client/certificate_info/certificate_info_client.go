@@ -205,6 +205,8 @@ func (a *Client) GetListOfCertificate(params *GetListOfCertificateParams, authIn
 
 /*
   GetRootCert gets a customer s root certificate
+
+  UNOFFICIAL ADDITION: Add root certificate to return value
 */
 func (a *Client) GetRootCert(params *GetRootCertParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetRootCertOK, error) {
 	// TODO: Validate the params before sending
