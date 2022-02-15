@@ -130,7 +130,7 @@ func (f *Output) Print() error {
 		return err
 	}
 
-	if !f.root.IsObject() && !f.root.IsArray() {
+	if !f.root.IsObject() && !f.root.IsArray() && !f.root.IsNull() {
 		return fmt.Errorf("output %d must be an object or array", f.root.Type())
 	}
 
@@ -180,6 +180,8 @@ func (f *Output) filterRows() error {
 		}
 
 		f.root = ajson.ArrayNode("", filteredDocument)
+
+		return nil
 	} else if f.root.IsObject() {
 		meetsFilter, err := f.checkMeetsFilter(f.root)
 		if err != nil {
@@ -188,11 +190,13 @@ func (f *Output) filterRows() error {
 		if !meetsFilter {
 			f.root = ajson.ObjectNode("", nil)
 		}
-	} else {
-		return fmt.Errorf("json is not in the form of an object or array")
+
+		return nil
+	} else if f.root.IsNull() {
+		return nil
 	}
 
-	return nil
+	return fmt.Errorf("cannot filter rows of an ajson object of type %d", f.root.Type())
 }
 
 func (f *Output) outputYAML() error {
@@ -252,18 +256,20 @@ func (f *Output) outputTable() error {
 		})
 	}
 
-	// Objects get printed as a single row table
-	if f.root.IsObject() {
-		f.root = ajson.ArrayNode("", []*ajson.Node{f.root})
-	}
-
 	table.Body = &simpletable.Body{}
-	for _, ajsonRow := range f.root.MustArray() {
-		row, err := f.formatPathRow(ajsonRow)
-		if err != nil {
-			return fmt.Errorf("unable to format path row %s: %w", ajsonRow.String(), err)
+	if !f.root.IsNull() {
+		// Objects get printed as a single row table
+		if f.root.IsObject() {
+			f.root = ajson.ArrayNode("", []*ajson.Node{f.root})
 		}
-		table.Body.Cells = append(table.Body.Cells, row)
+
+		for _, ajsonRow := range f.root.MustArray() {
+			row, err := f.formatPathRow(ajsonRow)
+			if err != nil {
+				return fmt.Errorf("unable to format path row %s: %w", ajsonRow.String(), err)
+			}
+			table.Body.Cells = append(table.Body.Cells, row)
+		}
 	}
 
 	table.SetStyle(simpletable.StyleCompactClassic)
