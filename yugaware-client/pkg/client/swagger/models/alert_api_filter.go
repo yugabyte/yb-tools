@@ -40,6 +40,11 @@ type AlertAPIFilter struct {
 	// Required: true
 	SourceName *string `json:"sourceName"`
 
+	// source u UI ds
+	// Required: true
+	// Unique: true
+	SourceUUIDs []strfmt.UUID `json:"sourceUUIDs"`
+
 	// states
 	// Required: true
 	// Unique: true
@@ -68,6 +73,10 @@ func (m *AlertAPIFilter) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateSourceName(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateSourceUUIDs(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -189,11 +198,32 @@ func (m *AlertAPIFilter) validateSourceName(formats strfmt.Registry) error {
 	return nil
 }
 
+func (m *AlertAPIFilter) validateSourceUUIDs(formats strfmt.Registry) error {
+
+	if err := validate.Required("sourceUUIDs", "body", m.SourceUUIDs); err != nil {
+		return err
+	}
+
+	if err := validate.UniqueItems("sourceUUIDs", "body", m.SourceUUIDs); err != nil {
+		return err
+	}
+
+	for i := 0; i < len(m.SourceUUIDs); i++ {
+
+		if err := validate.FormatOf("sourceUUIDs"+"."+strconv.Itoa(i), "body", "uuid", m.SourceUUIDs[i].String(), formats); err != nil {
+			return err
+		}
+
+	}
+
+	return nil
+}
+
 var alertApiFilterStatesItemsEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["ACTIVE","ACKNOWLEDGED","RESOLVED"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["ACTIVE","ACKNOWLEDGED","SUSPENDED","RESOLVED"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {

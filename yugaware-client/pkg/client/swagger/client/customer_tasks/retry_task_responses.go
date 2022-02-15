@@ -48,7 +48,7 @@ type RetryTaskOK struct {
 }
 
 func (o *RetryTaskOK) Error() string {
-	return fmt.Sprintf("[POST /api/v1/customers/{cUUID}/tasks/{tUUID}][%d] retryTaskOK  %+v", 200, o.Payload)
+	return fmt.Sprintf("[POST /api/v1/customers/{cUUID}/tasks/{tUUID}/retry][%d] retryTaskOK  %+v", 200, o.Payload)
 }
 func (o *RetryTaskOK) GetPayload() *models.UniverseResp {
 	return o.Payload

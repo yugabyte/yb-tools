@@ -117,6 +117,12 @@ func unmarshalAlertChannelParams(data []byte, consumer runtime.Consumer) (AlertC
 			return nil, err
 		}
 		return &result, nil
+	case "AlertChannelPagerDutyParams":
+		var result AlertChannelPagerDutyParams
+		if err := consumer.Consume(buf2, &result); err != nil {
+			return nil, err
+		}
+		return &result, nil
 	case "AlertChannelParams":
 		var result alertChannelParams
 		if err := consumer.Consume(buf2, &result); err != nil {
@@ -125,6 +131,12 @@ func unmarshalAlertChannelParams(data []byte, consumer runtime.Consumer) (AlertC
 		return &result, nil
 	case "AlertChannelSlackParams":
 		var result AlertChannelSlackParams
+		if err := consumer.Consume(buf2, &result); err != nil {
+			return nil, err
+		}
+		return &result, nil
+	case "AlertChannelWebHookParams":
+		var result AlertChannelWebHookParams
 		if err := consumer.Consume(buf2, &result); err != nil {
 			return nil, err
 		}

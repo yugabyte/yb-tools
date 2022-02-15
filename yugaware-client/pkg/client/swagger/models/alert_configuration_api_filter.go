@@ -39,6 +39,15 @@ type AlertConfigurationAPIFilter struct {
 	// Required: true
 	Name *string `json:"name"`
 
+	// severity
+	// Required: true
+	// Enum: [SEVERE WARNING]
+	Severity *string `json:"severity"`
+
+	// target
+	// Required: true
+	Target *AlertConfigurationTarget `json:"target"`
+
 	// target type
 	// Required: true
 	// Enum: [PLATFORM UNIVERSE]
@@ -46,7 +55,7 @@ type AlertConfigurationAPIFilter struct {
 
 	// template
 	// Required: true
-	// Enum: [REPLICATION_LAG CLOCK_SKEW MEMORY_CONSUMPTION HEALTH_CHECK_ERROR HEALTH_CHECK_NOTIFICATION_ERROR BACKUP_FAILURE BACKUP_SCHEDULE_FAILURE INACTIVE_CRON_NODES ALERT_QUERY_FAILED ALERT_CONFIG_WRITING_FAILED ALERT_NOTIFICATION_ERROR ALERT_NOTIFICATION_CHANNEL_ERROR NODE_DOWN NODE_RESTART NODE_CPU_USAGE NODE_DISK_USAGE NODE_FILE_DESCRIPTORS_USAGE DB_VERSION_MISMATCH DB_INSTANCE_DOWN DB_INSTANCE_RESTART DB_FATAL_LOGS DB_ERROR_LOGS DB_CORE_FILES DB_YSQL_CONNECTION DB_YCQL_CONNECTION DB_REDIS_CONNECTION NODE_TO_NODE_CA_CERT_EXPIRY NODE_TO_NODE_CERT_EXPIRY CLIENT_TO_NODE_CA_CERT_EXPIRY CLIENT_TO_NODE_CERT_EXPIRY YSQL_OP_AVG_LATENCY YCQL_OP_AVG_LATENCY YSQL_OP_P99_LATENCY YCQL_OP_P99_LATENCY HIGH_NUM_YCQL_CONNECTIONS HIGH_NUM_YEDIS_CONNECTIONS YSQL_THROUGHPUT YCQL_THROUGHPUT]
+	// Enum: [REPLICATION_LAG CLOCK_SKEW MEMORY_CONSUMPTION HEALTH_CHECK_ERROR HEALTH_CHECK_NOTIFICATION_ERROR BACKUP_FAILURE BACKUP_SCHEDULE_FAILURE INACTIVE_CRON_NODES ALERT_QUERY_FAILED ALERT_CONFIG_WRITING_FAILED ALERT_NOTIFICATION_ERROR ALERT_NOTIFICATION_CHANNEL_ERROR NODE_DOWN NODE_RESTART NODE_CPU_USAGE NODE_DISK_USAGE NODE_FILE_DESCRIPTORS_USAGE NODE_OOM_KILLS DB_VERSION_MISMATCH DB_INSTANCE_DOWN DB_INSTANCE_RESTART DB_FATAL_LOGS DB_ERROR_LOGS DB_CORE_FILES DB_YSQL_CONNECTION DB_YCQL_CONNECTION DB_REDIS_CONNECTION DB_MEMORY_OVERLOAD DB_COMPACTION_OVERLOAD DB_QUEUES_OVERFLOW DB_WRITE_READ_TEST_ERROR NODE_TO_NODE_CA_CERT_EXPIRY NODE_TO_NODE_CERT_EXPIRY CLIENT_TO_NODE_CA_CERT_EXPIRY CLIENT_TO_NODE_CERT_EXPIRY YSQL_OP_AVG_LATENCY YCQL_OP_AVG_LATENCY YSQL_OP_P99_LATENCY YCQL_OP_P99_LATENCY HIGH_NUM_YSQL_CONNECTIONS HIGH_NUM_YCQL_CONNECTIONS HIGH_NUM_YEDIS_CONNECTIONS YSQL_THROUGHPUT YCQL_THROUGHPUT MASTER_LEADER_MISSING LEADERLESS_TABLETS UNDER_REPLICATED_TABLETS]
 	Template *string `json:"template"`
 
 	// uuids
@@ -72,6 +81,14 @@ func (m *AlertConfigurationAPIFilter) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateName(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateSeverity(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateTarget(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -170,6 +187,69 @@ func (m *AlertConfigurationAPIFilter) validateName(formats strfmt.Registry) erro
 	return nil
 }
 
+var alertConfigurationApiFilterTypeSeverityPropEnum []interface{}
+
+func init() {
+	var res []string
+	if err := json.Unmarshal([]byte(`["SEVERE","WARNING"]`), &res); err != nil {
+		panic(err)
+	}
+	for _, v := range res {
+		alertConfigurationApiFilterTypeSeverityPropEnum = append(alertConfigurationApiFilterTypeSeverityPropEnum, v)
+	}
+}
+
+const (
+
+	// AlertConfigurationAPIFilterSeveritySEVERE captures enum value "SEVERE"
+	AlertConfigurationAPIFilterSeveritySEVERE string = "SEVERE"
+
+	// AlertConfigurationAPIFilterSeverityWARNING captures enum value "WARNING"
+	AlertConfigurationAPIFilterSeverityWARNING string = "WARNING"
+)
+
+// prop value enum
+func (m *AlertConfigurationAPIFilter) validateSeverityEnum(path, location string, value string) error {
+	if err := validate.EnumCase(path, location, value, alertConfigurationApiFilterTypeSeverityPropEnum, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *AlertConfigurationAPIFilter) validateSeverity(formats strfmt.Registry) error {
+
+	if err := validate.Required("severity", "body", m.Severity); err != nil {
+		return err
+	}
+
+	// value enum
+	if err := m.validateSeverityEnum("severity", "body", *m.Severity); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *AlertConfigurationAPIFilter) validateTarget(formats strfmt.Registry) error {
+
+	if err := validate.Required("target", "body", m.Target); err != nil {
+		return err
+	}
+
+	if m.Target != nil {
+		if err := m.Target.Validate(formats); err != nil {
+			if ve, ok := err.(*errors.Validation); ok {
+				return ve.ValidateName("target")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("target")
+			}
+			return err
+		}
+	}
+
+	return nil
+}
+
 var alertConfigurationApiFilterTypeTargetTypePropEnum []interface{}
 
 func init() {
@@ -217,7 +297,7 @@ var alertConfigurationApiFilterTypeTemplatePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["REPLICATION_LAG","CLOCK_SKEW","MEMORY_CONSUMPTION","HEALTH_CHECK_ERROR","HEALTH_CHECK_NOTIFICATION_ERROR","BACKUP_FAILURE","BACKUP_SCHEDULE_FAILURE","INACTIVE_CRON_NODES","ALERT_QUERY_FAILED","ALERT_CONFIG_WRITING_FAILED","ALERT_NOTIFICATION_ERROR","ALERT_NOTIFICATION_CHANNEL_ERROR","NODE_DOWN","NODE_RESTART","NODE_CPU_USAGE","NODE_DISK_USAGE","NODE_FILE_DESCRIPTORS_USAGE","DB_VERSION_MISMATCH","DB_INSTANCE_DOWN","DB_INSTANCE_RESTART","DB_FATAL_LOGS","DB_ERROR_LOGS","DB_CORE_FILES","DB_YSQL_CONNECTION","DB_YCQL_CONNECTION","DB_REDIS_CONNECTION","NODE_TO_NODE_CA_CERT_EXPIRY","NODE_TO_NODE_CERT_EXPIRY","CLIENT_TO_NODE_CA_CERT_EXPIRY","CLIENT_TO_NODE_CERT_EXPIRY","YSQL_OP_AVG_LATENCY","YCQL_OP_AVG_LATENCY","YSQL_OP_P99_LATENCY","YCQL_OP_P99_LATENCY","HIGH_NUM_YCQL_CONNECTIONS","HIGH_NUM_YEDIS_CONNECTIONS","YSQL_THROUGHPUT","YCQL_THROUGHPUT"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["REPLICATION_LAG","CLOCK_SKEW","MEMORY_CONSUMPTION","HEALTH_CHECK_ERROR","HEALTH_CHECK_NOTIFICATION_ERROR","BACKUP_FAILURE","BACKUP_SCHEDULE_FAILURE","INACTIVE_CRON_NODES","ALERT_QUERY_FAILED","ALERT_CONFIG_WRITING_FAILED","ALERT_NOTIFICATION_ERROR","ALERT_NOTIFICATION_CHANNEL_ERROR","NODE_DOWN","NODE_RESTART","NODE_CPU_USAGE","NODE_DISK_USAGE","NODE_FILE_DESCRIPTORS_USAGE","NODE_OOM_KILLS","DB_VERSION_MISMATCH","DB_INSTANCE_DOWN","DB_INSTANCE_RESTART","DB_FATAL_LOGS","DB_ERROR_LOGS","DB_CORE_FILES","DB_YSQL_CONNECTION","DB_YCQL_CONNECTION","DB_REDIS_CONNECTION","DB_MEMORY_OVERLOAD","DB_COMPACTION_OVERLOAD","DB_QUEUES_OVERFLOW","DB_WRITE_READ_TEST_ERROR","NODE_TO_NODE_CA_CERT_EXPIRY","NODE_TO_NODE_CERT_EXPIRY","CLIENT_TO_NODE_CA_CERT_EXPIRY","CLIENT_TO_NODE_CERT_EXPIRY","YSQL_OP_AVG_LATENCY","YCQL_OP_AVG_LATENCY","YSQL_OP_P99_LATENCY","YCQL_OP_P99_LATENCY","HIGH_NUM_YSQL_CONNECTIONS","HIGH_NUM_YCQL_CONNECTIONS","HIGH_NUM_YEDIS_CONNECTIONS","YSQL_THROUGHPUT","YCQL_THROUGHPUT","MASTER_LEADER_MISSING","LEADERLESS_TABLETS","UNDER_REPLICATED_TABLETS"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -278,6 +358,9 @@ const (
 	// AlertConfigurationAPIFilterTemplateNODEFILEDESCRIPTORSUSAGE captures enum value "NODE_FILE_DESCRIPTORS_USAGE"
 	AlertConfigurationAPIFilterTemplateNODEFILEDESCRIPTORSUSAGE string = "NODE_FILE_DESCRIPTORS_USAGE"
 
+	// AlertConfigurationAPIFilterTemplateNODEOOMKILLS captures enum value "NODE_OOM_KILLS"
+	AlertConfigurationAPIFilterTemplateNODEOOMKILLS string = "NODE_OOM_KILLS"
+
 	// AlertConfigurationAPIFilterTemplateDBVERSIONMISMATCH captures enum value "DB_VERSION_MISMATCH"
 	AlertConfigurationAPIFilterTemplateDBVERSIONMISMATCH string = "DB_VERSION_MISMATCH"
 
@@ -305,6 +388,18 @@ const (
 	// AlertConfigurationAPIFilterTemplateDBREDISCONNECTION captures enum value "DB_REDIS_CONNECTION"
 	AlertConfigurationAPIFilterTemplateDBREDISCONNECTION string = "DB_REDIS_CONNECTION"
 
+	// AlertConfigurationAPIFilterTemplateDBMEMORYOVERLOAD captures enum value "DB_MEMORY_OVERLOAD"
+	AlertConfigurationAPIFilterTemplateDBMEMORYOVERLOAD string = "DB_MEMORY_OVERLOAD"
+
+	// AlertConfigurationAPIFilterTemplateDBCOMPACTIONOVERLOAD captures enum value "DB_COMPACTION_OVERLOAD"
+	AlertConfigurationAPIFilterTemplateDBCOMPACTIONOVERLOAD string = "DB_COMPACTION_OVERLOAD"
+
+	// AlertConfigurationAPIFilterTemplateDBQUEUESOVERFLOW captures enum value "DB_QUEUES_OVERFLOW"
+	AlertConfigurationAPIFilterTemplateDBQUEUESOVERFLOW string = "DB_QUEUES_OVERFLOW"
+
+	// AlertConfigurationAPIFilterTemplateDBWRITEREADTESTERROR captures enum value "DB_WRITE_READ_TEST_ERROR"
+	AlertConfigurationAPIFilterTemplateDBWRITEREADTESTERROR string = "DB_WRITE_READ_TEST_ERROR"
+
 	// AlertConfigurationAPIFilterTemplateNODETONODECACERTEXPIRY captures enum value "NODE_TO_NODE_CA_CERT_EXPIRY"
 	AlertConfigurationAPIFilterTemplateNODETONODECACERTEXPIRY string = "NODE_TO_NODE_CA_CERT_EXPIRY"
 
@@ -329,6 +424,9 @@ const (
 	// AlertConfigurationAPIFilterTemplateYCQLOPP99LATENCY captures enum value "YCQL_OP_P99_LATENCY"
 	AlertConfigurationAPIFilterTemplateYCQLOPP99LATENCY string = "YCQL_OP_P99_LATENCY"
 
+	// AlertConfigurationAPIFilterTemplateHIGHNUMYSQLCONNECTIONS captures enum value "HIGH_NUM_YSQL_CONNECTIONS"
+	AlertConfigurationAPIFilterTemplateHIGHNUMYSQLCONNECTIONS string = "HIGH_NUM_YSQL_CONNECTIONS"
+
 	// AlertConfigurationAPIFilterTemplateHIGHNUMYCQLCONNECTIONS captures enum value "HIGH_NUM_YCQL_CONNECTIONS"
 	AlertConfigurationAPIFilterTemplateHIGHNUMYCQLCONNECTIONS string = "HIGH_NUM_YCQL_CONNECTIONS"
 
@@ -340,6 +438,15 @@ const (
 
 	// AlertConfigurationAPIFilterTemplateYCQLTHROUGHPUT captures enum value "YCQL_THROUGHPUT"
 	AlertConfigurationAPIFilterTemplateYCQLTHROUGHPUT string = "YCQL_THROUGHPUT"
+
+	// AlertConfigurationAPIFilterTemplateMASTERLEADERMISSING captures enum value "MASTER_LEADER_MISSING"
+	AlertConfigurationAPIFilterTemplateMASTERLEADERMISSING string = "MASTER_LEADER_MISSING"
+
+	// AlertConfigurationAPIFilterTemplateLEADERLESSTABLETS captures enum value "LEADERLESS_TABLETS"
+	AlertConfigurationAPIFilterTemplateLEADERLESSTABLETS string = "LEADERLESS_TABLETS"
+
+	// AlertConfigurationAPIFilterTemplateUNDERREPLICATEDTABLETS captures enum value "UNDER_REPLICATED_TABLETS"
+	AlertConfigurationAPIFilterTemplateUNDERREPLICATEDTABLETS string = "UNDER_REPLICATED_TABLETS"
 )
 
 // prop value enum
@@ -385,8 +492,33 @@ func (m *AlertConfigurationAPIFilter) validateUuids(formats strfmt.Registry) err
 	return nil
 }
 
-// ContextValidate validates this alert configuration Api filter based on context it is used
+// ContextValidate validate this alert configuration Api filter based on the context it is used
 func (m *AlertConfigurationAPIFilter) ContextValidate(ctx context.Context, formats strfmt.Registry) error {
+	var res []error
+
+	if err := m.contextValidateTarget(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if len(res) > 0 {
+		return errors.CompositeValidationError(res...)
+	}
+	return nil
+}
+
+func (m *AlertConfigurationAPIFilter) contextValidateTarget(ctx context.Context, formats strfmt.Registry) error {
+
+	if m.Target != nil {
+		if err := m.Target.ContextValidate(ctx, formats); err != nil {
+			if ve, ok := err.(*errors.Validation); ok {
+				return ve.ValidateName("target")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("target")
+			}
+			return err
+		}
+	}
+
 	return nil
 }
 

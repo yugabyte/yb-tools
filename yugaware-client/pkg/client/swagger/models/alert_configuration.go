@@ -8,6 +8,7 @@ package models
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/strfmt"
@@ -23,6 +24,10 @@ type AlertConfiguration struct {
 	// Is configured alerts raised or not
 	// Required: true
 	Active *bool `json:"active"`
+
+	// alert count
+	// Required: true
+	AlertCount *float64 `json:"alertCount"`
 
 	// Creation time
 	// Required: true
@@ -53,6 +58,11 @@ type AlertConfiguration struct {
 	// Minimum: 0
 	DurationSec *int32 `json:"durationSec"`
 
+	// Maintenance window UUIDs, applied to this alert config
+	// Read Only: true
+	// Unique: true
+	MaintenanceWindowUuids []strfmt.UUID `json:"maintenanceWindowUuids"`
+
 	// Name
 	// Required: true
 	// Max Length: 1000
@@ -72,7 +82,7 @@ type AlertConfiguration struct {
 	// Template name
 	// Required: true
 	// Read Only: true
-	// Enum: [REPLICATION_LAG CLOCK_SKEW MEMORY_CONSUMPTION HEALTH_CHECK_ERROR HEALTH_CHECK_NOTIFICATION_ERROR BACKUP_FAILURE BACKUP_SCHEDULE_FAILURE INACTIVE_CRON_NODES ALERT_QUERY_FAILED ALERT_CONFIG_WRITING_FAILED ALERT_NOTIFICATION_ERROR ALERT_NOTIFICATION_CHANNEL_ERROR NODE_DOWN NODE_RESTART NODE_CPU_USAGE NODE_DISK_USAGE NODE_FILE_DESCRIPTORS_USAGE DB_VERSION_MISMATCH DB_INSTANCE_DOWN DB_INSTANCE_RESTART DB_FATAL_LOGS DB_ERROR_LOGS DB_CORE_FILES DB_YSQL_CONNECTION DB_YCQL_CONNECTION DB_REDIS_CONNECTION NODE_TO_NODE_CA_CERT_EXPIRY NODE_TO_NODE_CERT_EXPIRY CLIENT_TO_NODE_CA_CERT_EXPIRY CLIENT_TO_NODE_CERT_EXPIRY YSQL_OP_AVG_LATENCY YCQL_OP_AVG_LATENCY YSQL_OP_P99_LATENCY YCQL_OP_P99_LATENCY HIGH_NUM_YCQL_CONNECTIONS HIGH_NUM_YEDIS_CONNECTIONS YSQL_THROUGHPUT YCQL_THROUGHPUT]
+	// Enum: [REPLICATION_LAG CLOCK_SKEW MEMORY_CONSUMPTION HEALTH_CHECK_ERROR HEALTH_CHECK_NOTIFICATION_ERROR BACKUP_FAILURE BACKUP_SCHEDULE_FAILURE INACTIVE_CRON_NODES ALERT_QUERY_FAILED ALERT_CONFIG_WRITING_FAILED ALERT_NOTIFICATION_ERROR ALERT_NOTIFICATION_CHANNEL_ERROR NODE_DOWN NODE_RESTART NODE_CPU_USAGE NODE_DISK_USAGE NODE_FILE_DESCRIPTORS_USAGE NODE_OOM_KILLS DB_VERSION_MISMATCH DB_INSTANCE_DOWN DB_INSTANCE_RESTART DB_FATAL_LOGS DB_ERROR_LOGS DB_CORE_FILES DB_YSQL_CONNECTION DB_YCQL_CONNECTION DB_REDIS_CONNECTION DB_MEMORY_OVERLOAD DB_COMPACTION_OVERLOAD DB_QUEUES_OVERFLOW DB_WRITE_READ_TEST_ERROR NODE_TO_NODE_CA_CERT_EXPIRY NODE_TO_NODE_CERT_EXPIRY CLIENT_TO_NODE_CA_CERT_EXPIRY CLIENT_TO_NODE_CERT_EXPIRY YSQL_OP_AVG_LATENCY YCQL_OP_AVG_LATENCY YSQL_OP_P99_LATENCY YCQL_OP_P99_LATENCY HIGH_NUM_YSQL_CONNECTIONS HIGH_NUM_YCQL_CONNECTIONS HIGH_NUM_YEDIS_CONNECTIONS YSQL_THROUGHPUT YCQL_THROUGHPUT MASTER_LEADER_MISSING LEADERLESS_TABLETS UNDER_REPLICATED_TABLETS]
 	Template string `json:"template"`
 
 	// Threshold unit
@@ -99,6 +109,10 @@ func (m *AlertConfiguration) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
+	if err := m.validateAlertCount(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validateCreateTime(formats); err != nil {
 		res = append(res, err)
 	}
@@ -120,6 +134,10 @@ func (m *AlertConfiguration) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateDurationSec(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateMaintenanceWindowUuids(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -160,6 +178,15 @@ func (m *AlertConfiguration) Validate(formats strfmt.Registry) error {
 func (m *AlertConfiguration) validateActive(formats strfmt.Registry) error {
 
 	if err := validate.Required("active", "body", m.Active); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *AlertConfiguration) validateAlertCount(formats strfmt.Registry) error {
+
+	if err := validate.Required("alertCount", "body", m.AlertCount); err != nil {
 		return err
 	}
 
@@ -230,6 +257,26 @@ func (m *AlertConfiguration) validateDurationSec(formats strfmt.Registry) error 
 
 	if err := validate.MinimumInt("durationSec", "body", int64(*m.DurationSec), 0, false); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (m *AlertConfiguration) validateMaintenanceWindowUuids(formats strfmt.Registry) error {
+	if swag.IsZero(m.MaintenanceWindowUuids) { // not required
+		return nil
+	}
+
+	if err := validate.UniqueItems("maintenanceWindowUuids", "body", m.MaintenanceWindowUuids); err != nil {
+		return err
+	}
+
+	for i := 0; i < len(m.MaintenanceWindowUuids); i++ {
+
+		if err := validate.FormatOf("maintenanceWindowUuids"+"."+strconv.Itoa(i), "body", "uuid", m.MaintenanceWindowUuids[i].String(), formats); err != nil {
+			return err
+		}
+
 	}
 
 	return nil
@@ -319,7 +366,7 @@ var alertConfigurationTypeTemplatePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["REPLICATION_LAG","CLOCK_SKEW","MEMORY_CONSUMPTION","HEALTH_CHECK_ERROR","HEALTH_CHECK_NOTIFICATION_ERROR","BACKUP_FAILURE","BACKUP_SCHEDULE_FAILURE","INACTIVE_CRON_NODES","ALERT_QUERY_FAILED","ALERT_CONFIG_WRITING_FAILED","ALERT_NOTIFICATION_ERROR","ALERT_NOTIFICATION_CHANNEL_ERROR","NODE_DOWN","NODE_RESTART","NODE_CPU_USAGE","NODE_DISK_USAGE","NODE_FILE_DESCRIPTORS_USAGE","DB_VERSION_MISMATCH","DB_INSTANCE_DOWN","DB_INSTANCE_RESTART","DB_FATAL_LOGS","DB_ERROR_LOGS","DB_CORE_FILES","DB_YSQL_CONNECTION","DB_YCQL_CONNECTION","DB_REDIS_CONNECTION","NODE_TO_NODE_CA_CERT_EXPIRY","NODE_TO_NODE_CERT_EXPIRY","CLIENT_TO_NODE_CA_CERT_EXPIRY","CLIENT_TO_NODE_CERT_EXPIRY","YSQL_OP_AVG_LATENCY","YCQL_OP_AVG_LATENCY","YSQL_OP_P99_LATENCY","YCQL_OP_P99_LATENCY","HIGH_NUM_YCQL_CONNECTIONS","HIGH_NUM_YEDIS_CONNECTIONS","YSQL_THROUGHPUT","YCQL_THROUGHPUT"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["REPLICATION_LAG","CLOCK_SKEW","MEMORY_CONSUMPTION","HEALTH_CHECK_ERROR","HEALTH_CHECK_NOTIFICATION_ERROR","BACKUP_FAILURE","BACKUP_SCHEDULE_FAILURE","INACTIVE_CRON_NODES","ALERT_QUERY_FAILED","ALERT_CONFIG_WRITING_FAILED","ALERT_NOTIFICATION_ERROR","ALERT_NOTIFICATION_CHANNEL_ERROR","NODE_DOWN","NODE_RESTART","NODE_CPU_USAGE","NODE_DISK_USAGE","NODE_FILE_DESCRIPTORS_USAGE","NODE_OOM_KILLS","DB_VERSION_MISMATCH","DB_INSTANCE_DOWN","DB_INSTANCE_RESTART","DB_FATAL_LOGS","DB_ERROR_LOGS","DB_CORE_FILES","DB_YSQL_CONNECTION","DB_YCQL_CONNECTION","DB_REDIS_CONNECTION","DB_MEMORY_OVERLOAD","DB_COMPACTION_OVERLOAD","DB_QUEUES_OVERFLOW","DB_WRITE_READ_TEST_ERROR","NODE_TO_NODE_CA_CERT_EXPIRY","NODE_TO_NODE_CERT_EXPIRY","CLIENT_TO_NODE_CA_CERT_EXPIRY","CLIENT_TO_NODE_CERT_EXPIRY","YSQL_OP_AVG_LATENCY","YCQL_OP_AVG_LATENCY","YSQL_OP_P99_LATENCY","YCQL_OP_P99_LATENCY","HIGH_NUM_YSQL_CONNECTIONS","HIGH_NUM_YCQL_CONNECTIONS","HIGH_NUM_YEDIS_CONNECTIONS","YSQL_THROUGHPUT","YCQL_THROUGHPUT","MASTER_LEADER_MISSING","LEADERLESS_TABLETS","UNDER_REPLICATED_TABLETS"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -380,6 +427,9 @@ const (
 	// AlertConfigurationTemplateNODEFILEDESCRIPTORSUSAGE captures enum value "NODE_FILE_DESCRIPTORS_USAGE"
 	AlertConfigurationTemplateNODEFILEDESCRIPTORSUSAGE string = "NODE_FILE_DESCRIPTORS_USAGE"
 
+	// AlertConfigurationTemplateNODEOOMKILLS captures enum value "NODE_OOM_KILLS"
+	AlertConfigurationTemplateNODEOOMKILLS string = "NODE_OOM_KILLS"
+
 	// AlertConfigurationTemplateDBVERSIONMISMATCH captures enum value "DB_VERSION_MISMATCH"
 	AlertConfigurationTemplateDBVERSIONMISMATCH string = "DB_VERSION_MISMATCH"
 
@@ -407,6 +457,18 @@ const (
 	// AlertConfigurationTemplateDBREDISCONNECTION captures enum value "DB_REDIS_CONNECTION"
 	AlertConfigurationTemplateDBREDISCONNECTION string = "DB_REDIS_CONNECTION"
 
+	// AlertConfigurationTemplateDBMEMORYOVERLOAD captures enum value "DB_MEMORY_OVERLOAD"
+	AlertConfigurationTemplateDBMEMORYOVERLOAD string = "DB_MEMORY_OVERLOAD"
+
+	// AlertConfigurationTemplateDBCOMPACTIONOVERLOAD captures enum value "DB_COMPACTION_OVERLOAD"
+	AlertConfigurationTemplateDBCOMPACTIONOVERLOAD string = "DB_COMPACTION_OVERLOAD"
+
+	// AlertConfigurationTemplateDBQUEUESOVERFLOW captures enum value "DB_QUEUES_OVERFLOW"
+	AlertConfigurationTemplateDBQUEUESOVERFLOW string = "DB_QUEUES_OVERFLOW"
+
+	// AlertConfigurationTemplateDBWRITEREADTESTERROR captures enum value "DB_WRITE_READ_TEST_ERROR"
+	AlertConfigurationTemplateDBWRITEREADTESTERROR string = "DB_WRITE_READ_TEST_ERROR"
+
 	// AlertConfigurationTemplateNODETONODECACERTEXPIRY captures enum value "NODE_TO_NODE_CA_CERT_EXPIRY"
 	AlertConfigurationTemplateNODETONODECACERTEXPIRY string = "NODE_TO_NODE_CA_CERT_EXPIRY"
 
@@ -431,6 +493,9 @@ const (
 	// AlertConfigurationTemplateYCQLOPP99LATENCY captures enum value "YCQL_OP_P99_LATENCY"
 	AlertConfigurationTemplateYCQLOPP99LATENCY string = "YCQL_OP_P99_LATENCY"
 
+	// AlertConfigurationTemplateHIGHNUMYSQLCONNECTIONS captures enum value "HIGH_NUM_YSQL_CONNECTIONS"
+	AlertConfigurationTemplateHIGHNUMYSQLCONNECTIONS string = "HIGH_NUM_YSQL_CONNECTIONS"
+
 	// AlertConfigurationTemplateHIGHNUMYCQLCONNECTIONS captures enum value "HIGH_NUM_YCQL_CONNECTIONS"
 	AlertConfigurationTemplateHIGHNUMYCQLCONNECTIONS string = "HIGH_NUM_YCQL_CONNECTIONS"
 
@@ -442,6 +507,15 @@ const (
 
 	// AlertConfigurationTemplateYCQLTHROUGHPUT captures enum value "YCQL_THROUGHPUT"
 	AlertConfigurationTemplateYCQLTHROUGHPUT string = "YCQL_THROUGHPUT"
+
+	// AlertConfigurationTemplateMASTERLEADERMISSING captures enum value "MASTER_LEADER_MISSING"
+	AlertConfigurationTemplateMASTERLEADERMISSING string = "MASTER_LEADER_MISSING"
+
+	// AlertConfigurationTemplateLEADERLESSTABLETS captures enum value "LEADERLESS_TABLETS"
+	AlertConfigurationTemplateLEADERLESSTABLETS string = "LEADERLESS_TABLETS"
+
+	// AlertConfigurationTemplateUNDERREPLICATEDTABLETS captures enum value "UNDER_REPLICATED_TABLETS"
+	AlertConfigurationTemplateUNDERREPLICATEDTABLETS string = "UNDER_REPLICATED_TABLETS"
 )
 
 // prop value enum
@@ -572,6 +646,10 @@ func (m *AlertConfiguration) ContextValidate(ctx context.Context, formats strfmt
 		res = append(res, err)
 	}
 
+	if err := m.contextValidateMaintenanceWindowUuids(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.contextValidateTarget(ctx, formats); err != nil {
 		res = append(res, err)
 	}
@@ -614,6 +692,15 @@ func (m *AlertConfiguration) contextValidateCreateTime(ctx context.Context, form
 func (m *AlertConfiguration) contextValidateCustomerUUID(ctx context.Context, formats strfmt.Registry) error {
 
 	if err := validate.ReadOnly(ctx, "customerUUID", "body", strfmt.UUID(m.CustomerUUID)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *AlertConfiguration) contextValidateMaintenanceWindowUuids(ctx context.Context, formats strfmt.Registry) error {
+
+	if err := validate.ReadOnly(ctx, "maintenanceWindowUuids", "body", []strfmt.UUID(m.MaintenanceWindowUuids)); err != nil {
 		return err
 	}
 

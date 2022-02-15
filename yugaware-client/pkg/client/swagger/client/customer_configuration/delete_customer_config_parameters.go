@@ -14,6 +14,7 @@ import (
 	"github.com/go-openapi/runtime"
 	cr "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
+	"github.com/go-openapi/swag"
 )
 
 // NewDeleteCustomerConfigParams creates a new DeleteCustomerConfigParams object,
@@ -69,6 +70,9 @@ type DeleteCustomerConfigParams struct {
 	// Format: uuid
 	ConfigUUID strfmt.UUID
 
+	// IsDeleteBackups.
+	IsDeleteBackups *bool
+
 	timeout    time.Duration
 	Context    context.Context
 	HTTPClient *http.Client
@@ -86,7 +90,18 @@ func (o *DeleteCustomerConfigParams) WithDefaults() *DeleteCustomerConfigParams 
 //
 // All values with no default are reset to their zero value.
 func (o *DeleteCustomerConfigParams) SetDefaults() {
-	// no default values defined for this parameter
+	var (
+		isDeleteBackupsDefault = bool(false)
+	)
+
+	val := DeleteCustomerConfigParams{
+		IsDeleteBackups: &isDeleteBackupsDefault,
+	}
+
+	val.timeout = o.timeout
+	val.Context = o.Context
+	val.HTTPClient = o.HTTPClient
+	*o = val
 }
 
 // WithTimeout adds the timeout to the delete customer config params
@@ -144,6 +159,17 @@ func (o *DeleteCustomerConfigParams) SetConfigUUID(configUUID strfmt.UUID) {
 	o.ConfigUUID = configUUID
 }
 
+// WithIsDeleteBackups adds the isDeleteBackups to the delete customer config params
+func (o *DeleteCustomerConfigParams) WithIsDeleteBackups(isDeleteBackups *bool) *DeleteCustomerConfigParams {
+	o.SetIsDeleteBackups(isDeleteBackups)
+	return o
+}
+
+// SetIsDeleteBackups adds the isDeleteBackups to the delete customer config params
+func (o *DeleteCustomerConfigParams) SetIsDeleteBackups(isDeleteBackups *bool) {
+	o.IsDeleteBackups = isDeleteBackups
+}
+
 // WriteToRequest writes these params to a swagger request
 func (o *DeleteCustomerConfigParams) WriteToRequest(r runtime.ClientRequest, reg strfmt.Registry) error {
 
@@ -160,6 +186,23 @@ func (o *DeleteCustomerConfigParams) WriteToRequest(r runtime.ClientRequest, reg
 	// path param configUUID
 	if err := r.SetPathParam("configUUID", o.ConfigUUID.String()); err != nil {
 		return err
+	}
+
+	if o.IsDeleteBackups != nil {
+
+		// query param isDeleteBackups
+		var qrIsDeleteBackups bool
+
+		if o.IsDeleteBackups != nil {
+			qrIsDeleteBackups = *o.IsDeleteBackups
+		}
+		qIsDeleteBackups := swag.FormatBool(qrIsDeleteBackups)
+		if qIsDeleteBackups != "" {
+
+			if err := r.SetQueryParam("isDeleteBackups", qIsDeleteBackups); err != nil {
+				return err
+			}
+		}
 	}
 
 	if len(res) > 0 {

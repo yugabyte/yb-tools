@@ -22,6 +22,8 @@ type NodeInstanceFormData struct {
 
 	// Node instances
 	// Required: true
+	// Max Items: 2147483647
+	// Min Items: 1
 	Nodes []*NodeInstanceData `json:"nodes"`
 }
 
@@ -42,6 +44,16 @@ func (m *NodeInstanceFormData) Validate(formats strfmt.Registry) error {
 func (m *NodeInstanceFormData) validateNodes(formats strfmt.Registry) error {
 
 	if err := validate.Required("nodes", "body", m.Nodes); err != nil {
+		return err
+	}
+
+	iNodesSize := int64(len(m.Nodes))
+
+	if err := validate.MinItems("nodes", "body", iNodesSize, 1); err != nil {
+		return err
+	}
+
+	if err := validate.MaxItems("nodes", "body", iNodesSize, 2147483647); err != nil {
 		return err
 	}
 

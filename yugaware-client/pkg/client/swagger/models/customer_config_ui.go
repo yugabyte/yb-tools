@@ -24,7 +24,7 @@ type CustomerConfigUI struct {
 	// Config name
 	// Example: backup20-01-2021
 	// Required: true
-	// Max Length: 50
+	// Max Length: 100
 	// Min Length: 1
 	ConfigName *string `json:"configName"`
 
@@ -114,7 +114,7 @@ func (m *CustomerConfigUI) validateConfigName(formats strfmt.Registry) error {
 		return err
 	}
 
-	if err := validate.MaxLength("configName", "body", *m.ConfigName, 50); err != nil {
+	if err := validate.MaxLength("configName", "body", *m.ConfigName, 100); err != nil {
 		return err
 	}
 

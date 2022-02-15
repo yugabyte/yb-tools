@@ -57,6 +57,10 @@ type BulkImportParams struct {
 	// Node exporter user
 	NodeExporterUser string `json:"nodeExporterUser,omitempty"`
 
+	// Previous task UUID only if this task is a retry
+	// Format: uuid
+	PreviousTaskUUID strfmt.UUID `json:"previousTaskUUID,omitempty"`
+
 	// S3 bucket URL
 	// Required: true
 	S3Bucket *string `json:"s3Bucket"`
@@ -108,6 +112,10 @@ func (m *BulkImportParams) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateNodeDetailsSet(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validatePreviousTaskUUID(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -238,6 +246,18 @@ func (m *BulkImportParams) validateNodeDetailsSet(formats strfmt.Registry) error
 			}
 		}
 
+	}
+
+	return nil
+}
+
+func (m *BulkImportParams) validatePreviousTaskUUID(formats strfmt.Registry) error {
+	if swag.IsZero(m.PreviousTaskUUID) { // not required
+		return nil
+	}
+
+	if err := validate.FormatOf("previousTaskUUID", "body", "uuid", m.PreviousTaskUUID.String(), formats); err != nil {
+		return err
 	}
 
 	return nil

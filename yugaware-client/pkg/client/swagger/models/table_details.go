@@ -22,17 +22,11 @@ type TableDetails struct {
 	// Details of all columns in the table
 	Columns []*ColumnDetails `json:"columns"`
 
-	// CQL create keyspace detail. This is the statement to be used to create the keyspace.
-	CqlcreateKeyspaceString string `json:"cqlcreateKeyspaceString,omitempty"`
-
-	// CQL create table detail. This is the statement to be used to create the table.
-	CqlcreateTableString string `json:"cqlcreateTableString,omitempty"`
-
-	// CQL use keyspace detail. This is the statement to be used to use the keyspace.
-	CqluseKeyspaceString string `json:"cqluseKeyspaceString,omitempty"`
-
 	// Keyspace to which this table belongs
 	Keyspace string `json:"keyspace,omitempty"`
+
+	// Primary key values used to split table into tablets
+	SplitValues []string `json:"splitValues"`
 
 	// Table name
 	TableName string `json:"tableName,omitempty"`

@@ -34,6 +34,8 @@ type ClientService interface {
 
 	AcknowledgeByFilter(params *AcknowledgeByFilterParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*AcknowledgeByFilterOK, error)
 
+	CountAlerts(params *CountAlertsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CountAlertsOK, error)
+
 	CreateAlertChannel(params *CreateAlertChannelParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateAlertChannelOK, error)
 
 	CreateAlertConfiguration(params *CreateAlertConfigurationParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateAlertConfigurationOK, error)
@@ -69,6 +71,8 @@ type ClientService interface {
 	PageAlertConfigurations(params *PageAlertConfigurationsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*PageAlertConfigurationsOK, error)
 
 	PageAlerts(params *PageAlertsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*PageAlertsOK, error)
+
+	SendTestAlert(params *SendTestAlertParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*SendTestAlertOK, error)
 
 	UpdateAlertChannel(params *UpdateAlertChannelParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpdateAlertChannelOK, error)
 
@@ -154,6 +158,45 @@ func (a *Client) AcknowledgeByFilter(params *AcknowledgeByFilterParams, authInfo
 	// unexpected success response
 	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
 	msg := fmt.Sprintf("unexpected success response for acknowledgeByFilter: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  CountAlerts counts alerts
+*/
+func (a *Client) CountAlerts(params *CountAlertsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CountAlertsOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewCountAlertsParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "countAlerts",
+		Method:             "POST",
+		PathPattern:        "/api/v1/customers/{cUUID}/alerts/count",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &CountAlertsReader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*CountAlertsOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for countAlerts: API contract not enforced by server. Client expected to get an error, but got: %T", result)
 	panic(msg)
 }
 
@@ -856,6 +899,45 @@ func (a *Client) PageAlerts(params *PageAlertsParams, authInfo runtime.ClientAut
 	// unexpected success response
 	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
 	msg := fmt.Sprintf("unexpected success response for pageAlerts: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  SendTestAlert sends test alert for alert configuration
+*/
+func (a *Client) SendTestAlert(params *SendTestAlertParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*SendTestAlertOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewSendTestAlertParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "sendTestAlert",
+		Method:             "POST",
+		PathPattern:        "/api/v1/customers/{cUUID}/alert_configurations/{configurationUUID}/test_alert",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &SendTestAlertReader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*SendTestAlertOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for sendTestAlert: API contract not enforced by server. Client expected to get an error, but got: %T", result)
 	panic(msg)
 }
 

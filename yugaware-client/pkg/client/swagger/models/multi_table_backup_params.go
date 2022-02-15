@@ -22,9 +22,8 @@ import (
 type MultiTableBackupParams struct {
 
 	// Action type
-	// Required: true
 	// Enum: [CREATE RESTORE RESTORE_KEYS DELETE]
-	ActionType *string `json:"actionType"`
+	ActionType string `json:"actionType,omitempty"`
 
 	// Backups
 	BackupList []*BackupTableParams `json:"backupList"`
@@ -42,6 +41,9 @@ type MultiTableBackupParams struct {
 
 	// Communication ports
 	CommunicationPorts *CommunicationPorts `json:"communicationPorts,omitempty"`
+
+	// Controller type
+	Controller string `json:"controller,omitempty"`
 
 	// Cron expression for a recurring backup
 	CronExpression string `json:"cronExpression,omitempty"`
@@ -94,6 +96,10 @@ type MultiTableBackupParams struct {
 
 	// Number of concurrent commands to run on nodes over SSH
 	Parallelism int32 `json:"parallelism,omitempty"`
+
+	// Previous task UUID only if this task is a retry
+	// Format: uuid
+	PreviousTaskUUID strfmt.UUID `json:"previousTaskUUID,omitempty"`
 
 	// Restore TimeStamp
 	RestoreTimeStamp string `json:"restoreTimeStamp,omitempty"`
@@ -200,6 +206,10 @@ func (m *MultiTableBackupParams) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
+	if err := m.validatePreviousTaskUUID(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validateScheduleUUID(formats); err != nil {
 		res = append(res, err)
 	}
@@ -270,13 +280,12 @@ func (m *MultiTableBackupParams) validateActionTypeEnum(path, location string, v
 }
 
 func (m *MultiTableBackupParams) validateActionType(formats strfmt.Registry) error {
-
-	if err := validate.Required("actionType", "body", m.ActionType); err != nil {
-		return err
+	if swag.IsZero(m.ActionType) { // not required
+		return nil
 	}
 
 	// value enum
-	if err := m.validateActionTypeEnum("actionType", "body", *m.ActionType); err != nil {
+	if err := m.validateActionTypeEnum("actionType", "body", m.ActionType); err != nil {
 		return err
 	}
 
@@ -495,6 +504,18 @@ func (m *MultiTableBackupParams) validateNodeDetailsSet(formats strfmt.Registry)
 			}
 		}
 
+	}
+
+	return nil
+}
+
+func (m *MultiTableBackupParams) validatePreviousTaskUUID(formats strfmt.Registry) error {
+	if swag.IsZero(m.PreviousTaskUUID) { // not required
+		return nil
+	}
+
+	if err := validate.FormatOf("previousTaskUUID", "body", "uuid", m.PreviousTaskUUID.String(), formats); err != nil {
+		return err
 	}
 
 	return nil

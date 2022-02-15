@@ -30,6 +30,8 @@ type ClientOption func(*runtime.ClientOperation)
 
 // ClientService is the interface for Client methods
 type ClientService interface {
+	AbortTask(params *AbortTaskParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*AbortTaskOK, error)
+
 	FailedSubtasks(params *FailedSubtasksParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*FailedSubtasksOK, error)
 
 	RetryTask(params *RetryTaskParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*RetryTaskOK, error)
@@ -39,6 +41,47 @@ type ClientService interface {
 	TasksList(params *TasksListParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*TasksListOK, error)
 
 	SetTransport(transport runtime.ClientTransport)
+}
+
+/*
+  AbortTask aborts a task
+
+  Aborts a running task
+*/
+func (a *Client) AbortTask(params *AbortTaskParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*AbortTaskOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewAbortTaskParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "abortTask",
+		Method:             "POST",
+		PathPattern:        "/api/v1/customers/{cUUID}/tasks/{tUUID}/abort",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &AbortTaskReader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*AbortTaskOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for abortTask: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
 }
 
 /*
@@ -81,9 +124,9 @@ func (a *Client) FailedSubtasks(params *FailedSubtasksParams, authInfo runtime.C
 }
 
 /*
-  RetryTask retries a task
+  RetryTask retries a universe task
 
-  Retry a Create Universe task.
+  Retry a Universe task.
 */
 func (a *Client) RetryTask(params *RetryTaskParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*RetryTaskOK, error) {
 	// TODO: Validate the params before sending
@@ -93,7 +136,7 @@ func (a *Client) RetryTask(params *RetryTaskParams, authInfo runtime.ClientAuthI
 	op := &runtime.ClientOperation{
 		ID:                 "retryTask",
 		Method:             "POST",
-		PathPattern:        "/api/v1/customers/{cUUID}/tasks/{tUUID}",
+		PathPattern:        "/api/v1/customers/{cUUID}/tasks/{tUUID}/retry",
 		ProducesMediaTypes: []string{"application/json"},
 		ConsumesMediaTypes: []string{"application/json"},
 		Schemes:            []string{"http", "https"},

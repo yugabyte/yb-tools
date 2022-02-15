@@ -90,7 +90,7 @@ type Alert struct {
 
 	// Alert state in the last-sent notification
 	// Read Only: true
-	// Enum: [ACTIVE ACKNOWLEDGED RESOLVED]
+	// Enum: [ACTIVE ACKNOWLEDGED SUSPENDED RESOLVED]
 	NotifiedState string `json:"notifiedState,omitempty"`
 
 	// Timestamp at which the alert was resolved
@@ -113,10 +113,16 @@ type Alert struct {
 	// Read Only: true
 	SourceName string `json:"sourceName"`
 
+	// The sourceUUID of the alert
+	// Required: true
+	// Read Only: true
+	// Format: uuid
+	SourceUUID strfmt.UUID `json:"sourceUUID"`
+
 	// The alert's state
 	// Required: true
 	// Read Only: true
-	// Enum: [ACTIVE ACKNOWLEDGED RESOLVED]
+	// Enum: [ACTIVE ACKNOWLEDGED SUSPENDED RESOLVED]
 	State string `json:"state"`
 
 	// state index
@@ -194,6 +200,10 @@ func (m *Alert) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateSourceName(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateSourceUUID(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -411,7 +421,7 @@ var alertTypeNotifiedStatePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["ACTIVE","ACKNOWLEDGED","RESOLVED"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["ACTIVE","ACKNOWLEDGED","SUSPENDED","RESOLVED"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -426,6 +436,9 @@ const (
 
 	// AlertNotifiedStateACKNOWLEDGED captures enum value "ACKNOWLEDGED"
 	AlertNotifiedStateACKNOWLEDGED string = "ACKNOWLEDGED"
+
+	// AlertNotifiedStateSUSPENDED captures enum value "SUSPENDED"
+	AlertNotifiedStateSUSPENDED string = "SUSPENDED"
 
 	// AlertNotifiedStateRESOLVED captures enum value "RESOLVED"
 	AlertNotifiedStateRESOLVED string = "RESOLVED"
@@ -525,11 +538,24 @@ func (m *Alert) validateSourceName(formats strfmt.Registry) error {
 	return nil
 }
 
+func (m *Alert) validateSourceUUID(formats strfmt.Registry) error {
+
+	if err := validate.Required("sourceUUID", "body", strfmt.UUID(m.SourceUUID)); err != nil {
+		return err
+	}
+
+	if err := validate.FormatOf("sourceUUID", "body", "uuid", m.SourceUUID.String(), formats); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 var alertTypeStatePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["ACTIVE","ACKNOWLEDGED","RESOLVED"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["ACTIVE","ACKNOWLEDGED","SUSPENDED","RESOLVED"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -544,6 +570,9 @@ const (
 
 	// AlertStateACKNOWLEDGED captures enum value "ACKNOWLEDGED"
 	AlertStateACKNOWLEDGED string = "ACKNOWLEDGED"
+
+	// AlertStateSUSPENDED captures enum value "SUSPENDED"
+	AlertStateSUSPENDED string = "SUSPENDED"
 
 	// AlertStateRESOLVED captures enum value "RESOLVED"
 	AlertStateRESOLVED string = "RESOLVED"
@@ -657,6 +686,10 @@ func (m *Alert) ContextValidate(ctx context.Context, formats strfmt.Registry) er
 	}
 
 	if err := m.contextValidateSourceName(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateSourceUUID(ctx, formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -823,6 +856,15 @@ func (m *Alert) contextValidateSeverity(ctx context.Context, formats strfmt.Regi
 func (m *Alert) contextValidateSourceName(ctx context.Context, formats strfmt.Registry) error {
 
 	if err := validate.ReadOnly(ctx, "sourceName", "body", string(m.SourceName)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *Alert) contextValidateSourceUUID(ctx context.Context, formats strfmt.Registry) error {
+
+	if err := validate.ReadOnly(ctx, "sourceUUID", "body", strfmt.UUID(m.SourceUUID)); err != nil {
 		return err
 	}
 

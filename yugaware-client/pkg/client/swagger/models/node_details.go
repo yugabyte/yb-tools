@@ -54,6 +54,11 @@ type NodeDetails struct {
 	// Master RCP port
 	MasterRPCPort int32 `json:"masterRpcPort,omitempty"`
 
+	// Master state
+	// Example: ToStart
+	// Enum: [None ToStart Configured ToStop]
+	MasterState string `json:"masterState,omitempty"`
+
 	// Node exporter port
 	NodeExporterPort int32 `json:"nodeExporterPort,omitempty"`
 
@@ -63,9 +68,10 @@ type NodeDetails struct {
 	// Node name
 	NodeName string `json:"nodeName,omitempty"`
 
-	// Node UUID
+	// Node UUID: Changes from upstream: removes duplicate field
+	// Required: true
 	// Format: uuid
-	NodeUUID strfmt.UUID `json:"nodeUuid,omitempty"`
+	NodeUUID *strfmt.UUID `json:"nodeUUID"`
 
 	// UUID of the cluster to which this node belongs
 	// Format: uuid
@@ -79,7 +85,7 @@ type NodeDetails struct {
 
 	// Node state
 	// Example: Provisioned
-	// Enum: [ToBeAdded ToJoinCluster Provisioned SoftwareInstalled UpgradeSoftware UpdateGFlags Live Stopping Starting Stopped Unreachable ToBeRemoved Removing Removed Adding BeingDecommissioned Decommissioned UpdateCert ToggleTls Resizing SystemdUpgrade]
+	// Enum: [ToBeAdded InstanceCreated ServerSetup ToJoinCluster Provisioned SoftwareInstalled UpgradeSoftware UpdateGFlags Live Stopping Starting Stopped Unreachable ToBeRemoved Removing Removed Adding BeingDecommissioned Decommissioned UpdateCert ToggleTls Resizing SystemdUpgrade]
 	State string `json:"state,omitempty"`
 
 	// Tablet server HTTP port
@@ -110,6 +116,10 @@ func (m *NodeDetails) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateCloudInfo(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateMasterState(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -162,12 +172,61 @@ func (m *NodeDetails) validateCloudInfo(formats strfmt.Registry) error {
 	return nil
 }
 
-func (m *NodeDetails) validateNodeUUID(formats strfmt.Registry) error {
-	if swag.IsZero(m.NodeUUID) { // not required
+var nodeDetailsTypeMasterStatePropEnum []interface{}
+
+func init() {
+	var res []string
+	if err := json.Unmarshal([]byte(`["None","ToStart","Configured","ToStop"]`), &res); err != nil {
+		panic(err)
+	}
+	for _, v := range res {
+		nodeDetailsTypeMasterStatePropEnum = append(nodeDetailsTypeMasterStatePropEnum, v)
+	}
+}
+
+const (
+
+	// NodeDetailsMasterStateNone captures enum value "None"
+	NodeDetailsMasterStateNone string = "None"
+
+	// NodeDetailsMasterStateToStart captures enum value "ToStart"
+	NodeDetailsMasterStateToStart string = "ToStart"
+
+	// NodeDetailsMasterStateConfigured captures enum value "Configured"
+	NodeDetailsMasterStateConfigured string = "Configured"
+
+	// NodeDetailsMasterStateToStop captures enum value "ToStop"
+	NodeDetailsMasterStateToStop string = "ToStop"
+)
+
+// prop value enum
+func (m *NodeDetails) validateMasterStateEnum(path, location string, value string) error {
+	if err := validate.EnumCase(path, location, value, nodeDetailsTypeMasterStatePropEnum, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *NodeDetails) validateMasterState(formats strfmt.Registry) error {
+	if swag.IsZero(m.MasterState) { // not required
 		return nil
 	}
 
-	if err := validate.FormatOf("nodeUuid", "body", "uuid", m.NodeUUID.String(), formats); err != nil {
+	// value enum
+	if err := m.validateMasterStateEnum("masterState", "body", m.MasterState); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *NodeDetails) validateNodeUUID(formats strfmt.Registry) error {
+
+	if err := validate.Required("nodeUUID", "body", m.NodeUUID); err != nil {
+		return err
+	}
+
+	if err := validate.FormatOf("nodeUUID", "body", "uuid", m.NodeUUID.String(), formats); err != nil {
 		return err
 	}
 
@@ -190,7 +249,7 @@ var nodeDetailsTypeStatePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["ToBeAdded","ToJoinCluster","Provisioned","SoftwareInstalled","UpgradeSoftware","UpdateGFlags","Live","Stopping","Starting","Stopped","Unreachable","ToBeRemoved","Removing","Removed","Adding","BeingDecommissioned","Decommissioned","UpdateCert","ToggleTls","Resizing","SystemdUpgrade"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["ToBeAdded","InstanceCreated","ServerSetup","ToJoinCluster","Provisioned","SoftwareInstalled","UpgradeSoftware","UpdateGFlags","Live","Stopping","Starting","Stopped","Unreachable","ToBeRemoved","Removing","Removed","Adding","BeingDecommissioned","Decommissioned","UpdateCert","ToggleTls","Resizing","SystemdUpgrade"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -202,6 +261,12 @@ const (
 
 	// NodeDetailsStateToBeAdded captures enum value "ToBeAdded"
 	NodeDetailsStateToBeAdded string = "ToBeAdded"
+
+	// NodeDetailsStateInstanceCreated captures enum value "InstanceCreated"
+	NodeDetailsStateInstanceCreated string = "InstanceCreated"
+
+	// NodeDetailsStateServerSetup captures enum value "ServerSetup"
+	NodeDetailsStateServerSetup string = "ServerSetup"
 
 	// NodeDetailsStateToJoinCluster captures enum value "ToJoinCluster"
 	NodeDetailsStateToJoinCluster string = "ToJoinCluster"

@@ -12,6 +12,7 @@ import (
 
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/access_keys"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/alerts"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/asynchronous_replication"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/audit"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/availability_zones"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/backup_schedule_management"
@@ -24,6 +25,7 @@ import (
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/encryption_at_rest"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/instance_types"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/logging_config"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/maintenance_windows"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/metrics"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/node_instances"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/region_management"
@@ -31,6 +33,7 @@ import (
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/runtime_configuration"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/schedule_external_script"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/session_management"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/support_bundle_management"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/table_management"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/tablet_server_management"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/universe_actions"
@@ -86,6 +89,7 @@ func New(transport runtime.ClientTransport, formats strfmt.Registry) *YugabytePl
 	cli.Transport = transport
 	cli.AccessKeys = access_keys.New(transport, formats)
 	cli.Alerts = alerts.New(transport, formats)
+	cli.AsynchronousReplication = asynchronous_replication.New(transport, formats)
 	cli.Audit = audit.New(transport, formats)
 	cli.AvailabilityZones = availability_zones.New(transport, formats)
 	cli.BackupScheduleManagement = backup_schedule_management.New(transport, formats)
@@ -98,6 +102,7 @@ func New(transport runtime.ClientTransport, formats strfmt.Registry) *YugabytePl
 	cli.EncryptionAtRest = encryption_at_rest.New(transport, formats)
 	cli.InstanceTypes = instance_types.New(transport, formats)
 	cli.LoggingConfig = logging_config.New(transport, formats)
+	cli.MaintenanceWindows = maintenance_windows.New(transport, formats)
 	cli.Metrics = metrics.New(transport, formats)
 	cli.NodeInstances = node_instances.New(transport, formats)
 	cli.RegionManagement = region_management.New(transport, formats)
@@ -105,6 +110,7 @@ func New(transport runtime.ClientTransport, formats strfmt.Registry) *YugabytePl
 	cli.RuntimeConfiguration = runtime_configuration.New(transport, formats)
 	cli.ScheduleExternalScript = schedule_external_script.New(transport, formats)
 	cli.SessionManagement = session_management.New(transport, formats)
+	cli.SupportBundleManagement = support_bundle_management.New(transport, formats)
 	cli.TableManagement = table_management.New(transport, formats)
 	cli.TabletServerManagement = tablet_server_management.New(transport, formats)
 	cli.UniverseActions = universe_actions.New(transport, formats)
@@ -162,6 +168,8 @@ type YugabytePlatformAPIs struct {
 
 	Alerts alerts.ClientService
 
+	AsynchronousReplication asynchronous_replication.ClientService
+
 	Audit audit.ClientService
 
 	AvailabilityZones availability_zones.ClientService
@@ -186,6 +194,8 @@ type YugabytePlatformAPIs struct {
 
 	LoggingConfig logging_config.ClientService
 
+	MaintenanceWindows maintenance_windows.ClientService
+
 	Metrics metrics.ClientService
 
 	NodeInstances node_instances.ClientService
@@ -199,6 +209,8 @@ type YugabytePlatformAPIs struct {
 	ScheduleExternalScript schedule_external_script.ClientService
 
 	SessionManagement session_management.ClientService
+
+	SupportBundleManagement support_bundle_management.ClientService
 
 	TableManagement table_management.ClientService
 
@@ -226,6 +238,7 @@ func (c *YugabytePlatformAPIs) SetTransport(transport runtime.ClientTransport) {
 	c.Transport = transport
 	c.AccessKeys.SetTransport(transport)
 	c.Alerts.SetTransport(transport)
+	c.AsynchronousReplication.SetTransport(transport)
 	c.Audit.SetTransport(transport)
 	c.AvailabilityZones.SetTransport(transport)
 	c.BackupScheduleManagement.SetTransport(transport)
@@ -238,6 +251,7 @@ func (c *YugabytePlatformAPIs) SetTransport(transport runtime.ClientTransport) {
 	c.EncryptionAtRest.SetTransport(transport)
 	c.InstanceTypes.SetTransport(transport)
 	c.LoggingConfig.SetTransport(transport)
+	c.MaintenanceWindows.SetTransport(transport)
 	c.Metrics.SetTransport(transport)
 	c.NodeInstances.SetTransport(transport)
 	c.RegionManagement.SetTransport(transport)
@@ -245,6 +259,7 @@ func (c *YugabytePlatformAPIs) SetTransport(transport runtime.ClientTransport) {
 	c.RuntimeConfiguration.SetTransport(transport)
 	c.ScheduleExternalScript.SetTransport(transport)
 	c.SessionManagement.SetTransport(transport)
+	c.SupportBundleManagement.SetTransport(transport)
 	c.TableManagement.SetTransport(transport)
 	c.TabletServerManagement.SetTransport(transport)
 	c.UniverseActions.SetTransport(transport)

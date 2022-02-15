@@ -136,26 +136,8 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 			})
 		})
 
-		// TODO: investigate why this API call fails on yugaware 2.11.2
-		//------------------------------
-		//• Failure in Spec Setup (BeforeEach) [98.760 seconds]
-		//Yugaware API Compatibility Tests
-		///tmp/build/be563b6d/yb-tools/integration/yugaware-client/api_test.go:16
-		//  SessionManagement API
-		//  /tmp/build/be563b6d/yb-tools/integration/yugaware-client/api_test.go:17
-		//    when Requesting filtered yugaware logs
-		//    /tmp/build/be563b6d/yb-tools/integration/yugaware-client/api_test.go:50
-		//      Returns valid logs [BeforeEach]
-		//      /tmp/build/be563b6d/yb-tools/integration/yugaware-client/api_test.go:68
-		//
-		//      Unexpected error:
-		//          <*errors.errorString | 0xc0000a5db0>: {
-		//              s: "&{[]} (*models.LogData) is not supported by the TextConsumer, can be resolved by supporting TextUnmarshaler interface",
-		//          }
-		//          &{[]} (*models.LogData) is not supported by the TextConsumer, can be resolved by supporting TextUnmarshaler interface
-		//      occurred
-		//
-		//      /tmp/build/be563b6d/yb-tools/integration/yugaware-client/api_test.go:64
+		// TODO: This API call had breaking changes in yugabyte-db commit 855eeb0b6b. Need to figure out how to deal
+		//       with issues like this
 		XWhen("Requesting filtered yugaware logs", func() {
 			var (
 				universe *models.UniverseResp

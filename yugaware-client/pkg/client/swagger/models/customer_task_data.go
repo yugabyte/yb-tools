@@ -19,6 +19,9 @@ import (
 // swagger:model CustomerTaskData
 type CustomerTaskData struct {
 
+	// Customer task abortable
+	Abortable bool `json:"abortable,omitempty"`
+
 	// Customer task completion time
 	// Example: 2021-06-17T15:00:05-0400
 	// Pattern: /([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})+([0-9]{4})/
@@ -38,6 +41,9 @@ type CustomerTaskData struct {
 	// Customer task percentage completed
 	// Example: 100
 	PercentComplete int32 `json:"percentComplete,omitempty"`
+
+	// Customer task retryable
+	Retryable bool `json:"retryable,omitempty"`
 
 	// Customer task status
 	// Example: Complete

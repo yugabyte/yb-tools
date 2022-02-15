@@ -17,6 +17,9 @@ import (
 // swagger:model AlertingData
 type AlertingData struct {
 
+	// Period, which is used to send active alert notifications
+	ActiveAlertNotificationIntervalMs int64 `json:"activeAlertNotificationIntervalMs,omitempty"`
+
 	// Alert email address
 	// Example: test@example.com
 	AlertingEmail string `json:"alertingEmail,omitempty"`

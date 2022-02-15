@@ -44,19 +44,19 @@ func NewDeleteCustomerConfigOK() *DeleteCustomerConfigOK {
 successful operation
 */
 type DeleteCustomerConfigOK struct {
-	Payload *models.YBPSuccess
+	Payload *models.YBPTask
 }
 
 func (o *DeleteCustomerConfigOK) Error() string {
 	return fmt.Sprintf("[DELETE /api/v1/customers/{cUUID}/configs/{configUUID}][%d] deleteCustomerConfigOK  %+v", 200, o.Payload)
 }
-func (o *DeleteCustomerConfigOK) GetPayload() *models.YBPSuccess {
+func (o *DeleteCustomerConfigOK) GetPayload() *models.YBPTask {
 	return o.Payload
 }
 
 func (o *DeleteCustomerConfigOK) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
 
-	o.Payload = new(models.YBPSuccess)
+	o.Payload = new(models.YBPTask)
 
 	// response payload
 	if err := consumer.Consume(response.Body(), o.Payload); err != nil && err != io.EOF {

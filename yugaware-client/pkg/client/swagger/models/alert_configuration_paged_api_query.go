@@ -43,7 +43,7 @@ type AlertConfigurationPagedAPIQuery struct {
 
 	// sort by
 	// Required: true
-	// Enum: [uuid name active targetType createTime template]
+	// Enum: [uuid name active targetType target createTime template severity destination alertCount]
 	SortBy *string `json:"sortBy"`
 }
 
@@ -175,7 +175,7 @@ var alertConfigurationPagedApiQueryTypeSortByPropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["uuid","name","active","targetType","createTime","template"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["uuid","name","active","targetType","target","createTime","template","severity","destination","alertCount"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -197,11 +197,23 @@ const (
 	// AlertConfigurationPagedAPIQuerySortByTargetType captures enum value "targetType"
 	AlertConfigurationPagedAPIQuerySortByTargetType string = "targetType"
 
+	// AlertConfigurationPagedAPIQuerySortByTarget captures enum value "target"
+	AlertConfigurationPagedAPIQuerySortByTarget string = "target"
+
 	// AlertConfigurationPagedAPIQuerySortByCreateTime captures enum value "createTime"
 	AlertConfigurationPagedAPIQuerySortByCreateTime string = "createTime"
 
 	// AlertConfigurationPagedAPIQuerySortByTemplate captures enum value "template"
 	AlertConfigurationPagedAPIQuerySortByTemplate string = "template"
+
+	// AlertConfigurationPagedAPIQuerySortBySeverity captures enum value "severity"
+	AlertConfigurationPagedAPIQuerySortBySeverity string = "severity"
+
+	// AlertConfigurationPagedAPIQuerySortByDestination captures enum value "destination"
+	AlertConfigurationPagedAPIQuerySortByDestination string = "destination"
+
+	// AlertConfigurationPagedAPIQuerySortByAlertCount captures enum value "alertCount"
+	AlertConfigurationPagedAPIQuerySortByAlertCount string = "alertCount"
 )
 
 // prop value enum

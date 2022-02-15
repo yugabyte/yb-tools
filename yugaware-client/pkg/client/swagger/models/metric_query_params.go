@@ -22,6 +22,9 @@ type MetricQueryParams struct {
 	// End time
 	End int64 `json:"end,omitempty"`
 
+	// Is Recharts
+	IsRecharts bool `json:"isRecharts,omitempty"`
+
 	// Metrics
 	// Required: true
 	Metrics []string `json:"metrics"`

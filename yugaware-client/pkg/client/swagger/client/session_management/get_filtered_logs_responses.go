@@ -41,7 +41,7 @@ func NewGetFilteredLogsOK() *GetFilteredLogsOK {
 
 /* GetFilteredLogsOK describes a response with status code 200, with default header values.
 
-successful operation
+successful operation. Changes from upstream: the return value for this field changed in 855eeb0b6b. This change was reverted to the v2.8.1 version of this call, and thus this API call is not compatible with v2.11.0, 2.11.1, or 2.11.2
 */
 type GetFilteredLogsOK struct {
 	Payload *models.LogData

@@ -23,6 +23,10 @@ type PlacementCloud struct {
 	// code
 	Code string `json:"code,omitempty"`
 
+	// default region
+	// Format: uuid
+	DefaultRegion strfmt.UUID `json:"defaultRegion,omitempty"`
+
 	// region list
 	RegionList []*PlacementRegion `json:"regionList"`
 
@@ -35,6 +39,10 @@ type PlacementCloud struct {
 func (m *PlacementCloud) Validate(formats strfmt.Registry) error {
 	var res []error
 
+	if err := m.validateDefaultRegion(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validateRegionList(formats); err != nil {
 		res = append(res, err)
 	}
@@ -46,6 +54,18 @@ func (m *PlacementCloud) Validate(formats strfmt.Registry) error {
 	if len(res) > 0 {
 		return errors.CompositeValidationError(res...)
 	}
+	return nil
+}
+
+func (m *PlacementCloud) validateDefaultRegion(formats strfmt.Registry) error {
+	if swag.IsZero(m.DefaultRegion) { // not required
+		return nil
+	}
+
+	if err := validate.FormatOf("defaultRegion", "body", "uuid", m.DefaultRegion.String(), formats); err != nil {
+		return err
+	}
+
 	return nil
 }
 
