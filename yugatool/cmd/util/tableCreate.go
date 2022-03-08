@@ -102,12 +102,11 @@ func tableCreate(log logr.Logger, c *client.YBClient, options *CreateOptions, gl
 			CertPath:               globalOptions.ClientCert,
 			KeyPath:                globalOptions.ClientKey,
 			CaPath:                 globalOptions.CACert,
-			EnableHostVerification: globalOptions.SkipHostVerification,
+			EnableHostVerification: !globalOptions.SkipHostVerification,
 		}
 	}
 
 	ycqlClient.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
-	//ycqlClient.Keyspace = "testkeyspace"
 	log.Info("connecting to ycql", "hosts", cqlHosts)
 	session, err := ycqlClient.CreateSession()
 	if err != nil {
