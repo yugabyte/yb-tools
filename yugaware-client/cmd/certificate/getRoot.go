@@ -30,8 +30,7 @@ import (
 func GetRootCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 	return &cobra.Command{
 		Use:   "get-root <CERT_UUID> | <CERT_NAME>",
-		Short: "List client certificates",
-		Long:  `List client certificates`,
+		Short: "Return the CA root certificate",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := ctx.WithCmd(cmd).Setup()
