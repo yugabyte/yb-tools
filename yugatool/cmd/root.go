@@ -116,6 +116,7 @@ func RootInit() *cobra.Command {
 			Commands: []*cobra.Command{
 				xcluster.InitConsumerCmd(ctx),
 				xcluster.InitProducerCmd(ctx),
+				xcluster.StreamInfoCmd(ctx),
 			},
 		},
 		{
