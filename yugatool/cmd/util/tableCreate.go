@@ -30,7 +30,7 @@ import (
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client/session"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/cmdutil"
-	util2 "github.com/yugabyte/yb-tools/yugatool/pkg/util"
+	"github.com/yugabyte/yb-tools/yugatool/pkg/util"
 )
 
 func TableCreateCmd(ctx *cmdutil.YugatoolContext) *cobra.Command {
@@ -165,7 +165,7 @@ func getCqlHosts(log logr.Logger, ybClient *client.YBClient) ([]string, error) {
 			Port: NewUint32(port),
 		}
 
-		cqlHosts = append(cqlHosts, util2.HostPortString(hostPort))
+		cqlHosts = append(cqlHosts, util.HostPortString(hostPort))
 	}
 
 	return cqlHosts, nil

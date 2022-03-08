@@ -124,6 +124,7 @@ func RootInit() *cobra.Command {
 			Description: "Miscellaneous utilities",
 			Commands: []*cobra.Command{
 				util.TableCreateCmd(ctx),
+				util.ResetStatStatementsCmd(ctx),
 			},
 		},
 	}

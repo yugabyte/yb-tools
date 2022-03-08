@@ -25,6 +25,7 @@ require (
 	github.com/juju/go4 v0.0.0-20160222163258-40d72ab9641a // indirect
 	github.com/juju/persistent-cookiejar v0.0.0-20171026135701-d5e5a8405ef9
 	github.com/kr/pretty v0.3.0 // indirect
+	github.com/lib/pq v1.10.2
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/onsi/ginkgo v1.16.4
@@ -40,7 +41,6 @@ require (
 	github.com/yugabyte/gocql v0.0.0-20200602185649-ef3952a45ff4
 	go.mongodb.org/mongo-driver v1.8.2 // indirect
 	go.uber.org/zap v1.20.0
-	golang.org/x/mod v0.5.1 // indirect
 	golang.org/x/net v0.0.0-20220121210141-e204ce36a2ba
 	golang.org/x/sys v0.0.0-20220114195835-da31bd327af9 // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
