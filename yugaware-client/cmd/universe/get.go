@@ -2,6 +2,7 @@ package universe
 
 import (
 	"fmt"
+
 	"github.com/yugabyte/yb-tools/pkg/format"
 
 	"github.com/spf13/cobra"
@@ -50,9 +51,32 @@ func getCmd(ctx *cmdutil.YWClientContext, universeIdentifier string) error {
 			{Name: "INSTANCE_TYPE", JSONPath: "$.universeDetails.clusters[0].userIntent.instanceType"},
 			{Name: "RF", JSONPath: "$.universeDetails.clusters[0].userIntent.replicationFactor"},
 			{Name: "NODE_COUNT", JSONPath: "$.universeDetails.clusters[0].userIntent.numNodes"},
-			{Name: "AVAILABILITY_ZONES", JSONPath: "$.universeDetails.clusters[0].regions[*].zones[*].code"},
 			{Name: "VERSION", JSONPath: "$.universeDetails.clusters[0].userIntent.ybSoftwareVersion"},
 		},
 	}
-	return table.Print()
+	err = table.Println()
+
+	if err != nil {
+		return err
+	}
+
+	if ctx.GlobalOptions.Output == "table" {
+		table = &format.Output{
+			OutputMessage: "Nodes",
+			JSONObject:    universe.UniverseDetails.NodeDetailsSet,
+			OutputType:    ctx.GlobalOptions.Output,
+			TableColumns: []format.Column{
+				{Name: "NAME", JSONPath: "$.nodeName"},
+				{Name: "REGION", JSONPath: "$.cloudInfo.region"},
+				{Name: "ZONE", JSONPath: "$.cloudInfo.az"},
+				{Name: "PRIVATE_IP", JSONPath: "$.cloudInfo.private_ip"},
+				{Name: "PUBLIC_IP", JSONPath: "$.cloudInfo.public_ip"},
+				{Name: "STATE", JSONPath: "$.state"},
+			},
+			Filter: "",
+		}
+		return table.Print()
+	}
+
+	return nil
 }

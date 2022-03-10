@@ -63,7 +63,6 @@ func list(ctx *cmdutil.YWClientContext) error {
 			{Name: "INSTANCE_TYPE", JSONPath: "$.universeDetails.clusters[0].userIntent.instanceType"},
 			{Name: "RF", JSONPath: "$.universeDetails.clusters[0].userIntent.replicationFactor"},
 			{Name: "NODE_COUNT", JSONPath: "$.universeDetails.clusters[0].userIntent.numNodes"},
-			{Name: "AVAILABILITY_ZONES", JSONPath: "$.universeDetails.clusters[0].regions[*].zones[*].code"},
 			{Name: "VERSION", JSONPath: "$.universeDetails.clusters[0].userIntent.ybSoftwareVersion"},
 		},
 	}
