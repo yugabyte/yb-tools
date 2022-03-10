@@ -61,6 +61,7 @@ type CreateOptions struct {
 	User           string `mapstructure:"user"`
 	Password       string `mapstructure:"password"`
 	PopulateTables bool   `mapstructure:"populate"`
+	CreateIndexes  bool   `mapstructure:"create_indexes"`
 }
 
 var _ cmdutil.CommandOptions = &CreateOptions{}
@@ -73,6 +74,7 @@ func (o *CreateOptions) AddFlags(cmd *cobra.Command) {
 	flags.StringVarP(&o.User, "user", "u", "", "ycql username")
 	flags.StringVarP(&o.Password, "password", "p", "", "ycql password")
 	flags.BoolVar(&o.PopulateTables, "populate", false, "populate tables")
+	flags.BoolVar(&o.CreateIndexes, "create-indexes", false, "create indexes")
 }
 
 func (o *CreateOptions) Validate() error {
@@ -118,6 +120,13 @@ func tableCreate(log logr.Logger, c *client.YBClient, options *CreateOptions, gl
 	err = RunTableCreate(log, session, options.TableCount, options.TabletCount*uint(c.TserverCount()))
 	if err != nil {
 		return err
+	}
+
+	if options.CreateIndexes {
+		err = RunCreateIndexes(log, session, options.TableCount, options.TabletCount*uint(c.TserverCount()))
+		if err != nil {
+			return err
+		}
 	}
 
 	if options.PopulateTables {
@@ -189,6 +198,23 @@ func RunTableCreate(log logr.Logger, session *gocql.Session, numberOfTables, num
 		err = session.Query(query).Exec()
 		if err != nil {
 			log.Error(err, "create table failed", "query", query)
+			return err
+		}
+	}
+
+	return nil
+}
+
+func RunCreateIndexes(log logr.Logger, session *gocql.Session, numberOfTables, numberOfTablets uint) error {
+	for i := uint(0); i < numberOfTables; i++ {
+		tableName := fmt.Sprintf("test.table%d", i)
+		CreateIndexStatement := `CREATE INDEX IF NOT EXISTS ON %s (b) WITH tablets = %d;`
+		query := fmt.Sprintf(CreateIndexStatement, tableName, numberOfTablets)
+		log.Info("creating index if not exists...", "query", query)
+
+		err := session.Query(query).Exec()
+		if err != nil {
+			log.Error(err, "create index failed", "query", query)
 			return err
 		}
 	}
