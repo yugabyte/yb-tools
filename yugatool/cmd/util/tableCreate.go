@@ -60,6 +60,7 @@ type CreateOptions struct {
 	TupleCount     uint   `mapstructure:"tuple_count"`
 	User           string `mapstructure:"user"`
 	Password       string `mapstructure:"password"`
+	LocalDC        string `mapstructure:"localdc"`
 	PopulateTables bool   `mapstructure:"populate"`
 	CreateIndexes  bool   `mapstructure:"create_indexes"`
 }
@@ -73,6 +74,7 @@ func (o *CreateOptions) AddFlags(cmd *cobra.Command) {
 	flags.UintVarP(&o.TupleCount, "tuple-count", "n", 1, "number of tuples to insert")
 	flags.StringVarP(&o.User, "user", "u", "", "ycql username")
 	flags.StringVarP(&o.Password, "password", "p", "", "ycql password")
+	flags.StringVar(&o.LocalDC, "localdc", "", "dc to connect to")
 	flags.BoolVar(&o.PopulateTables, "populate", false, "populate tables")
 	flags.BoolVar(&o.CreateIndexes, "create-indexes", false, "create indexes")
 }
@@ -108,7 +110,12 @@ func tableCreate(log logr.Logger, c *client.YBClient, options *CreateOptions, gl
 		}
 	}
 
-	ycqlClient.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
+	if options.LocalDC != "" {
+		ycqlClient.PoolConfig.HostSelectionPolicy = gocql.DCAwareRoundRobinPolicy(options.LocalDC)
+	} else {
+		ycqlClient.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
+	}
+
 	log.Info("connecting to ycql", "hosts", cqlHosts)
 	session, err := ycqlClient.CreateSession()
 	if err != nil {
