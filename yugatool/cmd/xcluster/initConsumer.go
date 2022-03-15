@@ -50,12 +50,14 @@ func InitConsumerCmd(ctx *cmdutil.YugatoolContext) *cobra.Command {
 }
 
 type InitConsumerOptions struct {
-	KeyspaceName string `mapstructure:"keyspace"`
+	KeyspaceName   string `mapstructure:"keyspace"`
+	SkipBootstraps bool   `mapstructure:"skip_bootstraps"`
 }
 
 func (o *InitConsumerOptions) AddFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 	flags.StringVar(&o.KeyspaceName, "keyspace", "", "keyspace to replicate")
+	flags.BoolVar(&o.SkipBootstraps, "skip-bootstraps", false, "initialize replication without bootstrap IDs")
 }
 
 func (o *InitConsumerOptions) Validate() error {
@@ -100,26 +102,33 @@ func runInitConsumer(ctx *cmdutil.YugatoolContext, options *InitConsumerOptions)
 		}
 	}
 
-	initCDCCommand.WriteRune(' ')
+	if !options.SkipBootstraps {
+		initCDCCommand.WriteRune(' ')
 
-	for i, table := range tables.GetTables() {
-		if table.TableType.Number() == common.TableType_YQL_TABLE_TYPE.Number() {
-			streams, err := ctx.Client.Master.MasterService.ListCDCStreams(&master.ListCDCStreamsRequestPB{
-				TableId: NewString(string(table.GetId())),
-			})
-			if err != nil {
-				return err
-			}
-			if streams.Error != nil {
-				return errors.Errorf("error getting stream table %s: %s", table, streams.Error)
-			}
-			if len(streams.GetStreams()) != 1 {
-				return errors.Errorf("found too many streams for table %s: %s", table, streams)
-			}
+		for i, table := range tables.GetTables() {
+			if table.TableType.Number() == common.TableType_YQL_TABLE_TYPE.Number() {
+				streams, err := ctx.Client.Master.MasterService.ListCDCStreams(&master.ListCDCStreamsRequestPB{
+					TableId: NewString(string(table.GetId())),
+				})
+				if err != nil {
+					return err
+				}
+				if streams.Error != nil {
+					return errors.Errorf("error getting stream table %s: %s", table, streams.Error)
+				}
 
-			initCDCCommand.Write(streams.Streams[0].StreamId)
-			if i+1 < len(tables.GetTables()) {
-				initCDCCommand.WriteRune(',')
+				if len(streams.GetStreams()) == 0 {
+					return errors.Errorf("bootstrap IDs not found for table %s: %s", table, streams)
+				}
+
+				if len(streams.GetStreams()) > 1 {
+					return errors.Errorf("found too many streams for table %s: %s", table, streams)
+				}
+
+				initCDCCommand.Write(streams.Streams[0].StreamId)
+				if i+1 < len(tables.GetTables()) {
+					initCDCCommand.WriteRune(',')
+				}
 			}
 		}
 	}
