@@ -1,4 +1,4 @@
-package yugaware_client_test
+package yugatool_test
 
 import (
 	"context"
@@ -14,13 +14,12 @@ import (
 	"github.com/spf13/viper"
 	"github.com/yugabyte/yb-tools/integration/util"
 	ywflags "github.com/yugabyte/yb-tools/pkg/flag"
-	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 )
 
-type YWTestOptions struct {
+type YugatoolTestOptions struct {
 	Hostname             string `mapstructure:"hostname"`
 	DialTimeout          int    `mapstructure:"dialtimeout"`
 	SkipHostVerification bool   `mapstructure:"skiphostverification"`
@@ -38,7 +37,7 @@ type YWTestOptions struct {
 }
 
 var (
-	options YWTestOptions
+	options YugatoolTestOptions
 
 	ywContext *util.YWContext
 
@@ -90,17 +89,20 @@ var _ = BeforeSuite(func() {
 
 	By(fmt.Sprintf("connecting to host %s", options.Hostname))
 	ywContext = util.NewYugawareContext(ctx, logger, options.Hostname, options.DialTimeout, options.SkipHostVerification, options.CACert, options.ClientCert, options.ClientKey, options.APIToken)
+
+	CreateTestUniverseIfNotExists()
 })
 
 var _ = AfterSuite(func() {
 	if !options.SkipCleanup && ywContext != nil {
-		ywContext.CleanupUniverse(options.TestUniverseName)
+		CleanupTestUniverse()
+		CleanupTLSTestUniverse()
 	}
 })
 
 func TestYugawareClient(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "YugawareClient Integration Suite")
+	RunSpecs(t, "Yugatool Integration Suite")
 }
 
 func NewLogObserver() (logr.Logger, *observer.ObservedLogs) {
@@ -119,10 +121,26 @@ func NewLogObserver() (logr.Logger, *observer.ObservedLogs) {
 	return logger, logs
 }
 
-func CreateTestUniverseIfNotExists() *models.UniverseResp {
-	return ywContext.CreateUniverseIfNotExists(options.TestUniverseName, options.Provider, options.InstanceType, false, options.Regions...)
+func CreateTestUniverseIfNotExists() *util.YugatoolContext {
+	return createTestUniverse(options.TestUniverseName, false)
 }
 
-func GetTestUniverse() *models.UniverseResp {
-	return ywContext.GetUniverse(options.TestUniverseName)
+func CreateTLSTestUniverseIfNotExists() *util.YugatoolContext {
+	return createTestUniverse(options.TestUniverseName+"-tls", true)
+}
+func createTestUniverse(universeName string, withTLS bool) *util.YugatoolContext {
+	universe := ywContext.CreateUniverseIfNotExists(universeName, options.Provider, options.InstanceType, withTLS, options.Regions...)
+
+	Expect(universe.UniverseDetails.Clusters[0].UserIntent.EnableNodeToNodeEncrypt).To(Equal(withTLS))
+	Expect(universe.UniverseDetails.Clusters[0].UserIntent.EnableClientToNodeEncrypt).To(Equal(withTLS))
+
+	return ywContext.CreateYugatoolContext(universeName)
+}
+
+func CleanupTestUniverse() {
+	ywContext.CleanupUniverse(options.TestUniverseName)
+}
+
+func CleanupTLSTestUniverse() {
+	ywContext.CleanupUniverse(options.TestUniverseName + "-tls")
 }

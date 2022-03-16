@@ -47,14 +47,14 @@ func TabletInfoCmd(ctx *cmdutil.YugatoolContext) *cobra.Command {
 			// Positional argument
 			tablet := args[0]
 
-			return tabletInfo(ctx.Log, ctx.Client, tablet)
+			return tabletInfo(cmd, ctx.Log, ctx.Client, tablet)
 		},
 	}
 
 	return cmd
 }
 
-func tabletInfo(log logr.Logger, c *client.YBClient, tablet string) error {
+func tabletInfo(cmd *cobra.Command, log logr.Logger, c *client.YBClient, tablet string) error {
 	hosts, errors := c.AllTservers()
 	if len(errors) > 0 {
 		for _, err := range errors {
@@ -90,7 +90,7 @@ func tabletInfo(log logr.Logger, c *client.YBClient, tablet string) error {
 				if err != nil {
 					return err
 				}
-				fmt.Printf("============================================================================\n"+
+				fmt.Fprintf(cmd.OutOrStdout(), "============================================================================\n"+
 					" %s (UUID %s)\n"+
 					"============================================================================\n"+
 					"%s\n"+

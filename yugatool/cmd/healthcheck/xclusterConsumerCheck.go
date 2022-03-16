@@ -42,14 +42,14 @@ func XclusterConsumerCheck(ctx *cmdutil.YugatoolContext) *cobra.Command {
 			}
 			defer ctx.Client.Close()
 
-			return runXClusterConsumerCheck(ctx.Log, ctx.Client)
+			return runXClusterConsumerCheck(cmd, ctx.Log, ctx.Client)
 		},
 	}
 
 	return cmd
 }
 
-func runXClusterConsumerCheck(log logr.Logger, consumerClient *client.YBClient) error {
+func runXClusterConsumerCheck(cmd *cobra.Command, log logr.Logger, consumerClient *client.YBClient) error {
 	clusterConfig, err := consumerClient.Master.MasterService.GetMasterClusterConfig(&master.GetMasterClusterConfigRequestPB{})
 	if err != nil {
 		return err
@@ -73,7 +73,7 @@ func runXClusterConsumerCheck(log logr.Logger, consumerClient *client.YBClient) 
 			return err
 		}
 		if producerReport.Errors != nil {
-			fmt.Println(prototext.Format(producerReport))
+			fmt.Fprintln(cmd.OutOrStdout(), prototext.Format(producerReport))
 		}
 
 		// TODO: Check that all masters are actually valid on producer

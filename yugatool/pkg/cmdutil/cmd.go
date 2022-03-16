@@ -8,6 +8,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/pkg/flag"
+	"github.com/yugabyte/yb-tools/pkg/format"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugatool/api/yugatool/config"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
@@ -32,8 +33,12 @@ type YugatoolContext struct {
 func NewCommandContext() *YugatoolContext {
 	return &YugatoolContext{
 		Context: context.Background(),
-		Fs:      vfs.OS(),
 	}
+}
+
+func (ctx *YugatoolContext) WithVFS(fs vfs.Filesystem) *YugatoolContext {
+	ctx.Fs = fs
+	return ctx
 }
 
 func (ctx *YugatoolContext) WithGlobalOptions(options *GlobalOptions) *YugatoolContext {
@@ -52,9 +57,14 @@ func (ctx *YugatoolContext) WithOptions(options CommandOptions) *YugatoolContext
 }
 
 func (ctx *YugatoolContext) Setup() error {
-	if ctx.Cmd == nil ||
-		ctx.GlobalOptions == nil {
-		panic("command context is not set")
+	if ctx.Cmd == nil {
+		panic("ctx.Cmd is not set")
+	}
+	if ctx.GlobalOptions == nil {
+		panic("ctx.GlobalOptions is not set")
+	}
+	if ctx.Fs == nil {
+		panic("ctx.Fs is not set")
 	}
 
 	setupError := func(err error) error {
@@ -62,6 +72,8 @@ func (ctx *YugatoolContext) Setup() error {
 	}
 
 	var err error
+
+	format.SetOut(ctx.Cmd.OutOrStdout())
 
 	ctx.Log, err = GetLogger(ctx.Cmd.Name(), ctx.GlobalOptions.Debug)
 	if err != nil {

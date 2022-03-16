@@ -20,6 +20,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/blang/vfs"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -36,7 +37,7 @@ var (
 )
 
 // rootCmd represents the base command when called without any subcommands
-var rootCmd = RootInit()
+var rootCmd = RootInit(vfs.OS())
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
@@ -76,7 +77,7 @@ func initConfig() {
 	}
 }
 
-func RootInit() *cobra.Command {
+func RootInit(fs vfs.Filesystem) *cobra.Command {
 	globalOptions := &cmdutil.GlobalOptions{}
 
 	cmd := &cobra.Command{
@@ -90,6 +91,7 @@ func RootInit() *cobra.Command {
 	globalOptions.AddFlags(cmd)
 
 	ctx := cmdutil.NewCommandContext().
+		WithVFS(fs).
 		WithGlobalOptions(globalOptions)
 
 	// Top level commands

@@ -133,6 +133,6 @@ func runInitConsumer(ctx *cmdutil.YugatoolContext, options *InitConsumerOptions)
 		}
 	}
 
-	fmt.Println(initCDCCommand.String())
+	fmt.Println(ctx.Cmd.OutOrStdout(), initCDCCommand.String())
 	return nil
 }

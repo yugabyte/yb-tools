@@ -75,15 +75,15 @@ func get(ctx *cmdutil.YWClientContext, certificateInfo *models.CertificateInfo) 
 	}
 
 	if ctx.GlobalOptions.Output == "json" {
-		fmt.Println(string(certJSON))
+		fmt.Fprintln(ctx.Cmd.OutOrStdout(), string(certJSON))
 	} else if ctx.GlobalOptions.Output == "yaml" {
 		certYAML, err := yaml.JSONToYAML(certJSON)
 		if err != nil {
 			return err
 		}
-		fmt.Print(string(certYAML))
+		fmt.Fprint(ctx.Cmd.OutOrStdout(), string(certYAML))
 	} else {
-		fmt.Print(certificate.GetPayload().RootCrt)
+		fmt.Fprint(ctx.Cmd.OutOrStdout(), certificate.GetPayload().RootCrt)
 	}
 
 	return nil

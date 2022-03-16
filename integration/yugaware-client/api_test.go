@@ -31,10 +31,10 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 				universe := CreateTestUniverseIfNotExists()
 
 				params := access_keys.NewListParams().
-					WithCUUID(ywclient.CustomerUUID()).
+					WithCUUID(ywContext.CustomerUUID()).
 					WithPUUID(strfmt.UUID(universe.UniverseDetails.Clusters[0].UserIntent.Provider))
 
-				keysResponse, err := ywclient.PlatformAPIs.AccessKeys.List(params, ywclient.SwaggerAuth)
+				keysResponse, err := ywContext.PlatformAPIs.AccessKeys.List(params, ywContext.SwaggerAuth)
 				Expect(err).NotTo(HaveOccurred())
 				accessKeys = keysResponse.GetPayload()
 			})
@@ -55,9 +55,9 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 			BeforeEach(func() {
 				_ = CreateTestUniverseIfNotExists()
 
-				params := certificate_info.NewGetListOfCertificateParams().WithCUUID(ywclient.CustomerUUID())
+				params := certificate_info.NewGetListOfCertificateParams().WithCUUID(ywContext.CustomerUUID())
 
-				certificatesResponse, err := ywclient.PlatformAPIs.CertificateInfo.GetListOfCertificate(params, ywclient.SwaggerAuth)
+				certificatesResponse, err := ywContext.PlatformAPIs.CertificateInfo.GetListOfCertificate(params, ywContext.SwaggerAuth)
 				Expect(err).NotTo(HaveOccurred())
 				certificates = certificatesResponse.GetPayload()
 			})
@@ -68,10 +68,10 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 			When("Getting a root certificate", func() {
 				BeforeEach(func() {
 					params := certificate_info.NewGetRootCertParams().
-						WithCUUID(ywclient.CustomerUUID()).
+						WithCUUID(ywContext.CustomerUUID()).
 						WithRUUID(certificates[0].UUID)
 
-					certificateResponse, err := ywclient.PlatformAPIs.CertificateInfo.GetRootCert(params, ywclient.SwaggerAuth)
+					certificateResponse, err := ywContext.PlatformAPIs.CertificateInfo.GetRootCert(params, ywContext.SwaggerAuth)
 					Expect(err).NotTo(HaveOccurred())
 					certificate = certificateResponse.GetPayload()
 				})
@@ -92,8 +92,8 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 
 			BeforeEach(func() {
 				params := cloud_providers.NewGetListOfProvidersParams().
-					WithCUUID(ywclient.CustomerUUID())
-				response, err := ywclient.PlatformAPIs.CloudProviders.GetListOfProviders(params, ywclient.SwaggerAuth)
+					WithCUUID(ywContext.CustomerUUID())
+				response, err := ywContext.PlatformAPIs.CloudProviders.GetListOfProviders(params, ywContext.SwaggerAuth)
 				Expect(err).NotTo(HaveOccurred())
 				providers = response.GetPayload()
 			})
@@ -110,7 +110,7 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 			)
 			BeforeEach(func() {
 				params := session_management.NewAppVersionParams().WithDefaults()
-				response, err := ywclient.PlatformAPIs.SessionManagement.AppVersion(params)
+				response, err := ywContext.PlatformAPIs.SessionManagement.AppVersion(params)
 				Expect(err).NotTo(HaveOccurred())
 
 				appVersionReturn = response.GetPayload()
@@ -126,7 +126,7 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 			)
 			BeforeEach(func() {
 				params := session_management.NewCustomerCountParams().WithDefaults()
-				response, err := ywclient.PlatformAPIs.SessionManagement.CustomerCount(params)
+				response, err := ywContext.PlatformAPIs.SessionManagement.CustomerCount(params)
 				Expect(err).NotTo(HaveOccurred())
 
 				customerCount = response.GetPayload().Count
@@ -151,7 +151,7 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 					WithUniverseName(NewString(universe.Name)).
 					WithTimeout(time.Duration(options.DialTimeout) * time.Second)
 
-				response, err := ywclient.PlatformAPIs.SessionManagement.GetFilteredLogs(params, ywclient.SwaggerAuth)
+				response, err := ywContext.PlatformAPIs.SessionManagement.GetFilteredLogs(params, ywContext.SwaggerAuth)
 				Expect(err).NotTo(HaveOccurred())
 
 				logLines = response.GetPayload().Lines
@@ -169,7 +169,7 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 				params := session_management.NewGetLogsParams().
 					WithMaxLines(int32(10))
 
-				response, err := ywclient.PlatformAPIs.SessionManagement.GetLogs(params, ywclient.SwaggerAuth)
+				response, err := ywContext.PlatformAPIs.SessionManagement.GetLogs(params, ywContext.SwaggerAuth)
 				Expect(err).NotTo(HaveOccurred())
 
 				logLines = response.GetPayload().Lines
@@ -189,9 +189,9 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 			)
 			BeforeEach(func() {
 				params := session_management.NewGetPasswordPolicyParams().
-					WithCUUID(ywclient.CustomerUUID())
+					WithCUUID(ywContext.CustomerUUID())
 
-				err = ywclient.PlatformAPIs.SessionManagement.GetPasswordPolicy(params)
+				err = ywContext.PlatformAPIs.SessionManagement.GetPasswordPolicy(params)
 
 			})
 			It("Returns a valid password policy", func() {
@@ -207,13 +207,13 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 				params := session_management.NewGetSessionInfoParams().
 					WithDefaults()
 
-				response, err := ywclient.PlatformAPIs.SessionManagement.GetSessionInfo(params, ywclient.SwaggerAuth)
+				response, err := ywContext.PlatformAPIs.SessionManagement.GetSessionInfo(params, ywContext.SwaggerAuth)
 				Expect(err).NotTo(HaveOccurred())
 
 				sessionInfo = response.GetPayload()
 			})
 			It("Returns a valid password policy", func() {
-				Expect(sessionInfo.CustomerUUID).To(Equal(ywclient.CustomerUUID()))
+				Expect(sessionInfo.CustomerUUID).To(Equal(ywContext.CustomerUUID()))
 			})
 		})
 	})
@@ -232,16 +232,16 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 				clusters[0].UserIntent.NumNodes = newNodeCount
 
 				params := universe_cluster_mutations.NewUpdatePrimaryClusterParams().
-					WithCUUID(ywclient.CustomerUUID()).
+					WithCUUID(ywContext.CustomerUUID()).
 					WithUniUUID(originalUniverse.UniverseUUID).
 					WithUniverseConfigureTaskParams(&models.UniverseConfigureTaskParams{
 						Clusters:     clusters,
 						UniverseUUID: originalUniverse.UniverseUUID,
 					})
 
-				response, err := ywclient.PlatformAPIs.UniverseClusterMutations.UpdatePrimaryCluster(params, ywclient.SwaggerAuth)
+				response, err := ywContext.PlatformAPIs.UniverseClusterMutations.UpdatePrimaryCluster(params, ywContext.SwaggerAuth)
 				Expect(err).NotTo(HaveOccurred())
-				err = cmdutil.WaitForTaskCompletion(context.Background(), ywclient, response.GetPayload())
+				err = cmdutil.WaitForTaskCompletion(context.Background(), ywContext.YugawareClient, response.GetPayload())
 				Expect(err).NotTo(HaveOccurred())
 
 				universe = GetTestUniverse()
@@ -269,11 +269,11 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 
 				// This requires a dummy value to work around https://yugabyte.atlassian.net/browse/PLAT-2076
 				params := universe_management.NewResetUniverseVersionParams().
-					WithCUUID(ywclient.CustomerUUID()).
+					WithCUUID(ywContext.CustomerUUID()).
 					WithUniUUID(universe.UniverseUUID).
 					WithDummy(&models.DummyBody{})
 
-				response, err := ywclient.PlatformAPIs.UniverseManagement.ResetUniverseVersion(params, ywclient.SwaggerAuth)
+				response, err := ywContext.PlatformAPIs.UniverseManagement.ResetUniverseVersion(params, ywContext.SwaggerAuth)
 				Expect(err).NotTo(HaveOccurred())
 
 				resetResponse = response.GetPayload()

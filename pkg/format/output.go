@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"strconv"
 	"time"
 
@@ -15,6 +17,8 @@ import (
 	"github.com/icza/gox/mathx"
 	"github.com/spyzhov/ajson"
 )
+
+var outputWriter io.Writer
 
 func init() {
 	ajson.AddFunction("seconds_pretty", func(node *ajson.Node) (result *ajson.Node, err error) {
@@ -157,7 +161,7 @@ func (f *Output) Println() error {
 	}
 
 	if f.OutputType == "table" {
-		fmt.Println()
+		fmt.Fprintln(outputOrStdout())
 	}
 	return nil
 }
@@ -220,8 +224,8 @@ func (f *Output) outputYAML() error {
 		return err
 	}
 
-	fmt.Println("---")
-	fmt.Println(string(yamlDocument))
+	fmt.Fprintln(outputOrStdout(), "---")
+	fmt.Fprintln(outputOrStdout(), string(yamlDocument))
 	return nil
 }
 
@@ -241,7 +245,7 @@ func (f *Output) outputJSON() error {
 		return err
 	}
 
-	fmt.Println(string(document))
+	fmt.Fprintln(outputOrStdout(), string(document))
 	return nil
 }
 
@@ -274,9 +278,9 @@ func (f *Output) outputTable() error {
 
 	table.SetStyle(simpletable.StyleCompactClassic)
 	if f.OutputMessage != "" {
-		fmt.Printf("[ %s ]\n", f.OutputMessage)
+		fmt.Fprintf(outputOrStdout(), "[ %s ]\n", f.OutputMessage)
 	}
-	table.Println()
+	fmt.Fprintln(outputOrStdout(), table.String())
 
 	return nil
 }
@@ -388,4 +392,15 @@ func AJSONToIndentedJSON(root *ajson.Node, prefix, indent string) ([]byte, error
 	}
 
 	return json.MarshalIndent(jsonObj, prefix, indent)
+}
+
+func outputOrStdout() io.Writer {
+	if outputWriter != nil {
+		return outputWriter
+	}
+	return os.Stdout
+}
+
+func SetOut(out io.Writer) {
+	outputWriter = out
 }

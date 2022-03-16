@@ -121,7 +121,7 @@ func initProducer(ctx *cmdutil.YugatoolContext, o *InitProducerOptions) error {
 		}
 	}
 
-	fmt.Println(initCDCCommand.String())
+	fmt.Fprintln(ctx.Cmd.OutOrStdout(), initCDCCommand.String())
 
 	return nil
 }

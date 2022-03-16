@@ -192,7 +192,6 @@ func clusterInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) erro
 				if err != nil {
 					return err
 				}
-				//fmt.Printf("tablet: %s\n%s\n", tablet.GetTabletStatus().GetTabletId(), prototext.Format(consensusState))
 				tabletinfos = append(tabletinfos, &tabletinfo{
 					Tablet:         tablet,
 					ConsensusState: consensusState,
