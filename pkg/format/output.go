@@ -143,6 +143,11 @@ func (f *Output) Print() error {
 		return err
 	}
 
+	// No output type set, default to table
+	if f.OutputType == "" {
+		f.OutputType = "table"
+	}
+
 	if f.OutputType == "table" {
 		return f.outputTable()
 	} else if f.OutputType == "json" {
@@ -151,7 +156,7 @@ func (f *Output) Print() error {
 		return f.outputYAML()
 	}
 
-	return fmt.Errorf("unknown output type: %s", f.OutputType)
+	return fmt.Errorf("unsupported output type: %s", f.OutputType)
 }
 
 func (f *Output) Println() error {
@@ -252,6 +257,10 @@ func (f *Output) outputJSON() error {
 func (f *Output) outputTable() error {
 	table := simpletable.New()
 
+	if len(f.TableColumns) < 1 {
+		return fmt.Errorf("no output columns have been set")
+	}
+
 	table.Header = &simpletable.Header{}
 	for _, col := range f.TableColumns {
 		table.Header.Cells = append(table.Header.Cells, &simpletable.Cell{
@@ -267,10 +276,10 @@ func (f *Output) outputTable() error {
 			f.root = ajson.ArrayNode("", []*ajson.Node{f.root})
 		}
 
-		for _, ajsonRow := range f.root.MustArray() {
+		for i, ajsonRow := range f.root.MustArray() {
 			row, err := f.formatPathRow(ajsonRow)
 			if err != nil {
-				return fmt.Errorf("unable to format path row %s: %w", ajsonRow.String(), err)
+				return fmt.Errorf("unable to format path row[%d] %s: %w", i+1, ajsonRow.String(), err)
 			}
 			table.Body.Cells = append(table.Body.Cells, row)
 		}
@@ -307,7 +316,7 @@ func (f *Output) formatPathRow(root *ajson.Node) ([]*simpletable.Cell, error) {
 	var err error
 
 	var row []*simpletable.Cell
-	for _, col := range f.TableColumns {
+	for i, col := range f.TableColumns {
 		var cell *simpletable.Cell
 
 		if col.Expr != "" {
@@ -321,7 +330,7 @@ func (f *Output) formatPathRow(root *ajson.Node) ([]*simpletable.Cell, error) {
 				return formatPathRowError(err)
 			}
 		} else {
-			return formatPathRowError(fmt.Errorf("no expression or jsonpath set for column %s", col.Name))
+			return formatPathRowError(fmt.Errorf("no expression or jsonpath set for column %s[%d]", col.Name, i+1))
 		}
 
 		row = append(row, cell)
