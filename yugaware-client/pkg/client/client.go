@@ -169,9 +169,16 @@ func (c *YugawareClient) Connect() (*YugawareClient, error) {
 	// The csrfCookie is given to the client when connecting to this address. This cookie
 	// is required to access API endpoints that are intended for the Web GUI only, such as
 	// the Provider configuration interfaces.
-	_, err = c.newRequest().Path("/api/v1/platform_config").Get().Do()
+	yw, err := c.newRequest().Path("/api/v1/platform_config").Get().Do()
 
 	if err != nil {
+		if yw != nil {
+			if yw.Response != nil {
+				if yw.Response.StatusCode == 502 {
+					return nil, fmt.Errorf("connected but server responded 502: yugaware may not be up yet")
+				}
+			}
+		}
 		return nil, fmt.Errorf("unable to connect: %w", err)
 	}
 

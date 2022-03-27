@@ -18,6 +18,8 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/pkg/flag"
@@ -38,7 +40,7 @@ func RegisterCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 		Short: "Register a Yugaware server",
 		Long:  `Register a Yugaware server`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := ctx.WithCmd(cmd).WithOptions(options).Setup()
+			err := ctx.WithCmd(cmd).WithOptions(options).SetupNoClient()
 			if err != nil {
 				return err
 			}
@@ -48,7 +50,32 @@ func RegisterCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 				return err
 			}
 
-			return registerYugaware(ctx, options)
+			// We never want to use an API token when registering Yugaware, instead rely on user/password
+			ctx.GlobalOptions.APIToken = ""
+
+			globalTimeout := time.After(5 * time.Minute)
+
+			for {
+				select {
+				case <-time.After(1 * time.Second):
+					ctx.Client, err = cmdutil.ConnectToYugaware(ctx)
+					if err != nil {
+						if strings.HasSuffix(err.Error(), "connect: connection refused") {
+							continue
+						}
+						if err.Error() == "connected but server responded 502: yugaware may not be up yet" {
+							continue
+						}
+						return err
+					}
+					return registerYugaware(ctx, options)
+				case <-globalTimeout:
+					return fmt.Errorf("failed to connect to yugaware within timeout")
+				case <-ctx.Done():
+					ctx.Log.Info("connect wait cancelled")
+					return nil
+				}
+			}
 		},
 	}
 	options.AddFlags(registerCmd)
