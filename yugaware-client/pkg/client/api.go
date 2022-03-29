@@ -1,7 +1,6 @@
 package client
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/go-openapi/strfmt"
@@ -65,30 +64,6 @@ func (c *YugawareClient) Logout() error {
 	c.expireSession()
 
 	return c.cookiejar.Save()
-}
-
-func (c *YugawareClient) ConfigureKubernetesProvider(request *yugaware.ConfigureKubernetesProviderRequest) (*yugaware.ConfigureKubernetesProviderResponse, error) {
-
-	if c.customerUUID == "" {
-		return nil, fmt.Errorf("customerUUID is not set, are you logged in?")
-	}
-
-	KubernetesPath := "/api/v1/customers/" + string(c.customerUUID) + "/providers/kubernetes"
-	response := &yugaware.ConfigureKubernetesProviderResponse{}
-
-	_, err := c.newRequest().
-		Post().
-		Path(KubernetesPath).
-		RequestBody(request).
-		DecodeResponseInto(response).
-		Do()
-
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
-
 }
 
 func (c *YugawareClient) GetUniverseByIdentifier(identifier string) (*models.UniverseResp, error) {

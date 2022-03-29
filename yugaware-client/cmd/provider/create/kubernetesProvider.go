@@ -24,9 +24,10 @@ import (
 	"github.com/ghodss/yaml"
 	"github.com/go-logr/logr"
 	"github.com/go-openapi/runtime"
+	. "github.com/icza/gox/gox"
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/yugaware-client/entity/cli"
-	"github.com/yugabyte/yb-tools/yugaware-client/entity/yugaware"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/cloud_providers"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/cmdutil"
@@ -152,18 +153,18 @@ func registerKubernetesProvider(ctx *cmdutil.YWClientContext, provider *cli.Kube
 	ywc := ctx.Client
 
 	log = log.WithValues("name", provider.Name, "provider", "kubernetes")
-	request, err := makeKubernetesProviderRequest(log, provider)
+	request, err := makeKubernetesProviderRequest(log, ywc, provider)
 	if err != nil {
 		return err
 	}
 
 	log.Info("registering provider")
-	response, err := ywc.ConfigureKubernetesProvider(request)
+	response, err := ywc.PlatformAPIs.CloudProviders.CreateProviders(request, ywc.SwaggerAuth)
 	if err != nil {
 		log.Error(err, "failed to register provider")
 		return err
 	}
-	log.Info("registered provider", "response", response)
+	log.Info("registered provider", "response", response.GetPayload())
 
 	return nil
 }
@@ -178,7 +179,7 @@ func kubernetesProviderAlreadyConfigured(providers []*models.Provider, name, cod
 	return false
 }
 
-func makeKubernetesProviderRequest(log logr.Logger, provider *cli.KubernetesProvider) (*yugaware.ConfigureKubernetesProviderRequest, error) {
+func makeKubernetesProviderRequest(log logr.Logger, ywclient *client.YugawareClient, provider *cli.KubernetesProvider) (*cloud_providers.CreateProvidersParams, error) {
 	if provider.ImageRegistry == "" {
 		provider.ImageRegistry = "quay.io/yugabyte/yugabyte"
 	}
@@ -193,20 +194,7 @@ func makeKubernetesProviderRequest(log logr.Logger, provider *cli.KubernetesProv
 	// Open the pull secret if available
 	pullSecret, pullSecretName, pullSecretFilename := getPullSecret(log, provider.ImagePullSecretPath)
 
-	request := &yugaware.ConfigureKubernetesProviderRequest{
-		Code: "kubernetes",
-		Name: provider.Name,
-		Config: yugaware.KubernetesConfig{
-			// TODO: what should this be if the provider isn't GKE?
-			KubeconfigProvider:            "gke",
-			KubeconfigServiceAccount:      provider.ServiceAccountName,
-			KubeconfigImageRegistry:       provider.ImageRegistry,
-			KubeconfigImagePullSecretName: pullSecretName,
-			KubeconfigPullSecretName:      pullSecretFilename,
-			KubeconfigPullSecretContent:   string(pullSecret),
-		},
-	}
-
+	var regions []*models.Region
 	for _, region := range provider.Regions {
 		kubeRegion, err := lookupGkeRegion(region.Code)
 		if err != nil {
@@ -219,44 +207,59 @@ func makeKubernetesProviderRequest(log logr.Logger, provider *cli.KubernetesProv
 				return nil, err
 			}
 
-			kubeRegion.ZoneList = append(kubeRegion.ZoneList, kubeZone)
-
+			kubeRegion.Zones = append(kubeRegion.Zones, kubeZone)
 		}
 
-		request.RegionList = append(request.RegionList, kubeRegion)
-
+		regions = append(regions, kubeRegion)
 	}
+
+	request := cloud_providers.NewCreateProvidersParams().
+		WithCUUID(ywclient.CustomerUUID()).
+		WithCreateProviderRequest(&models.Provider{
+			Code: "kubernetes",
+			Config: map[string]string{
+				"KUBECONFIG_PROVIDER":               "gke",
+				"KUBECONFIG_SERVICE_ACCOUNT":        provider.ServiceAccountName,
+				"KUBECONFIG_IMAGE_REGISTRY":         provider.ImageRegistry,
+				"KUBECONFIG_IMAGE_PULL_SECRET_NAME": pullSecretName,
+				"KUBECONFIG_PULL_SECRET_NAME":       pullSecretFilename,
+				"KUBECONFIG_PULL_SECRET_CONTENT":    string(pullSecret),
+			},
+			Name:    provider.Name,
+			Regions: regions,
+		})
 
 	return request, nil
 }
 
-func getKubernetesZone(log logr.Logger, info cli.ZoneInfo, kubeconfig []byte) (yugaware.KubernetesZone, error) {
+func getKubernetesZone(log logr.Logger, info cli.ZoneInfo, kubeconfig []byte) (*models.AvailabilityZone, error) {
 	log = log.WithValues("zone", info.Name)
 	if info.Config.KubeconfigPath != "" {
 		log.Info("reading overridden kubeconfig", "path", info.Config.KubeconfigPath)
 		kubeconfigOverride, err := os.ReadFile(info.Config.KubeconfigPath)
 		if err != nil {
 			log.Error(err, "unable to read kubeconfig", "path", info.Config.KubeconfigPath)
-			return yugaware.KubernetesZone{}, err
+			return &models.AvailabilityZone{}, err
 		}
 		kubeconfig = kubeconfigOverride
 	}
-	zone := yugaware.KubernetesZone{
+
+	zone := &models.AvailabilityZone{
 		Code: info.Name,
-		Name: info.Name,
-		Config: yugaware.KubernetesZoneConfig{
-			StorageClass:      info.Config.StorageClass,
-			Overrides:         info.Config.Overrides,
-			KubeconfigName:    info.Name + "-kubeconfig",
-			KubeconfigContent: string(kubeconfig),
+		Name: NewString(info.Name),
+		Config: map[string]string{
+			"STORAGE_CLASS":      info.Config.StorageClass,
+			"OVERRIDES":          info.Config.Overrides,
+			"KUBECONFIG_NAME":    info.Name + "-kubeconfig",
+			"KUBECONFIG_CONTENT": string(kubeconfig),
 		},
 	}
 	log.V(1).Info("generated zone", "zone", &zone)
 	return zone, nil
 }
 
-func lookupGkeRegion(regionCode string) (yugaware.KubernetesRegion, error) {
-	RegionData := map[string]yugaware.KubernetesRegion{
+func lookupGkeRegion(regionCode string) (*models.Region, error) {
+	RegionData := map[string]*models.Region{
 		"us-west":         {Code: "us-west", Name: "US West", Latitude: 37, Longitude: -121},
 		"us-east":         {Code: "us-east", Name: "US East", Latitude: 36.8, Longitude: -79},
 		"us-south":        {Code: "us-south", Name: "US South", Latitude: 28, Longitude: -99},
@@ -277,7 +280,7 @@ func lookupGkeRegion(regionCode string) (yugaware.KubernetesRegion, error) {
 		for region := range RegionData {
 			validRegions = append(validRegions, region)
 		}
-		return yugaware.KubernetesRegion{}, fmt.Errorf("invalid region: %s must be one of: %v", regionCode, validRegions)
+		return &models.Region{}, fmt.Errorf("invalid region: %s must be one of: %v", regionCode, validRegions)
 	}
 	return RegionData[regionCode], nil
 }
