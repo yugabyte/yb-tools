@@ -3,6 +3,7 @@ package util
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/go-logr/logr"
@@ -11,6 +12,7 @@ import (
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/session_management"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
@@ -154,4 +156,25 @@ func (c *YWContext) CreateYugatoolContext(universeName string) *YugatoolContext 
 
 	// TODO: Should test with the clientCert or clientKey
 	return NewYugatoolContext(c.Log, c.GetMasterAddresses(universeName), int64(c.DialTimeout), cacert, nil, nil, skipHostVerification)
+}
+
+func (c *YWContext) DumpYugawareLogs() {
+	params := session_management.NewGetLogsParams().
+		WithMaxLines(int32(1200))
+
+	response, err := c.PlatformAPIs.SessionManagement.GetLogs(params, c.SwaggerAuth)
+	if err == nil {
+		logLines := response.GetPayload().Lines
+
+		fmt.Println("===============================================================")
+		fmt.Println("                       Yugaware Logs")
+		fmt.Println("===============================================================")
+		fmt.Println()
+
+		for _, line := range logLines {
+			fmt.Println(line)
+		}
+
+		fmt.Println()
+	}
 }

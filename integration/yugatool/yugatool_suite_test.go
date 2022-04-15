@@ -45,6 +45,8 @@ var (
 	logs   *observer.ObservedLogs
 
 	flags *pflag.FlagSet
+
+	failed = false
 )
 
 func init() {
@@ -89,11 +91,17 @@ var _ = BeforeSuite(func() {
 
 	By(fmt.Sprintf("connecting to host %s", options.Hostname))
 	ywContext = util.NewYugawareContext(ctx, logger, options.Hostname, options.DialTimeout, options.SkipHostVerification, options.CACert, options.ClientCert, options.ClientKey, options.APIToken)
+})
 
-	CreateTestUniverseIfNotExists()
+var _ = AfterEach(func() {
+	failed = failed || CurrentGinkgoTestDescription().Failed
 })
 
 var _ = AfterSuite(func() {
+	if ywContext != nil && failed {
+		fmt.Print("\ntest suite failed, attempting to dump yugaware logs...\n\n")
+		ywContext.DumpYugawareLogs()
+	}
 	if !options.SkipCleanup && ywContext != nil {
 		CleanupTestUniverse()
 		CleanupTLSTestUniverse()
