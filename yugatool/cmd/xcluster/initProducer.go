@@ -16,8 +16,8 @@ limitations under the License.
 package xcluster
 
 import (
+	"bytes"
 	"fmt"
-	"strings"
 
 	. "github.com/icza/gox/gox"
 	"github.com/spf13/cobra"
@@ -48,11 +48,15 @@ func InitProducerCmd(ctx *cmdutil.YugatoolContext) *cobra.Command {
 
 type InitProducerOptions struct {
 	KeyspaceName string `mapstructure:"keyspace"`
+	BatchSize    int    `mapstructure:"batch_size"`
 }
 
 func (o *InitProducerOptions) AddFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 	flags.StringVar(&o.KeyspaceName, "keyspace", "", "keyspace target for replication bootstrap")
+	// Use a sufficiently large number for default. Can't use MaxInt as we add this number
+	// to other Ints below.
+	flags.IntVar(&o.BatchSize, "batch-size", 100000, "number of tables per batch, defaults to no batching")
 }
 
 func (o *InitProducerOptions) Validate() error {
@@ -89,39 +93,44 @@ func getTablesToBootstrap(ctx *cmdutil.YugatoolContext, keyspaceName string) (*m
 	return tables, nil
 }
 
-func initProducer(ctx *cmdutil.YugatoolContext, o *InitProducerOptions) error {
-	tables, err := getTablesToBootstrap(ctx, o.KeyspaceName)
+func initProducer(ctx *cmdutil.YugatoolContext, options *InitProducerOptions) error {
+	tables, err := getTablesToBootstrap(ctx, options.KeyspaceName)
 	if err != nil {
 		return err
 	}
 
-	var initCDCCommand strings.Builder
+	var initCDCCommandPrefix bytes.Buffer
 
-	initCDCCommand.WriteString("yb-admin -master_addresses ")
-	initCDCCommand.WriteString("$PRODUCER_MASTERS")
+	initCDCCommandPrefix.WriteString("yb-admin -master_addresses ")
+	initCDCCommandPrefix.WriteString("$PRODUCER_MASTERS")
 
-	initCDCCommand.WriteRune(' ')
+	initCDCCommandPrefix.WriteRune(' ')
 
 	if util.HasTLS(ctx.Client.Config.GetTlsOpts()) {
-		initCDCCommand.WriteString("-certs_dir_name $CERTS_DIR")
+		initCDCCommandPrefix.WriteString("-certs_dir_name $CERTS_DIR")
 	}
 
-	initCDCCommand.WriteRune(' ')
+	initCDCCommandPrefix.WriteRune(' ')
 
-	initCDCCommand.WriteString("bootstrap_cdc_producer")
+	initCDCCommandPrefix.WriteString("bootstrap_cdc_producer")
 
-	initCDCCommand.WriteRune(' ')
+	initCDCCommandPrefix.WriteRune(' ')
 
-	for i, table := range tables.GetTables() {
-		if table.TableType.Number() == common.TableType_YQL_TABLE_TYPE.Number() {
-			initCDCCommand.Write(table.GetId())
-			if i+1 < len(tables.GetTables()) {
-				initCDCCommand.WriteRune(',')
+	var tablesArr = tables.GetTables()
+	for tablesArrIdx := 0; tablesArrIdx < len(tablesArr); tablesArrIdx += options.BatchSize {
+		var initCDCCommand = initCDCCommandPrefix
+		batch := tablesArr[tablesArrIdx:min(tablesArrIdx+options.BatchSize, len(tablesArr))]
+		for i, table := range batch {
+			if table.TableType.Number() == common.TableType_YQL_TABLE_TYPE.Number() {
+				initCDCCommand.Write(table.GetId())
+				if i+1 < len(batch) {
+					initCDCCommand.WriteRune(',')
+				}
 			}
 		}
-	}
 
-	fmt.Fprintln(ctx.Cmd.OutOrStdout(), initCDCCommand.String())
+		fmt.Fprintln(ctx.Cmd.OutOrStdout(), initCDCCommand.String())
+	}
 
 	return nil
 }
