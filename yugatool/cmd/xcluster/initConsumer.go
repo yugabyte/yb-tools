@@ -52,12 +52,16 @@ func InitConsumerCmd(ctx *cmdutil.YugatoolContext) *cobra.Command {
 type InitConsumerOptions struct {
 	KeyspaceName   string `mapstructure:"keyspace"`
 	SkipBootstraps bool   `mapstructure:"skip_bootstraps"`
+	BatchSize      int    `mapstructure:"batch_size"`
 }
 
 func (o *InitConsumerOptions) AddFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 	flags.StringVar(&o.KeyspaceName, "keyspace", "", "keyspace to replicate")
 	flags.BoolVar(&o.SkipBootstraps, "skip-bootstraps", false, "initialize replication without bootstrap IDs")
+        // Use a sufficiently large number for default. Can't use MaxInt as we add this number
+        // to other Ints below.
+	flags.IntVar(&o.BatchSize, "batch-size", 100000, "number of tables per batch, defaults to no batching")
 }
 
 func (o *InitConsumerOptions) Validate() error {
@@ -77,62 +81,76 @@ func runInitConsumer(ctx *cmdutil.YugatoolContext, options *InitConsumerOptions)
 		return err
 	}
 
-	var initCDCCommand bytes.Buffer
+	var initCDCCommandPrefix bytes.Buffer
 
-	initCDCCommand.WriteString("yb-admin -master_addresses ")
-	initCDCCommand.WriteString("$CONSUMER_MASTERS")
+	initCDCCommandPrefix.WriteString("yb-admin -master_addresses ")
+	initCDCCommandPrefix.WriteString("$CONSUMER_MASTERS")
 
-	initCDCCommand.WriteRune(' ')
+	initCDCCommandPrefix.WriteRune(' ')
 
 	if util.HasTLS(ctx.Client.Config.GetTlsOpts()) {
-		initCDCCommand.WriteString("-certs_dir_name $CERTS_DIR ")
+		initCDCCommandPrefix.WriteString("-certs_dir_name $CERTS_DIR ")
 	}
 
-	initCDCCommand.WriteString("setup_universe_replication ")
+	initCDCCommandPrefix.WriteString("setup_universe_replication ")
 
-	initCDCCommand.WriteString(clusterInfoCmd.ClusterConfig.GetClusterUuid())
+	initCDCCommandPrefix.WriteString(clusterInfoCmd.ClusterConfig.GetClusterUuid())
 
-	initCDCCommand.WriteString(" $PRODUCER_MASTERS ")
-	for i, table := range tables.GetTables() {
-		if table.TableType.Number() == common.TableType_YQL_TABLE_TYPE.Number() {
-			initCDCCommand.Write(table.GetId())
-			if i+1 < len(tables.GetTables()) {
-				initCDCCommand.WriteRune(',')
-			}
-		}
-	}
+	initCDCCommandPrefix.WriteString(" $PRODUCER_MASTERS ")
 
-	if !options.SkipBootstraps {
-		initCDCCommand.WriteRune(' ')
+	var tablesArr = tables.GetTables()
+	for tablesArrIdx := 0; tablesArrIdx < len(tablesArr); tablesArrIdx += options.BatchSize {
+		var initCDCCommand = initCDCCommandPrefix
+		batch := tablesArr[tablesArrIdx:min(tablesArrIdx+options.BatchSize, len(tablesArr))]
 
-		for i, table := range tables.GetTables() {
+		for i, table := range batch {
 			if table.TableType.Number() == common.TableType_YQL_TABLE_TYPE.Number() {
-				streams, err := ctx.Client.Master.MasterService.ListCDCStreams(&master.ListCDCStreamsRequestPB{
-					TableId: NewString(string(table.GetId())),
-				})
-				if err != nil {
-					return err
-				}
-				if streams.Error != nil {
-					return errors.Errorf("error getting stream table %s: %s", table, streams.Error)
-				}
-
-				if len(streams.GetStreams()) == 0 {
-					return errors.Errorf("bootstrap IDs not found for table %s: %s", table, streams)
-				}
-
-				if len(streams.GetStreams()) > 1 {
-					return errors.Errorf("found too many streams for table %s: %s", table, streams)
-				}
-
-				initCDCCommand.Write(streams.Streams[0].StreamId)
-				if i+1 < len(tables.GetTables()) {
+				initCDCCommand.Write(table.GetId())
+				if i+1 < len(batch) {
 					initCDCCommand.WriteRune(',')
 				}
 			}
 		}
-	}
 
-	fmt.Println(initCDCCommand.String())
+		if !options.SkipBootstraps {
+			initCDCCommand.WriteRune(' ')
+
+			for i, table := range batch {
+				if table.TableType.Number() == common.TableType_YQL_TABLE_TYPE.Number() {
+					streams, err := ctx.Client.Master.MasterService.ListCDCStreams(&master.ListCDCStreamsRequestPB{
+						TableId: NewString(string(table.GetId())),
+					})
+					if err != nil {
+						return err
+					}
+					if streams.Error != nil {
+						return errors.Errorf("error getting stream table %s: %s", table, streams.Error)
+					}
+
+					if len(streams.GetStreams()) == 0 {
+						return errors.Errorf("bootstrap IDs not found for table %s: %s", table, streams)
+					}
+
+					if len(streams.GetStreams()) > 1 {
+						return errors.Errorf("found too many streams for table %s: %s", table, streams)
+					}
+
+					initCDCCommand.Write(streams.Streams[0].StreamId)
+					if i+1 < len(batch) {
+						initCDCCommand.WriteRune(',')
+					}
+				}
+			}
+		}
+
+		fmt.Println(initCDCCommand.String())
+	}
 	return nil
+}
+
+func min(a, b int) int {
+	if a <= b {
+		return a
+	}
+	return b
 }
