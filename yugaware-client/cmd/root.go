@@ -25,6 +25,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd/certificate"
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd/provider"
+	"github.com/yugabyte/yb-tools/yugaware-client/cmd/session"
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd/universe"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/cmdutil"
 )
@@ -114,6 +115,13 @@ func RootInit() *cobra.Command {
 			Commands: []*cobra.Command{
 				provider.CreateCmd(ctx),
 				provider.ListCmd(ctx),
+			},
+		},
+		{
+			Name:        "session",
+			Description: "Session management utilities",
+			Commands: []*cobra.Command{
+				session.ServerLogCmd(ctx),
 			},
 		},
 		{
