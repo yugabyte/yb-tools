@@ -92,15 +92,23 @@ func runInitConsumer(ctx *cmdutil.YugatoolContext, options *InitConsumerOptions)
 		initCDCCommandPrefix.WriteString("-certs_dir_name $CERTS_DIR ")
 	}
 
-	initCDCCommandPrefix.WriteString("setup_universe_replication ")
-
-	initCDCCommandPrefix.WriteString(clusterInfoCmd.ClusterConfig.GetClusterUuid())
-
-	initCDCCommandPrefix.WriteString(" $PRODUCER_MASTERS ")
-
 	var tablesArr = tables.GetTables()
 	for tablesArrIdx := 0; tablesArrIdx < len(tablesArr); tablesArrIdx += options.BatchSize {
 		var initCDCCommand = initCDCCommandPrefix
+                if tablesArrIdx < options.BatchSize {
+	                initCDCCommand.WriteString("setup_universe_replication ")
+
+	                initCDCCommand.WriteString(clusterInfoCmd.ClusterConfig.GetClusterUuid())
+
+	                initCDCCommand.WriteString(" $PRODUCER_MASTERS ")
+
+                } else {
+	                initCDCCommand.WriteString("alter_universe_replication ")
+
+	                initCDCCommand.WriteString(clusterInfoCmd.ClusterConfig.GetClusterUuid())
+
+	                initCDCCommand.WriteString(" add_table ")
+                }
 		batch := tablesArr[tablesArrIdx:min(tablesArrIdx+options.BatchSize, len(tablesArr))]
 
 		for i, table := range batch {
