@@ -19,6 +19,7 @@ package cmd
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/pkg/format"
@@ -165,83 +166,118 @@ func clusterInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) erro
 	}
 
 	if options.TabletReport {
+		type Report struct {
+			output *format.Output
+			err    error
+		}
+
+		wg := &sync.WaitGroup{}
+		ch := make(chan Report)
+
 		for _, server := range tabletServers.GetServers() {
-			host, err := c.GetHostByUUID(server.GetInstanceId().GetPermanentUuid())
-			if err != nil {
-				ctx.Log.Error(err, "host connection failed", "server", server.InstanceId)
-				continue
-			}
-
-			tablets, err := host.TabletServerService.ListTablets(&tserver.ListTabletsRequestPB{})
-			if err != nil {
-				return err
-			}
-
-			type tabletinfo struct {
-				Tablet         *tserver.ListTabletsResponsePB_StatusAndSchemaPB `json:"tablet,omitempty"`
-				ConsensusState *consensus.GetConsensusStateResponsePB           `json:"consensus_state,omitempty"`
-			}
-			var tabletinfos []*tabletinfo
-			for _, tablet := range tablets.GetStatusAndSchema() {
-				pb := consensus.GetConsensusStateRequestPB{
-					DestUuid: host.Status.GetNodeInstance().GetPermanentUuid(),
-					TabletId: []byte(tablet.GetTabletStatus().GetTabletId()),
-					Type:     common.ConsensusConfigType_CONSENSUS_CONFIG_COMMITTED.Enum(),
-				}
-				consensusState, err := host.ConsensusService.GetConsensusState(&pb)
+			wg.Add(1)
+			go func(server *master.ListTabletServersResponsePB_Entry) {
+				log := ctx.Log.WithValues("server", server.InstanceId.PermanentUuid)
+				defer func() {
+					log.V(1).Info("done with waitgroup")
+					wg.Done()
+				}()
+				host, err := c.GetHostByUUID(server.GetInstanceId().GetPermanentUuid())
 				if err != nil {
-					return err
+					log.Error(err, "host connection failed")
+					return
 				}
-				tabletinfos = append(tabletinfos, &tabletinfo{
-					Tablet:         tablet,
-					ConsensusState: consensusState,
-				})
-			}
 
-			filter := &strings.Builder{}
-			if !options.ShowTombstonedFilter {
-				addFilter(filter, fmt.Sprintf(`@.tablet.tablet_status.tabletDataState != "%s"`, common.TabletDataState_TABLET_DATA_TOMBSTONED.String()))
-			}
+				tablets, err := host.TabletServerService.ListTablets(&tserver.ListTabletsRequestPB{})
+				if err != nil {
+					ch <- Report{nil, err}
+					return
+				}
 
-			if options.TableFilter != "" {
-				addFilter(filter, fmt.Sprintf(`@.tablet.tablet_status.tableName == "%s"`, options.TableFilter))
-			}
+				type tabletinfo struct {
+					Tablet         *tserver.ListTabletsResponsePB_StatusAndSchemaPB `json:"tablet,omitempty"`
+					ConsensusState *consensus.GetConsensusStateResponsePB           `json:"consensus_state,omitempty"`
+				}
+				var tabletinfos []*tabletinfo
+				for _, tablet := range tablets.GetStatusAndSchema() {
+					pb := consensus.GetConsensusStateRequestPB{
+						DestUuid: host.Status.GetNodeInstance().GetPermanentUuid(),
+						TabletId: []byte(tablet.GetTabletStatus().GetTabletId()),
+						Type:     common.ConsensusConfigType_CONSENSUS_CONFIG_COMMITTED.Enum(),
+					}
+					consensusState, err := host.ConsensusService.GetConsensusState(&pb)
+					if err != nil {
+						ch <- Report{nil, err}
+						return
+					}
+					tabletinfos = append(tabletinfos, &tabletinfo{
+						Tablet:         tablet,
+						ConsensusState: consensusState,
+					})
+				}
 
-			if options.NamespaceFilter != "" {
-				addFilter(filter, fmt.Sprintf(`@.tablet.tablet_status.namespaceName == "%s"`, options.NamespaceFilter))
-			}
+				filter := &strings.Builder{}
+				if !options.ShowTombstonedFilter {
+					addFilter(filter, fmt.Sprintf(`@.tablet.tablet_status.tabletDataState != "%s"`, common.TabletDataState_TABLET_DATA_TOMBSTONED.String()))
+				}
 
-			if options.LeadersOnlyFilter {
-				addFilter(filter, fmt.Sprintf(`@.consensus_state.leaderLeaseStatus == "%s"`, consensus.LeaderLeaseStatus_HAS_LEASE.String()))
-			}
+				if options.TableFilter != "" {
+					addFilter(filter, fmt.Sprintf(`@.tablet.tablet_status.tableName == "%s"`, options.TableFilter))
+				}
 
-			tabletReport := format.Output{
-				OutputMessage: fmt.Sprintf("Tablet Report: %s (%s)", host.Status.GetBoundRpcAddresses(), string(host.Status.GetNodeInstance().GetPermanentUuid())),
-				JSONObject:    tabletinfos,
-				OutputType:    ctx.GlobalOptions.Output,
-				TableColumns: []format.Column{
-					{Name: "TABLET", JSONPath: "$.tablet.tablet_status.tabletId"},
-					{Name: "TABLE", JSONPath: "$.tablet.tablet_status.tableName"},
-					{Name: "NAMESPACE", JSONPath: "$.tablet.tablet_status.namespaceName"},
-					{Name: "STATE", JSONPath: "$.tablet.tablet_status.state"},
-					{Name: "STATUS", JSONPath: "$.tablet.tablet_status.tabletDataState"},
-					{Name: "START_KEY", Expr: "base64_to_hex(@.tablet.tablet_status.partition.partitionKeyStart)"},
-					{Name: "END_KEY", Expr: "base64_to_hex(@.tablet.tablet_status.partition.partitionKeyEnd)"},
-					{Name: "SST_SIZE", Expr: "size_pretty(@.tablet.tablet_status.sstFilesDiskSize)"},
-					{Name: "WAL_SIZE", Expr: "size_pretty(@.tablet.tablet_status.walFilesDiskSize)"},
-					{Name: "CTERM", JSONPath: "$.consensus_state.cstate.currentTerm"},
-					{Name: "CIDX", JSONPath: "$.consensus_state.cstate.config.opidIndex"},
-					{Name: "LEADER", JSONPath: "$.consensus_state.cstate.leaderUuid"},
-					{Name: "LEASE_STATUS", JSONPath: "$.consensus_state.leaderLeaseStatus"},
-				},
-				Filter: filter.String(),
-			}
+				if options.NamespaceFilter != "" {
+					addFilter(filter, fmt.Sprintf(`@.tablet.tablet_status.namespaceName == "%s"`, options.NamespaceFilter))
+				}
 
-			err = tabletReport.Println()
-			if err != nil {
-				return err
-			}
+				if options.LeadersOnlyFilter {
+					addFilter(filter, fmt.Sprintf(`@.consensus_state.leaderLeaseStatus == "%s"`, consensus.LeaderLeaseStatus_HAS_LEASE.String()))
+				}
 
+				tabletReport := &format.Output{
+					OutputMessage: fmt.Sprintf("Tablet Report: %s (%s)", host.Status.GetBoundRpcAddresses(), string(host.Status.GetNodeInstance().GetPermanentUuid())),
+					JSONObject:    tabletinfos,
+					OutputType:    ctx.GlobalOptions.Output,
+					TableColumns: []format.Column{
+						{Name: "TABLET", JSONPath: "$.tablet.tablet_status.tabletId"},
+						{Name: "TABLE", JSONPath: "$.tablet.tablet_status.tableName"},
+						{Name: "NAMESPACE", JSONPath: "$.tablet.tablet_status.namespaceName"},
+						{Name: "STATE", JSONPath: "$.tablet.tablet_status.state"},
+						{Name: "STATUS", JSONPath: "$.tablet.tablet_status.tabletDataState"},
+						{Name: "START_KEY", Expr: "base64_to_hex(@.tablet.tablet_status.partition.partitionKeyStart)"},
+						{Name: "END_KEY", Expr: "base64_to_hex(@.tablet.tablet_status.partition.partitionKeyEnd)"},
+						{Name: "SST_SIZE", Expr: "size_pretty(@.tablet.tablet_status.sstFilesDiskSize)"},
+						{Name: "WAL_SIZE", Expr: "size_pretty(@.tablet.tablet_status.walFilesDiskSize)"},
+						{Name: "CTERM", JSONPath: "$.consensus_state.cstate.currentTerm"},
+						{Name: "CIDX", JSONPath: "$.consensus_state.cstate.config.opidIndex"},
+						{Name: "LEADER", JSONPath: "$.consensus_state.cstate.leaderUuid"},
+						{Name: "LEASE_STATUS", JSONPath: "$.consensus_state.leaderLeaseStatus"},
+					},
+					Filter: filter.String(),
+				}
+
+				log.V(1).Info("returning report")
+				ch <- Report{tabletReport, nil}
+			}(server)
+		}
+
+		go func() {
+			ctx.Log.V(1).Info("waiting for tablet reports to complete")
+			wg.Wait()
+			ctx.Log.V(1).Info("tablet reports have finished, closing channel")
+			close(ch)
+		}()
+
+		for tabletReport := range ch {
+			if tabletReport.err != nil {
+				ctx.Log.Error(err, "tablet report failed")
+			} else if tabletReport.output != nil {
+				err = tabletReport.output.Println()
+				if err != nil {
+					ctx.Log.Error(err, "tablet report returned error")
+				}
+			} else {
+				ctx.Log.Error(nil, "empty tablet report")
+			}
 		}
 	}
 	return nil
