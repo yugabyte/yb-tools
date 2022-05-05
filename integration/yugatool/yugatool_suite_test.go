@@ -64,7 +64,7 @@ func init() {
 	flags.StringVar(&options.Provider, "provider", "", "provider to use for tests")
 	flags.StringVar(&options.InstanceType, "instance-type", "", "instance type to use for tests")
 	flags.StringArrayVar(&options.Regions, "regions", nil, "regions to use for tests")
-	flags.StringVar(&options.TestUniverseName, "test-universe-name", "ybtools-itest-universe", "name of universe to create for tests")
+	flags.StringVar(&options.TestUniverseName, "test-universe-name", "ybtools-itest", "name of universe to create for tests")
 
 	flags.BoolVar(&options.SkipCleanup, "skip-cleanup", false, "skip test cleanup")
 
