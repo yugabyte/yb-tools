@@ -95,14 +95,15 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterEach(func() {
+	if ywContext != nil && CurrentGinkgoTestDescription().Failed {
+		fmt.Print("\ntest failed, attempting to dump yugaware logs...\n\n")
+		ywContext.DumpYugawareLogs()
+	}
+
 	failed = failed || CurrentGinkgoTestDescription().Failed
 })
 
 var _ = AfterSuite(func() {
-	if ywContext != nil && failed {
-		fmt.Print("\ntest suite failed, attempting to dump yugaware logs...\n\n")
-		ywContext.DumpYugawareLogs()
-	}
 	if !options.SkipCleanup && ywContext != nil {
 		ywContext.CleanupUniverse(options.TestUniverseName)
 	}
