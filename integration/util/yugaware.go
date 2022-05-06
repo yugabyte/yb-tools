@@ -155,12 +155,12 @@ func (c *YWContext) CreateYugatoolContext(universeName string) *YugatoolContext 
 	}
 
 	// TODO: Should test with the clientCert or clientKey
-	return NewYugatoolContext(c.Log, c.GetMasterAddresses(universeName), int64(c.DialTimeout), cacert, nil, nil, skipHostVerification)
+	return NewYugatoolContext(c.Log, universe, c.GetMasterAddresses(universeName), int64(c.DialTimeout), cacert, nil, nil, skipHostVerification)
 }
 
 func (c *YWContext) DumpYugawareLogs() {
 	params := session_management.NewGetLogsParams().
-		WithMaxLines(int32(1200))
+		WithMaxLines(int32(400))
 
 	response, err := c.PlatformAPIs.SessionManagement.GetLogs(params, c.SwaggerAuth)
 	if err == nil {

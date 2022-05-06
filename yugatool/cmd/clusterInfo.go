@@ -75,6 +75,11 @@ func (o *ClusterInfoOptions) Validate() error {
 
 var _ cmdutil.CommandOptions = &ClusterInfoOptions{}
 
+type TabletInfo struct {
+	Tablet         *tserver.ListTabletsResponsePB_StatusAndSchemaPB `json:"tablet,omitempty"`
+	ConsensusState *consensus.GetConsensusStateResponsePB           `json:"consensus_state,omitempty"`
+}
+
 func clusterInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) error {
 	c := ctx.Client
 
@@ -194,11 +199,7 @@ func clusterInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) erro
 					return
 				}
 
-				type tabletinfo struct {
-					Tablet         *tserver.ListTabletsResponsePB_StatusAndSchemaPB `json:"tablet,omitempty"`
-					ConsensusState *consensus.GetConsensusStateResponsePB           `json:"consensus_state,omitempty"`
-				}
-				var tabletinfos []*tabletinfo
+				var tabletinfos []*TabletInfo
 				for _, tablet := range tablets.GetStatusAndSchema() {
 					pb := consensus.GetConsensusStateRequestPB{
 						DestUuid: host.Status.GetNodeInstance().GetPermanentUuid(),
@@ -210,7 +211,7 @@ func clusterInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) erro
 						ch <- Report{nil, err}
 						return
 					}
-					tabletinfos = append(tabletinfos, &tabletinfo{
+					tabletinfos = append(tabletinfos, &TabletInfo{
 						Tablet:         tablet,
 						ConsensusState: consensusState,
 					})

@@ -2,6 +2,8 @@ package util
 
 import (
 	"bytes"
+	"database/sql"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/yugabyte/yb-tools/yugatool/cmd"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/client"
 	"github.com/yugabyte/yb-tools/yugatool/pkg/util"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
 type YugatoolContext struct {
@@ -27,10 +30,12 @@ type YugatoolContext struct {
 	ClientKey            string
 	SkipHostVerification bool
 
+	UniverseInfo *models.UniverseResp
+
 	Fs vfs.Filesystem
 }
 
-func NewYugatoolContext(logger logr.Logger, masters []*common.HostPortPB, dialTimeout int64, cacert, clientCert, clientKey []byte, skipHostVerification bool) *YugatoolContext {
+func NewYugatoolContext(logger logr.Logger, universe *models.UniverseResp, masters []*common.HostPortPB, dialTimeout int64, cacert, clientCert, clientKey []byte, skipHostVerification bool) *YugatoolContext {
 	var caCertPath, clientCertPath, clientKeyPath string
 	fs := memfs.Create()
 
@@ -81,6 +86,8 @@ func NewYugatoolContext(logger logr.Logger, masters []*common.HostPortPB, dialTi
 		ClientKey:            clientKeyPath,
 		SkipHostVerification: skipHostVerification,
 
+		UniverseInfo: universe,
+
 		Fs: fs,
 	}
 }
@@ -99,7 +106,7 @@ func (c *YugatoolContext) mastersString() string {
 	return masters.String()
 }
 
-func (c *YugatoolContext) RunYugatoolCommand(args ...string) ([]byte, error) {
+func (c *YugatoolContext) RunYugatoolCommand(args ...string) (*bytes.Buffer, error) {
 	ytCommand := cmd.RootInit(c.Fs)
 
 	args = append(args, "-m", c.mastersString(), "--dial-timeout", strconv.Itoa(int(c.DialTimeout)))
@@ -128,5 +135,24 @@ func (c *YugatoolContext) RunYugatoolCommand(args ...string) ([]byte, error) {
 
 	err := ytCommand.Execute()
 
-	return buf.Bytes(), err
+	return buf, err
+}
+
+func (c *YugatoolContext) YSQLConnection() *sql.DB {
+	var psqlInfo string
+	for _, server := range c.UniverseInfo.UniverseDetails.NodeDetailsSet {
+		if server.IsTserver {
+			sslMode := "disable"
+			if c.UniverseInfo.UniverseDetails.Clusters[0].UserIntent.EnableClientToNodeEncrypt {
+				sslMode = "require"
+			}
+
+			psqlInfo = fmt.Sprintf("host=%s port=%d user=%s dbname=%s sslmode=%s",
+				server.CloudInfo.PrivateIP, server.YsqlServerRPCPort, "yugabyte", "yugabyte", sslMode)
+			break
+		}
+	}
+	db, err := sql.Open("postgres", psqlInfo)
+	Expect(err).NotTo(HaveOccurred())
+	return db
 }
