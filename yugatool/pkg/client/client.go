@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"sync"
 
 	"github.com/blang/vfs"
 	"github.com/go-logr/logr"
@@ -29,8 +30,10 @@ type YBClient struct {
 
 	Master *HostState
 
+	m               sync.Mutex
 	tServersUUIDMap map[uuid.UUID]*HostState
-	dialer          dial.Dialer
+
+	dialer dial.Dialer
 
 	tabletServers *master.ListTabletServersResponsePB
 }
@@ -101,12 +104,19 @@ func (c *YBClient) GetHostByUUID(permanentUUID []byte) (*HostState, error) {
 		return nil, err
 	}
 
-	hoststate, ok := c.tServersUUIDMap[tserverUUID]
+	c.m.Lock()
+	defer c.m.Unlock()
+	hostState, ok := c.tServersUUIDMap[tserverUUID]
 	if !ok {
-		return c.dialTserver(tserverUUID)
+		hostState, err = c.dialTserver(tserverUUID)
+		if err != nil {
+			return hostState, err
+		}
+
+		c.tServersUUIDMap[tserverUUID] = hostState
 	}
 
-	return hoststate, nil
+	return hostState, nil
 }
 
 func (c *YBClient) dialTserver(tserverUUID uuid.UUID) (*HostState, error) {
@@ -129,8 +139,6 @@ func (c *YBClient) dialTserver(tserverUUID uuid.UUID) (*HostState, error) {
 				return nil, err
 			}
 
-			c.tServersUUIDMap[tserverUUID] = hostState
-
 			return hostState, nil
 		}
 	}
@@ -141,6 +149,8 @@ func (c *YBClient) dialTserver(tserverUUID uuid.UUID) (*HostState, error) {
 // TODO: Log errors
 func (c *YBClient) Close() {
 	c.Master.Close()
+	c.m.Lock()
+	defer c.m.Unlock()
 	for _, tserver := range c.tServersUUIDMap {
 		tserver.Close()
 	}
