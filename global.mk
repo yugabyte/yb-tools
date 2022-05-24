@@ -49,14 +49,10 @@ ginkgo: ${GOBIN}/ginkgo
 ${GOBIN}/ginkgo:
 	go install -modfile=${TOP_BUILDDIR}/go.mod github.com/onsi/ginkgo/ginkgo
 
-cobra: ${GOBIN}/cobra
-${GOBIN}/cobra:
-	go install -modfile=${TOP_BUILDDIR}/go.mod github.com/spf13/cobra/cobra
-
 swagger: ${GOBIN}/swagger
 ${GOBIN}/swagger:
 	go install -modfile=${TOP_BUILDDIR}/go.mod github.com/go-swagger/go-swagger/cmd/swagger
 
 protoc-gen-go: ${GOBIN}/protoc-gen-go
 ${GOBIN}/protoc-gen-go:
-	go install google.golang.org/protobuf/cmd/protoc-gen-go
+	go install -modfile=${TOP_BUILDDIR}/go.mod google.golang.org/protobuf/cmd/protoc-gen-go

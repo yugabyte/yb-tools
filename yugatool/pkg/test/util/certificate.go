@@ -12,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func GenerateCACertificate() ([]byte, error) {
+func GenerateCACertificate() ([]byte, *rsa.PrivateKey, error) {
 	certTemplate := &x509.Certificate{
 		Version:      3,
 		SerialNumber: big.NewInt(1),
@@ -35,20 +35,20 @@ func GenerateCACertificate() ([]byte, error) {
 	}
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		return []byte{}, err
+		return []byte{}, key, err
 	}
 
 	rootCACert, err := x509.CreateCertificate(rand.Reader, certTemplate, certTemplate, &key.PublicKey, key)
 	if err != nil {
-		return []byte{}, err
+		return []byte{}, key, err
 	}
 
 	rootCACertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: rootCACert})
 
-	return rootCACertPEM, nil
+	return rootCACertPEM, key, nil
 }
 
-func GeenerateClientCertFromCACertPEM(CACertPEM []byte) (cert, privatekey []byte, err error) {
+func GeenerateClientCertFromCACertPEM(CACertPEM []byte, key *rsa.PrivateKey) (cert, privateKey []byte, err error) {
 	CACertBlock, restOfPEM := pem.Decode(CACertPEM)
 	if len(restOfPEM) > 0 {
 		err = errors.New("extra bytes left over from decoding CACert")
@@ -60,10 +60,10 @@ func GeenerateClientCertFromCACertPEM(CACertPEM []byte) (cert, privatekey []byte
 		return
 	}
 
-	return GenerateClientCertificate(cacert)
+	return GenerateClientCertificate(cacert, key)
 }
 
-func GenerateClientCertificate(CACert *x509.Certificate) (cert, privateKey []byte, err error) {
+func GenerateClientCertificate(CACert *x509.Certificate, key *rsa.PrivateKey) (cert, privateKey []byte, err error) {
 	certTemplate := &x509.Certificate{
 		Version:      3,
 		SerialNumber: big.NewInt(2),
@@ -78,11 +78,6 @@ func GenerateClientCertificate(CACert *x509.Certificate) (cert, privateKey []byt
 			x509.ExtKeyUsageClientAuth,
 		},
 		DNSNames: []string{"*.*.yugabyte-db", "*.*.yugabyte-db.svc.cluster.local"},
-	}
-
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return
 	}
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, certTemplate, CACert, &key.PublicKey, key)

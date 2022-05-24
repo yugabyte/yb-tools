@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gocql/gocql"
 	"github.com/spf13/cobra"
+	"github.com/yugabyte/gocql"
 )
 
 const (

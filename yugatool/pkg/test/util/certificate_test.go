@@ -1,6 +1,7 @@
 package util_test
 
 import (
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
 
@@ -15,15 +16,14 @@ var _ = Describe("Certificate", func() {
 
 		decodedPEM         *pem.Block
 		CACert, clientCert *x509.Certificate
-		//clientKeyInterface interface{}
-		//clientKey          *rsa.PrivateKey
+		privateKey         *rsa.PrivateKey
 
 		certError       error
 		parseError      error
 		clientCertError error
 	)
 	BeforeEach(func() {
-		cacertPEM, certError = util2.GenerateCACertificate()
+		cacertPEM, privateKey, certError = util2.GenerateCACertificate()
 		decodedPEM, restOfPEM = pem.Decode(cacertPEM)
 		CACert, parseError = x509.ParseCertificate(decodedPEM.Bytes)
 	})
@@ -47,7 +47,8 @@ var _ = Describe("Certificate", func() {
 	})
 	Context("GenerateClientCertificate", func() {
 		BeforeEach(func() {
-			clientCertPEM, clientKeyPEM, clientCertError = util2.GenerateClientCertificate(CACert)
+			clientCertPEM, clientKeyPEM, clientCertError = util2.GenerateClientCertificate(CACert, privateKey)
+			Expect(clientCertError).NotTo(HaveOccurred())
 		})
 		When("generating a client certificate", func() {
 			BeforeEach(func() {
@@ -55,7 +56,6 @@ var _ = Describe("Certificate", func() {
 				clientCert, parseError = x509.ParseCertificate(decodedPEM.Bytes)
 			})
 			It("creates a valid client certificate", func() {
-				Expect(clientCertError).NotTo(HaveOccurred())
 				Expect(clientCertPEM).Should(ContainSubstring("-----BEGIN CERTIFICATE-----"))
 				Expect(clientCertPEM).Should(ContainSubstring("-----END CERTIFICATE-----"))
 
@@ -83,9 +83,6 @@ var _ = Describe("Certificate", func() {
 			Expect(restOfPEM).To(HaveLen(0))
 
 			Expect(parseError).NotTo(HaveOccurred())
-
-			//clientKey = clientKeyInterface.(*rsa.PrivateKey)
-			//Expect(clientKey.Validate()).To(Succeed())
 		})
 
 	})

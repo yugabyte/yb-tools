@@ -81,19 +81,19 @@ var _ = Describe("Client", func() {
 				}
 
 				yugabyteClient.Fs = memfs.Create()
-				CaCertPEM, err := util.GenerateCACertificate()
+				CaCertPEM, key, err := util.GenerateCACertificate()
 				Expect(err).NotTo(HaveOccurred())
 
 				err = vfs.WriteFile(yugabyteClient.Fs, CaCertPath, CaCertPEM, 0600)
 				Expect(err).NotTo(HaveOccurred())
 
-				clientCert, clientKey, err := util.GeenerateClientCertFromCACertPEM(CaCertPEM)
+				clientCert, privateKey, err := util.GeenerateClientCertFromCACertPEM(CaCertPEM, key)
 				Expect(err).NotTo(HaveOccurred())
 
 				err = vfs.WriteFile(yugabyteClient.Fs, CertPath, clientCert, 0600)
 				Expect(err).NotTo(HaveOccurred())
 
-				err = vfs.WriteFile(yugabyteClient.Fs, KeyPath, clientKey, 0600)
+				err = vfs.WriteFile(yugabyteClient.Fs, KeyPath, privateKey, 0600)
 				Expect(err).NotTo(HaveOccurred())
 			})
 			When("all certs are present", func() {
