@@ -21,6 +21,7 @@ import (
 type XClusterConfigEditFormData struct {
 
 	// Name
+	// Example: Repl-config1
 	Name string `json:"name,omitempty"`
 
 	// Status
@@ -28,6 +29,7 @@ type XClusterConfigEditFormData struct {
 	Status string `json:"status,omitempty"`
 
 	// Source Universe table IDs
+	// Example: [000033df000030008000000000004006, 000033df00003000800000000000400b]
 	// Unique: true
 	Tables []string `json:"tables"`
 }

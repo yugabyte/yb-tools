@@ -42,13 +42,13 @@ func NewTaskStatusOK() *TaskStatusOK {
 successful operation
 */
 type TaskStatusOK struct {
-	Payload map[string]interface{}
+	Payload interface{}
 }
 
 func (o *TaskStatusOK) Error() string {
 	return fmt.Sprintf("[GET /api/v1/customers/{cUUID}/tasks/{tUUID}][%d] taskStatusOK  %+v", 200, o.Payload)
 }
-func (o *TaskStatusOK) GetPayload() map[string]interface{} {
+func (o *TaskStatusOK) GetPayload() interface{} {
 	return o.Payload
 }
 

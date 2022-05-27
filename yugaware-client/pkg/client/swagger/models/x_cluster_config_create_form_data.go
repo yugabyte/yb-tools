@@ -20,6 +20,7 @@ import (
 type XClusterConfigCreateFormData struct {
 
 	// Name
+	// Example: Repl-config1
 	// Required: true
 	Name *string `json:"name"`
 
@@ -29,6 +30,7 @@ type XClusterConfigCreateFormData struct {
 	SourceUniverseUUID *strfmt.UUID `json:"sourceUniverseUUID"`
 
 	// Source Universe table IDs
+	// Example: [000033df000030008000000000004006, 000033df00003000800000000000400b]
 	// Required: true
 	// Unique: true
 	Tables []string `json:"tables"`

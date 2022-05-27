@@ -50,6 +50,11 @@ type CustomerConfig struct {
 	// Min Length: 1
 	Name *string `json:"name"`
 
+	// state of the customerConfig. Possible values are Active, QueuedForDeletion.
+	// Read Only: true
+	// Enum: [Active QueuedForDeletion]
+	State string `json:"state,omitempty"`
+
 	// Config type
 	// Example: STORAGE
 	// Required: true
@@ -78,6 +83,10 @@ func (m *CustomerConfig) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateName(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateState(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -159,6 +168,48 @@ func (m *CustomerConfig) validateName(formats strfmt.Registry) error {
 	return nil
 }
 
+var customerConfigTypeStatePropEnum []interface{}
+
+func init() {
+	var res []string
+	if err := json.Unmarshal([]byte(`["Active","QueuedForDeletion"]`), &res); err != nil {
+		panic(err)
+	}
+	for _, v := range res {
+		customerConfigTypeStatePropEnum = append(customerConfigTypeStatePropEnum, v)
+	}
+}
+
+const (
+
+	// CustomerConfigStateActive captures enum value "Active"
+	CustomerConfigStateActive string = "Active"
+
+	// CustomerConfigStateQueuedForDeletion captures enum value "QueuedForDeletion"
+	CustomerConfigStateQueuedForDeletion string = "QueuedForDeletion"
+)
+
+// prop value enum
+func (m *CustomerConfig) validateStateEnum(path, location string, value string) error {
+	if err := validate.EnumCase(path, location, value, customerConfigTypeStatePropEnum, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *CustomerConfig) validateState(formats strfmt.Registry) error {
+	if swag.IsZero(m.State) { // not required
+		return nil
+	}
+
+	// value enum
+	if err := m.validateStateEnum("state", "body", m.State); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 var customerConfigTypeTypePropEnum []interface{}
 
 func init() {
@@ -223,6 +274,10 @@ func (m *CustomerConfig) ContextValidate(ctx context.Context, formats strfmt.Reg
 		res = append(res, err)
 	}
 
+	if err := m.contextValidateState(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
 	if len(res) > 0 {
 		return errors.CompositeValidationError(res...)
 	}
@@ -241,6 +296,15 @@ func (m *CustomerConfig) contextValidateConfigUUID(ctx context.Context, formats 
 func (m *CustomerConfig) contextValidateCustomerUUID(ctx context.Context, formats strfmt.Registry) error {
 
 	if err := validate.ReadOnly(ctx, "customerUUID", "body", strfmt.UUID(m.CustomerUUID)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *CustomerConfig) contextValidateState(ctx context.Context, formats strfmt.Registry) error {
+
+	if err := validate.ReadOnly(ctx, "state", "body", string(m.State)); err != nil {
 		return err
 	}
 

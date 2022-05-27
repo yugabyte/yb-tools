@@ -7,6 +7,7 @@ package universe_information
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/strfmt"
@@ -19,41 +20,44 @@ type DownloadNodeLogsReader struct {
 
 // ReadResponse reads a server response into the received o.
 func (o *DownloadNodeLogsReader) ReadResponse(response runtime.ClientResponse, consumer runtime.Consumer) (interface{}, error) {
-	result := NewDownloadNodeLogsDefault(response.Code())
-	if err := result.readResponse(response, consumer, o.formats); err != nil {
-		return nil, err
-	}
-	if response.Code()/100 == 2 {
+	switch response.Code() {
+	case 200:
+		result := NewDownloadNodeLogsOK()
+		if err := result.readResponse(response, consumer, o.formats); err != nil {
+			return nil, err
+		}
 		return result, nil
-	}
-	return nil, result
-}
-
-// NewDownloadNodeLogsDefault creates a DownloadNodeLogsDefault with default headers values
-func NewDownloadNodeLogsDefault(code int) *DownloadNodeLogsDefault {
-	return &DownloadNodeLogsDefault{
-		_statusCode: code,
+	default:
+		return nil, runtime.NewAPIError("response status code does not match any response statuses defined for this endpoint in the swagger spec", response, response.Code())
 	}
 }
 
-/* DownloadNodeLogsDefault describes a response with status code -1, with default header values.
+// NewDownloadNodeLogsOK creates a DownloadNodeLogsOK with default headers values
+func NewDownloadNodeLogsOK() *DownloadNodeLogsOK {
+	return &DownloadNodeLogsOK{}
+}
+
+/* DownloadNodeLogsOK describes a response with status code 200, with default header values.
 
 successful operation
 */
-type DownloadNodeLogsDefault struct {
-	_statusCode int
+type DownloadNodeLogsOK struct {
+	Payload string
 }
 
-// Code gets the status code for the download node logs default response
-func (o *DownloadNodeLogsDefault) Code() int {
-	return o._statusCode
+func (o *DownloadNodeLogsOK) Error() string {
+	return fmt.Sprintf("[GET /api/v1/customers/{cUUID}/universes/{uniUUID}/{nodeName}/download_logs][%d] downloadNodeLogsOK  %+v", 200, o.Payload)
+}
+func (o *DownloadNodeLogsOK) GetPayload() string {
+	return o.Payload
 }
 
-func (o *DownloadNodeLogsDefault) Error() string {
-	return fmt.Sprintf("[GET /api/v1/customers/{cUUID}/universes/{uniUUID}/{nodeName}/download_logs][%d] downloadNodeLogs default ", o._statusCode)
-}
+func (o *DownloadNodeLogsOK) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
 
-func (o *DownloadNodeLogsDefault) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
+	// response payload
+	if err := consumer.Consume(response.Body(), &o.Payload); err != nil && err != io.EOF {
+		return err
+	}
 
 	return nil
 }

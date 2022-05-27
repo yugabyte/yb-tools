@@ -14,7 +14,7 @@ import (
 	"github.com/go-openapi/validate"
 )
 
-// CustomerTaskData Customer task data. Changes from upstream:  Adds date patterns. If you want to use a date-time without a pattern, you MUST use the date format as defined in RFC3339. https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.0.3.md#data-types
+// CustomerTaskData Customer task data
 //
 // swagger:model CustomerTaskData
 type CustomerTaskData struct {
@@ -24,13 +24,11 @@ type CustomerTaskData struct {
 
 	// Customer task completion time
 	// Example: 2021-06-17T15:00:05-0400
-	// Pattern: /([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})+([0-9]{4})/
 	// Format: date-time
 	CompletionTime strfmt.DateTime `json:"completionTime,omitempty"`
 
 	// Customer task creation time
 	// Example: 2021-06-17T15:00:05-0400
-	// Pattern: /([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})+([0-9]{4})/
 	// Format: date-time
 	CreateTime strfmt.DateTime `json:"createTime,omitempty"`
 
@@ -101,10 +99,6 @@ func (m *CustomerTaskData) validateCompletionTime(formats strfmt.Registry) error
 		return nil
 	}
 
-	if err := validate.Pattern("completionTime", "body", m.CompletionTime.String(), `/([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})+([0-9]{4})/`); err != nil {
-		return err
-	}
-
 	if err := validate.FormatOf("completionTime", "body", "date-time", m.CompletionTime.String(), formats); err != nil {
 		return err
 	}
@@ -115,10 +109,6 @@ func (m *CustomerTaskData) validateCompletionTime(formats strfmt.Registry) error
 func (m *CustomerTaskData) validateCreateTime(formats strfmt.Registry) error {
 	if swag.IsZero(m.CreateTime) { // not required
 		return nil
-	}
-
-	if err := validate.Pattern("createTime", "body", m.CreateTime.String(), `/([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})+([0-9]{4})/`); err != nil {
-		return err
 	}
 
 	if err := validate.FormatOf("createTime", "body", "date-time", m.CreateTime.String(), formats); err != nil {

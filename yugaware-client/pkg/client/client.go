@@ -59,7 +59,7 @@ type YugawareClient struct {
 
 	Log logr.Logger
 
-	PlatformAPIs *swaggerclient.YugabytePlatformAPIs
+	PlatformAPIs *swaggerclient.YugabyteDBAnywhereAPIs
 	SwaggerAuth  runtime.ClientAuthInfoWriter
 }
 

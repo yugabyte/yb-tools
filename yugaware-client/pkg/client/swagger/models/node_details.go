@@ -30,6 +30,9 @@ type NodeDetails struct {
 	// True if cron jobs were properly configured for this node
 	CronsActive bool `json:"cronsActive,omitempty"`
 
+	// Disks are mounted by uuid
+	DisksAreMountedByUUID bool `json:"disksAreMountedByUUID,omitempty"`
+
 	// True if this node is a master
 	IsMaster bool `json:"isMaster,omitempty"`
 
@@ -68,10 +71,9 @@ type NodeDetails struct {
 	// Node name
 	NodeName string `json:"nodeName,omitempty"`
 
-	// Node UUID: Changes from upstream: removes duplicate field
-	// Required: true
+	// Node UUID
 	// Format: uuid
-	NodeUUID *strfmt.UUID `json:"nodeUUID"`
+	NodeUUID strfmt.UUID `json:"nodeUuid,omitempty"`
 
 	// UUID of the cluster to which this node belongs
 	// Format: uuid
@@ -85,7 +87,7 @@ type NodeDetails struct {
 
 	// Node state
 	// Example: Provisioned
-	// Enum: [ToBeAdded InstanceCreated ServerSetup ToJoinCluster Provisioned SoftwareInstalled UpgradeSoftware UpdateGFlags Live Stopping Starting Stopped Unreachable ToBeRemoved Removing Removed Adding BeingDecommissioned Decommissioned UpdateCert ToggleTls Resizing SystemdUpgrade]
+	// Enum: [ToBeAdded InstanceCreated ServerSetup ToJoinCluster Provisioned SoftwareInstalled UpgradeSoftware UpdateGFlags Live Stopping Starting Stopped Unreachable ToBeRemoved Removing Removed Adding BeingDecommissioned Decommissioned UpdateCert ToggleTls Resizing SystemdUpgrade Terminating Terminated]
 	State string `json:"state,omitempty"`
 
 	// Tablet server HTTP port
@@ -93,6 +95,9 @@ type NodeDetails struct {
 
 	// Tablet server RPC port
 	TserverRPCPort int32 `json:"tserverRpcPort,omitempty"`
+
+	// True if this a custom YB AMI
+	YbPrebuiltAmi bool `json:"ybPrebuiltAmi,omitempty"`
 
 	// YCQL HTTP port
 	YqlServerHTTPPort int32 `json:"yqlServerHttpPort,omitempty"`
@@ -221,12 +226,11 @@ func (m *NodeDetails) validateMasterState(formats strfmt.Registry) error {
 }
 
 func (m *NodeDetails) validateNodeUUID(formats strfmt.Registry) error {
-
-	if err := validate.Required("nodeUUID", "body", m.NodeUUID); err != nil {
-		return err
+	if swag.IsZero(m.NodeUUID) { // not required
+		return nil
 	}
 
-	if err := validate.FormatOf("nodeUUID", "body", "uuid", m.NodeUUID.String(), formats); err != nil {
+	if err := validate.FormatOf("nodeUuid", "body", "uuid", m.NodeUUID.String(), formats); err != nil {
 		return err
 	}
 
@@ -249,7 +253,7 @@ var nodeDetailsTypeStatePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["ToBeAdded","InstanceCreated","ServerSetup","ToJoinCluster","Provisioned","SoftwareInstalled","UpgradeSoftware","UpdateGFlags","Live","Stopping","Starting","Stopped","Unreachable","ToBeRemoved","Removing","Removed","Adding","BeingDecommissioned","Decommissioned","UpdateCert","ToggleTls","Resizing","SystemdUpgrade"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["ToBeAdded","InstanceCreated","ServerSetup","ToJoinCluster","Provisioned","SoftwareInstalled","UpgradeSoftware","UpdateGFlags","Live","Stopping","Starting","Stopped","Unreachable","ToBeRemoved","Removing","Removed","Adding","BeingDecommissioned","Decommissioned","UpdateCert","ToggleTls","Resizing","SystemdUpgrade","Terminating","Terminated"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -327,6 +331,12 @@ const (
 
 	// NodeDetailsStateSystemdUpgrade captures enum value "SystemdUpgrade"
 	NodeDetailsStateSystemdUpgrade string = "SystemdUpgrade"
+
+	// NodeDetailsStateTerminating captures enum value "Terminating"
+	NodeDetailsStateTerminating string = "Terminating"
+
+	// NodeDetailsStateTerminated captures enum value "Terminated"
+	NodeDetailsStateTerminated string = "Terminated"
 )
 
 // prop value enum

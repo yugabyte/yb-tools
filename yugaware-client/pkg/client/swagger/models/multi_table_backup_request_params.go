@@ -16,7 +16,7 @@ import (
 	"github.com/go-openapi/validate"
 )
 
-// MultiTableBackupRequestParams Multi-table backup parameters. Changes from upstream: removes duplicate field
+// MultiTableBackupRequestParams Multi-table backup parameters
 //
 // swagger:model MultiTableBackupRequestParams
 type MultiTableBackupRequestParams struct {
@@ -25,8 +25,14 @@ type MultiTableBackupRequestParams struct {
 	// Enum: [CREATE RESTORE RESTORE_KEYS DELETE]
 	ActionType string `json:"actionType,omitempty"`
 
+	// Alter load balancer state
+	AlterLoadBalancer bool `json:"alterLoadBalancer,omitempty"`
+
 	// Backups
 	BackupList []*BackupTableParams `json:"backupList"`
+
+	// Backup size in bytes
+	BackupSizeInBytes int64 `json:"backupSizeInBytes,omitempty"`
 
 	// Backup type
 	// Enum: [YQL_TABLE_TYPE REDIS_TABLE_TYPE PGSQL_TABLE_TYPE TRANSACTION_STATUS_TABLE_TYPE]
@@ -42,18 +48,18 @@ type MultiTableBackupRequestParams struct {
 	// Communication ports
 	CommunicationPorts *CommunicationPorts `json:"communicationPorts,omitempty"`
 
-	// Controller type
-	Controller string `json:"controller,omitempty"`
-
 	// Cron expression for a recurring backup
 	CronExpression string `json:"cronExpression,omitempty"`
 
-	// Customer UUID
+	// Customer UUID. Changes From Upstream: Removes duplicate customerUUID field
 	// Format: uuid
 	CustomerUUID strfmt.UUID `json:"customerUUID,omitempty"`
 
 	// Device information
 	DeviceInfo *DeviceInfo `json:"deviceInfo,omitempty"`
+
+	// Disable checksum
+	DisableChecksum bool `json:"disableChecksum,omitempty"`
 
 	// Is verbose logging enabled
 	EnableVerboseLogs bool `json:"enableVerboseLogs,omitempty"`
@@ -67,6 +73,10 @@ type MultiTableBackupRequestParams struct {
 	// Expected universe version
 	ExpectedUniverseVersion int32 `json:"expectedUniverseVersion,omitempty"`
 
+	// Time unit for backup expiry time
+	// Enum: [NANOSECONDS MICROSECONDS MILLISECONDS SECONDS MINUTES HOURS DAYS MONTHS YEARS]
+	ExpiryTimeUnit string `json:"expiryTimeUnit,omitempty"`
+
 	// Extra dependencies
 	ExtraDependencies *ExtraDependencies `json:"extraDependencies,omitempty"`
 
@@ -75,6 +85,9 @@ type MultiTableBackupRequestParams struct {
 
 	// Should table backup errors be ignored
 	IgnoreErrors bool `json:"ignoreErrors,omitempty"`
+
+	// Full Table type backup
+	IsFullBackup bool `json:"isFullBackup,omitempty"`
 
 	// Key space
 	Keyspace string `json:"keyspace,omitempty"`
@@ -86,6 +99,9 @@ type MultiTableBackupRequestParams struct {
 	// Minimum number of backups to retain for a particular backup schedule
 	MinNumBackupsToRetain int32 `json:"minNumBackupsToRetain,omitempty"`
 
+	// User name of the new tables owner
+	NewOwner string `json:"newOwner,omitempty"`
+
 	// Node details
 	// Unique: true
 	NodeDetailsSet []*NodeDetails `json:"nodeDetailsSet"`
@@ -93,12 +109,18 @@ type MultiTableBackupRequestParams struct {
 	// Node exporter user
 	NodeExporterUser string `json:"nodeExporterUser,omitempty"`
 
+	// User name of the current tables owner
+	OldOwner string `json:"oldOwner,omitempty"`
+
 	// Number of concurrent commands to run on nodes over SSH
 	Parallelism int32 `json:"parallelism,omitempty"`
 
 	// Previous task UUID only if this task is a retry
 	// Format: uuid
 	PreviousTaskUUID strfmt.UUID `json:"previousTaskUUID,omitempty"`
+
+	// Per region locations
+	RegionLocations []*RegionLocations `json:"regionLocations"`
 
 	// Restore TimeStamp
 	RestoreTimeStamp string `json:"restoreTimeStamp,omitempty"`
@@ -116,6 +138,10 @@ type MultiTableBackupRequestParams struct {
 
 	// Is SSE
 	Sse bool `json:"sse,omitempty"`
+
+	// Type of backup storage config
+	// Enum: [S3 NFS AZ GCS FILE]
+	StorageConfigType string `json:"storageConfigType,omitempty"`
 
 	// Storage configuration UUID
 	// Required: true
@@ -151,6 +177,9 @@ type MultiTableBackupRequestParams struct {
 	// Associated universe UUID
 	// Format: uuid
 	UniverseUUID strfmt.UUID `json:"universeUUID,omitempty"`
+
+	// Is tablespaces information included
+	UseTablespaces bool `json:"useTablespaces,omitempty"`
 
 	// Previous software version
 	YbPrevSoftwareVersion string `json:"ybPrevSoftwareVersion,omitempty"`
@@ -192,6 +221,10 @@ func (m *MultiTableBackupRequestParams) Validate(formats strfmt.Registry) error 
 		res = append(res, err)
 	}
 
+	if err := m.validateExpiryTimeUnit(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validateExtraDependencies(formats); err != nil {
 		res = append(res, err)
 	}
@@ -208,11 +241,19 @@ func (m *MultiTableBackupRequestParams) Validate(formats strfmt.Registry) error 
 		res = append(res, err)
 	}
 
+	if err := m.validateRegionLocations(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validateScheduleUUID(formats); err != nil {
 		res = append(res, err)
 	}
 
 	if err := m.validateSourceXClusterConfigs(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateStorageConfigType(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -445,6 +486,69 @@ func (m *MultiTableBackupRequestParams) validateEncryptionAtRestConfig(formats s
 	return nil
 }
 
+var multiTableBackupRequestParamsTypeExpiryTimeUnitPropEnum []interface{}
+
+func init() {
+	var res []string
+	if err := json.Unmarshal([]byte(`["NANOSECONDS","MICROSECONDS","MILLISECONDS","SECONDS","MINUTES","HOURS","DAYS","MONTHS","YEARS"]`), &res); err != nil {
+		panic(err)
+	}
+	for _, v := range res {
+		multiTableBackupRequestParamsTypeExpiryTimeUnitPropEnum = append(multiTableBackupRequestParamsTypeExpiryTimeUnitPropEnum, v)
+	}
+}
+
+const (
+
+	// MultiTableBackupRequestParamsExpiryTimeUnitNANOSECONDS captures enum value "NANOSECONDS"
+	MultiTableBackupRequestParamsExpiryTimeUnitNANOSECONDS string = "NANOSECONDS"
+
+	// MultiTableBackupRequestParamsExpiryTimeUnitMICROSECONDS captures enum value "MICROSECONDS"
+	MultiTableBackupRequestParamsExpiryTimeUnitMICROSECONDS string = "MICROSECONDS"
+
+	// MultiTableBackupRequestParamsExpiryTimeUnitMILLISECONDS captures enum value "MILLISECONDS"
+	MultiTableBackupRequestParamsExpiryTimeUnitMILLISECONDS string = "MILLISECONDS"
+
+	// MultiTableBackupRequestParamsExpiryTimeUnitSECONDS captures enum value "SECONDS"
+	MultiTableBackupRequestParamsExpiryTimeUnitSECONDS string = "SECONDS"
+
+	// MultiTableBackupRequestParamsExpiryTimeUnitMINUTES captures enum value "MINUTES"
+	MultiTableBackupRequestParamsExpiryTimeUnitMINUTES string = "MINUTES"
+
+	// MultiTableBackupRequestParamsExpiryTimeUnitHOURS captures enum value "HOURS"
+	MultiTableBackupRequestParamsExpiryTimeUnitHOURS string = "HOURS"
+
+	// MultiTableBackupRequestParamsExpiryTimeUnitDAYS captures enum value "DAYS"
+	MultiTableBackupRequestParamsExpiryTimeUnitDAYS string = "DAYS"
+
+	// MultiTableBackupRequestParamsExpiryTimeUnitMONTHS captures enum value "MONTHS"
+	MultiTableBackupRequestParamsExpiryTimeUnitMONTHS string = "MONTHS"
+
+	// MultiTableBackupRequestParamsExpiryTimeUnitYEARS captures enum value "YEARS"
+	MultiTableBackupRequestParamsExpiryTimeUnitYEARS string = "YEARS"
+)
+
+// prop value enum
+func (m *MultiTableBackupRequestParams) validateExpiryTimeUnitEnum(path, location string, value string) error {
+	if err := validate.EnumCase(path, location, value, multiTableBackupRequestParamsTypeExpiryTimeUnitPropEnum, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *MultiTableBackupRequestParams) validateExpiryTimeUnit(formats strfmt.Registry) error {
+	if swag.IsZero(m.ExpiryTimeUnit) { // not required
+		return nil
+	}
+
+	// value enum
+	if err := m.validateExpiryTimeUnitEnum("expiryTimeUnit", "body", m.ExpiryTimeUnit); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (m *MultiTableBackupRequestParams) validateExtraDependencies(formats strfmt.Registry) error {
 	if swag.IsZero(m.ExtraDependencies) { // not required
 		return nil
@@ -518,6 +622,32 @@ func (m *MultiTableBackupRequestParams) validatePreviousTaskUUID(formats strfmt.
 	return nil
 }
 
+func (m *MultiTableBackupRequestParams) validateRegionLocations(formats strfmt.Registry) error {
+	if swag.IsZero(m.RegionLocations) { // not required
+		return nil
+	}
+
+	for i := 0; i < len(m.RegionLocations); i++ {
+		if swag.IsZero(m.RegionLocations[i]) { // not required
+			continue
+		}
+
+		if m.RegionLocations[i] != nil {
+			if err := m.RegionLocations[i].Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("regionLocations" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("regionLocations" + "." + strconv.Itoa(i))
+				}
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
 func (m *MultiTableBackupRequestParams) validateScheduleUUID(formats strfmt.Registry) error {
 	if swag.IsZero(m.ScheduleUUID) { // not required
 		return nil
@@ -541,6 +671,57 @@ func (m *MultiTableBackupRequestParams) validateSourceXClusterConfigs(formats st
 			return err
 		}
 
+	}
+
+	return nil
+}
+
+var multiTableBackupRequestParamsTypeStorageConfigTypePropEnum []interface{}
+
+func init() {
+	var res []string
+	if err := json.Unmarshal([]byte(`["S3","NFS","AZ","GCS","FILE"]`), &res); err != nil {
+		panic(err)
+	}
+	for _, v := range res {
+		multiTableBackupRequestParamsTypeStorageConfigTypePropEnum = append(multiTableBackupRequestParamsTypeStorageConfigTypePropEnum, v)
+	}
+}
+
+const (
+
+	// MultiTableBackupRequestParamsStorageConfigTypeS3 captures enum value "S3"
+	MultiTableBackupRequestParamsStorageConfigTypeS3 string = "S3"
+
+	// MultiTableBackupRequestParamsStorageConfigTypeNFS captures enum value "NFS"
+	MultiTableBackupRequestParamsStorageConfigTypeNFS string = "NFS"
+
+	// MultiTableBackupRequestParamsStorageConfigTypeAZ captures enum value "AZ"
+	MultiTableBackupRequestParamsStorageConfigTypeAZ string = "AZ"
+
+	// MultiTableBackupRequestParamsStorageConfigTypeGCS captures enum value "GCS"
+	MultiTableBackupRequestParamsStorageConfigTypeGCS string = "GCS"
+
+	// MultiTableBackupRequestParamsStorageConfigTypeFILE captures enum value "FILE"
+	MultiTableBackupRequestParamsStorageConfigTypeFILE string = "FILE"
+)
+
+// prop value enum
+func (m *MultiTableBackupRequestParams) validateStorageConfigTypeEnum(path, location string, value string) error {
+	if err := validate.EnumCase(path, location, value, multiTableBackupRequestParamsTypeStorageConfigTypePropEnum, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *MultiTableBackupRequestParams) validateStorageConfigType(formats strfmt.Registry) error {
+	if swag.IsZero(m.StorageConfigType) { // not required
+		return nil
+	}
+
+	// value enum
+	if err := m.validateStorageConfigTypeEnum("storageConfigType", "body", m.StorageConfigType); err != nil {
+		return err
 	}
 
 	return nil
@@ -640,6 +821,10 @@ func (m *MultiTableBackupRequestParams) ContextValidate(ctx context.Context, for
 	}
 
 	if err := m.contextValidateNodeDetailsSet(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateRegionLocations(ctx, formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -751,6 +936,26 @@ func (m *MultiTableBackupRequestParams) contextValidateNodeDetailsSet(ctx contex
 					return ve.ValidateName("nodeDetailsSet" + "." + strconv.Itoa(i))
 				} else if ce, ok := err.(*errors.CompositeError); ok {
 					return ce.ValidateName("nodeDetailsSet" + "." + strconv.Itoa(i))
+				}
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *MultiTableBackupRequestParams) contextValidateRegionLocations(ctx context.Context, formats strfmt.Registry) error {
+
+	for i := 0; i < len(m.RegionLocations); i++ {
+
+		if m.RegionLocations[i] != nil {
+			if err := m.RegionLocations[i].ContextValidate(ctx, formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("regionLocations" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("regionLocations" + "." + strconv.Itoa(i))
 				}
 				return err
 			}

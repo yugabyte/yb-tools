@@ -14,6 +14,8 @@ import (
 	"github.com/go-openapi/runtime"
 	cr "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
+
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
 // NewRunYsqlQueryUniverseParams creates a new RunYsqlQueryUniverseParams object,
@@ -58,6 +60,9 @@ func NewRunYsqlQueryUniverseParamsWithHTTPClient(client *http.Client) *RunYsqlQu
    Typically these are written to a http.Request.
 */
 type RunYsqlQueryUniverseParams struct {
+
+	// RunQueryFormData.
+	RunQueryFormData *models.RunQueryFormData
 
 	// CUUID.
 	//
@@ -122,6 +127,17 @@ func (o *RunYsqlQueryUniverseParams) SetHTTPClient(client *http.Client) {
 	o.HTTPClient = client
 }
 
+// WithRunQueryFormData adds the runQueryFormData to the run ysql query universe params
+func (o *RunYsqlQueryUniverseParams) WithRunQueryFormData(runQueryFormData *models.RunQueryFormData) *RunYsqlQueryUniverseParams {
+	o.SetRunQueryFormData(runQueryFormData)
+	return o
+}
+
+// SetRunQueryFormData adds the runQueryFormData to the run ysql query universe params
+func (o *RunYsqlQueryUniverseParams) SetRunQueryFormData(runQueryFormData *models.RunQueryFormData) {
+	o.RunQueryFormData = runQueryFormData
+}
+
 // WithCUUID adds the cUUID to the run ysql query universe params
 func (o *RunYsqlQueryUniverseParams) WithCUUID(cUUID strfmt.UUID) *RunYsqlQueryUniverseParams {
 	o.SetCUUID(cUUID)
@@ -151,6 +167,11 @@ func (o *RunYsqlQueryUniverseParams) WriteToRequest(r runtime.ClientRequest, reg
 		return err
 	}
 	var res []error
+	if o.RunQueryFormData != nil {
+		if err := r.SetBodyParam(o.RunQueryFormData); err != nil {
+			return err
+		}
+	}
 
 	// path param cUUID
 	if err := r.SetPathParam("cUUID", o.CUUID.String()); err != nil {

@@ -30,7 +30,11 @@ type ClientOption func(*runtime.ClientOperation)
 
 // ClientService is the interface for Client methods
 type ClientService interface {
+	CreateSelfSignedCert(params *CreateSelfSignedCertParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateSelfSignedCertOK, error)
+
 	DeleteCertificate(params *DeleteCertificateParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteCertificateOK, error)
+
+	EditCertificate(params *EditCertificateParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*EditCertificateOK, error)
 
 	GetCertificate(params *GetCertificateParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetCertificateOK, error)
 
@@ -45,6 +49,45 @@ type ClientService interface {
 	Upload(params *UploadParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UploadOK, error)
 
 	SetTransport(transport runtime.ClientTransport)
+}
+
+/*
+  CreateSelfSignedCert creates a self signed certificate
+*/
+func (a *Client) CreateSelfSignedCert(params *CreateSelfSignedCertParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateSelfSignedCertOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewCreateSelfSignedCertParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "createSelfSignedCert",
+		Method:             "POST",
+		PathPattern:        "/api/v1/customers/{cUUID}/certificates/create_self_signed_cert",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &CreateSelfSignedCertReader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*CreateSelfSignedCertOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for createSelfSignedCert: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
 }
 
 /*
@@ -83,6 +126,45 @@ func (a *Client) DeleteCertificate(params *DeleteCertificateParams, authInfo run
 	// unexpected success response
 	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
 	msg := fmt.Sprintf("unexpected success response for deleteCertificate: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  EditCertificate edits TLS certificate config details
+*/
+func (a *Client) EditCertificate(params *EditCertificateParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*EditCertificateOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewEditCertificateParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "editCertificate",
+		Method:             "POST",
+		PathPattern:        "/api/v1/customers/{cUUID}/certificates/{rUUID}/edit",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &EditCertificateReader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*EditCertificateOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for editCertificate: API contract not enforced by server. Client expected to get an error, but got: %T", result)
 	panic(msg)
 }
 

@@ -55,6 +55,11 @@ type CustomerConfigUI struct {
 	// Min Length: 1
 	Name *string `json:"name"`
 
+	// state of the customerConfig. Possible values are Active, QueuedForDeletion.
+	// Read Only: true
+	// Enum: [Active QueuedForDeletion]
+	State string `json:"state,omitempty"`
+
 	// Config type
 	// Example: STORAGE
 	// Required: true
@@ -87,6 +92,10 @@ func (m *CustomerConfigUI) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateName(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateState(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -166,6 +175,48 @@ func (m *CustomerConfigUI) validateName(formats strfmt.Registry) error {
 	}
 
 	if err := validate.MaxLength("name", "body", *m.Name, 50); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+var customerConfigUiTypeStatePropEnum []interface{}
+
+func init() {
+	var res []string
+	if err := json.Unmarshal([]byte(`["Active","QueuedForDeletion"]`), &res); err != nil {
+		panic(err)
+	}
+	for _, v := range res {
+		customerConfigUiTypeStatePropEnum = append(customerConfigUiTypeStatePropEnum, v)
+	}
+}
+
+const (
+
+	// CustomerConfigUIStateActive captures enum value "Active"
+	CustomerConfigUIStateActive string = "Active"
+
+	// CustomerConfigUIStateQueuedForDeletion captures enum value "QueuedForDeletion"
+	CustomerConfigUIStateQueuedForDeletion string = "QueuedForDeletion"
+)
+
+// prop value enum
+func (m *CustomerConfigUI) validateStateEnum(path, location string, value string) error {
+	if err := validate.EnumCase(path, location, value, customerConfigUiTypeStatePropEnum, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *CustomerConfigUI) validateState(formats strfmt.Registry) error {
+	if swag.IsZero(m.State) { // not required
+		return nil
+	}
+
+	// value enum
+	if err := m.validateStateEnum("state", "body", m.State); err != nil {
 		return err
 	}
 
@@ -266,6 +317,10 @@ func (m *CustomerConfigUI) ContextValidate(ctx context.Context, formats strfmt.R
 		res = append(res, err)
 	}
 
+	if err := m.contextValidateState(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.contextValidateUniverseDetails(ctx, formats); err != nil {
 		res = append(res, err)
 	}
@@ -297,6 +352,15 @@ func (m *CustomerConfigUI) contextValidateCustomerUUID(ctx context.Context, form
 func (m *CustomerConfigUI) contextValidateInUse(ctx context.Context, formats strfmt.Registry) error {
 
 	if err := validate.ReadOnly(ctx, "inUse", "body", m.InUse); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *CustomerConfigUI) contextValidateState(ctx context.Context, formats strfmt.Registry) error {
+
+	if err := validate.ReadOnly(ctx, "state", "body", string(m.State)); err != nil {
 		return err
 	}
 

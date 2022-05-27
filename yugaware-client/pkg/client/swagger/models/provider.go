@@ -62,9 +62,18 @@ type Provider struct {
 	// Provider name
 	Name string `json:"name,omitempty"`
 
+	// Transient property - only present in mutate API request
+	NtpServers []string `json:"ntpServers"`
+
+	// Transient property - only present in mutate API request
+	OverrideKeyValidate bool `json:"overrideKeyValidate,omitempty"`
+
 	// regions
 	// Required: true
 	Regions []*Region `json:"regions"`
+
+	// Transient property - only present in mutate API request
+	SetUpChrony bool `json:"setUpChrony,omitempty"`
 
 	// Transient property - only present in mutate API request
 	SSHPort int32 `json:"sshPort,omitempty"`
