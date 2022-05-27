@@ -8,6 +8,7 @@ package models
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/strfmt"
@@ -38,6 +39,9 @@ type ReleaseMetadata struct {
 	// Release notes
 	Notes []string `json:"notes"`
 
+	// Release packages
+	Packages []*Package `json:"packages"`
+
 	// S3 link and credentials
 	S3 *S3Location `json:"s3,omitempty"`
 
@@ -56,6 +60,10 @@ func (m *ReleaseMetadata) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateHTTP(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validatePackages(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -106,6 +114,32 @@ func (m *ReleaseMetadata) validateHTTP(formats strfmt.Registry) error {
 			}
 			return err
 		}
+	}
+
+	return nil
+}
+
+func (m *ReleaseMetadata) validatePackages(formats strfmt.Registry) error {
+	if swag.IsZero(m.Packages) { // not required
+		return nil
+	}
+
+	for i := 0; i < len(m.Packages); i++ {
+		if swag.IsZero(m.Packages[i]) { // not required
+			continue
+		}
+
+		if m.Packages[i] != nil {
+			if err := m.Packages[i].Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("packages" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("packages" + "." + strconv.Itoa(i))
+				}
+				return err
+			}
+		}
+
 	}
 
 	return nil
@@ -187,6 +221,10 @@ func (m *ReleaseMetadata) ContextValidate(ctx context.Context, formats strfmt.Re
 		res = append(res, err)
 	}
 
+	if err := m.contextValidatePackages(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.contextValidateS3(ctx, formats); err != nil {
 		res = append(res, err)
 	}
@@ -224,6 +262,26 @@ func (m *ReleaseMetadata) contextValidateHTTP(ctx context.Context, formats strfm
 			}
 			return err
 		}
+	}
+
+	return nil
+}
+
+func (m *ReleaseMetadata) contextValidatePackages(ctx context.Context, formats strfmt.Registry) error {
+
+	for i := 0; i < len(m.Packages); i++ {
+
+		if m.Packages[i] != nil {
+			if err := m.Packages[i].ContextValidate(ctx, formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("packages" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("packages" + "." + strconv.Itoa(i))
+				}
+				return err
+			}
+		}
+
 	}
 
 	return nil

@@ -7,9 +7,12 @@ package backups
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/strfmt"
+
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
 // StopBackupReader is a Reader for the StopBackup structure.
@@ -19,41 +22,46 @@ type StopBackupReader struct {
 
 // ReadResponse reads a server response into the received o.
 func (o *StopBackupReader) ReadResponse(response runtime.ClientResponse, consumer runtime.Consumer) (interface{}, error) {
-	result := NewStopBackupDefault(response.Code())
-	if err := result.readResponse(response, consumer, o.formats); err != nil {
-		return nil, err
-	}
-	if response.Code()/100 == 2 {
+	switch response.Code() {
+	case 200:
+		result := NewStopBackupOK()
+		if err := result.readResponse(response, consumer, o.formats); err != nil {
+			return nil, err
+		}
 		return result, nil
-	}
-	return nil, result
-}
-
-// NewStopBackupDefault creates a StopBackupDefault with default headers values
-func NewStopBackupDefault(code int) *StopBackupDefault {
-	return &StopBackupDefault{
-		_statusCode: code,
+	default:
+		return nil, runtime.NewAPIError("response status code does not match any response statuses defined for this endpoint in the swagger spec", response, response.Code())
 	}
 }
 
-/* StopBackupDefault describes a response with status code -1, with default header values.
+// NewStopBackupOK creates a StopBackupOK with default headers values
+func NewStopBackupOK() *StopBackupOK {
+	return &StopBackupOK{}
+}
+
+/* StopBackupOK describes a response with status code 200, with default header values.
 
 successful operation
 */
-type StopBackupDefault struct {
-	_statusCode int
+type StopBackupOK struct {
+	Payload *models.YBPSuccess
 }
 
-// Code gets the status code for the stop backup default response
-func (o *StopBackupDefault) Code() int {
-	return o._statusCode
+func (o *StopBackupOK) Error() string {
+	return fmt.Sprintf("[POST /api/v1/customers/{cUUID}/backups/{backupUUID}/stop][%d] stopBackupOK  %+v", 200, o.Payload)
+}
+func (o *StopBackupOK) GetPayload() *models.YBPSuccess {
+	return o.Payload
 }
 
-func (o *StopBackupDefault) Error() string {
-	return fmt.Sprintf("[POST /api/v1/customers/{cUUID}/backups/{backupUUID}/stop][%d] stopBackup default ", o._statusCode)
-}
+func (o *StopBackupOK) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
 
-func (o *StopBackupDefault) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
+	o.Payload = new(models.YBPSuccess)
+
+	// response payload
+	if err := consumer.Consume(response.Body(), o.Payload); err != nil && err != io.EOF {
+		return err
+	}
 
 	return nil
 }

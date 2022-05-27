@@ -12,7 +12,7 @@ import (
 	"github.com/go-openapi/swag"
 )
 
-// YBPError Generic error response from the Yugabyte Platform API
+// YBPError Generic error response from the YugabyteDB Anywhere API
 //
 // swagger:model YBPError
 type YBPError struct {

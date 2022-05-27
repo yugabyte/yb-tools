@@ -23,7 +23,7 @@ type CertificateInfo struct {
 
 	// Type of the certificate
 	// Example: SelfSigned
-	// Enum: [SelfSigned CustomCertHostPath CustomServerCert]
+	// Enum: [SelfSigned CustomCertHostPath CustomServerCert HashicorpVault]
 	CertType string `json:"certType,omitempty"`
 
 	// Certificate path
@@ -34,8 +34,13 @@ type CertificateInfo struct {
 	// Read Only: true
 	Checksum string `json:"checksum,omitempty"`
 
-	// Details about the certificate
-	CustomCertInfo *CustomCertInfo `json:"customCertInfo,omitempty"`
+	// custom cert path params
+	// Required: true
+	CustomCertPathParams *CustomCertInfo `json:"customCertPathParams"`
+
+	// custom h c p k i cert info
+	// Required: true
+	CustomHCPKICertInfo *HashicorpVaultConfigParams `json:"customHCPKICertInfo"`
 
 	// custom server cert info
 	// Required: true
@@ -83,7 +88,11 @@ func (m *CertificateInfo) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
-	if err := m.validateCustomCertInfo(formats); err != nil {
+	if err := m.validateCustomCertPathParams(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateCustomHCPKICertInfo(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -121,7 +130,7 @@ var certificateInfoTypeCertTypePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["SelfSigned","CustomCertHostPath","CustomServerCert"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["SelfSigned","CustomCertHostPath","CustomServerCert","HashicorpVault"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -139,6 +148,9 @@ const (
 
 	// CertificateInfoCertTypeCustomServerCert captures enum value "CustomServerCert"
 	CertificateInfoCertTypeCustomServerCert string = "CustomServerCert"
+
+	// CertificateInfoCertTypeHashicorpVault captures enum value "HashicorpVault"
+	CertificateInfoCertTypeHashicorpVault string = "HashicorpVault"
 )
 
 // prop value enum
@@ -162,17 +174,38 @@ func (m *CertificateInfo) validateCertType(formats strfmt.Registry) error {
 	return nil
 }
 
-func (m *CertificateInfo) validateCustomCertInfo(formats strfmt.Registry) error {
-	if swag.IsZero(m.CustomCertInfo) { // not required
-		return nil
+func (m *CertificateInfo) validateCustomCertPathParams(formats strfmt.Registry) error {
+
+	if err := validate.Required("customCertPathParams", "body", m.CustomCertPathParams); err != nil {
+		return err
 	}
 
-	if m.CustomCertInfo != nil {
-		if err := m.CustomCertInfo.Validate(formats); err != nil {
+	if m.CustomCertPathParams != nil {
+		if err := m.CustomCertPathParams.Validate(formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
-				return ve.ValidateName("customCertInfo")
+				return ve.ValidateName("customCertPathParams")
 			} else if ce, ok := err.(*errors.CompositeError); ok {
-				return ce.ValidateName("customCertInfo")
+				return ce.ValidateName("customCertPathParams")
+			}
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (m *CertificateInfo) validateCustomHCPKICertInfo(formats strfmt.Registry) error {
+
+	if err := validate.Required("customHCPKICertInfo", "body", m.CustomHCPKICertInfo); err != nil {
+		return err
+	}
+
+	if m.CustomHCPKICertInfo != nil {
+		if err := m.CustomHCPKICertInfo.Validate(formats); err != nil {
+			if ve, ok := err.(*errors.Validation); ok {
+				return ve.ValidateName("customHCPKICertInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("customHCPKICertInfo")
 			}
 			return err
 		}
@@ -283,7 +316,11 @@ func (m *CertificateInfo) ContextValidate(ctx context.Context, formats strfmt.Re
 		res = append(res, err)
 	}
 
-	if err := m.contextValidateCustomCertInfo(ctx, formats); err != nil {
+	if err := m.contextValidateCustomCertPathParams(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateCustomHCPKICertInfo(ctx, formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -318,14 +355,30 @@ func (m *CertificateInfo) contextValidateChecksum(ctx context.Context, formats s
 	return nil
 }
 
-func (m *CertificateInfo) contextValidateCustomCertInfo(ctx context.Context, formats strfmt.Registry) error {
+func (m *CertificateInfo) contextValidateCustomCertPathParams(ctx context.Context, formats strfmt.Registry) error {
 
-	if m.CustomCertInfo != nil {
-		if err := m.CustomCertInfo.ContextValidate(ctx, formats); err != nil {
+	if m.CustomCertPathParams != nil {
+		if err := m.CustomCertPathParams.ContextValidate(ctx, formats); err != nil {
 			if ve, ok := err.(*errors.Validation); ok {
-				return ve.ValidateName("customCertInfo")
+				return ve.ValidateName("customCertPathParams")
 			} else if ce, ok := err.(*errors.CompositeError); ok {
-				return ce.ValidateName("customCertInfo")
+				return ce.ValidateName("customCertPathParams")
+			}
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (m *CertificateInfo) contextValidateCustomHCPKICertInfo(ctx context.Context, formats strfmt.Registry) error {
+
+	if m.CustomHCPKICertInfo != nil {
+		if err := m.CustomHCPKICertInfo.ContextValidate(ctx, formats); err != nil {
+			if ve, ok := err.(*errors.Validation); ok {
+				return ve.ValidateName("customHCPKICertInfo")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("customHCPKICertInfo")
 			}
 			return err
 		}

@@ -36,6 +36,12 @@ type MaintenanceWindow struct {
 	// Format: uuid
 	CustomerUUID strfmt.UUID `json:"customerUUID"`
 
+	// Description
+	// Required: true
+	// Max Length: 2147483647
+	// Min Length: 1
+	Description *string `json:"description"`
+
 	// End time
 	// Required: true
 	// Format: date-time
@@ -76,6 +82,10 @@ func (m *MaintenanceWindow) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateCustomerUUID(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateDescription(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -145,6 +155,23 @@ func (m *MaintenanceWindow) validateCustomerUUID(formats strfmt.Registry) error 
 	}
 
 	if err := validate.FormatOf("customerUUID", "body", "uuid", m.CustomerUUID.String(), formats); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *MaintenanceWindow) validateDescription(formats strfmt.Registry) error {
+
+	if err := validate.Required("description", "body", m.Description); err != nil {
+		return err
+	}
+
+	if err := validate.MinLength("description", "body", *m.Description, 1); err != nil {
+		return err
+	}
+
+	if err := validate.MaxLength("description", "body", *m.Description, 2147483647); err != nil {
 		return err
 	}
 

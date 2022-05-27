@@ -14,6 +14,8 @@ import (
 	"github.com/go-openapi/runtime"
 	cr "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
+
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
 // NewCreateSupportBundleParams creates a new CreateSupportBundleParams object,
@@ -58,6 +60,12 @@ func NewCreateSupportBundleParamsWithHTTPClient(client *http.Client) *CreateSupp
    Typically these are written to a http.Request.
 */
 type CreateSupportBundleParams struct {
+
+	/* Dummy.
+
+	   Dummy value to work around platform bug PLAT-2076
+	*/
+	Dummy *models.DummyBody
 
 	// CUUID.
 	//
@@ -122,6 +130,17 @@ func (o *CreateSupportBundleParams) SetHTTPClient(client *http.Client) {
 	o.HTTPClient = client
 }
 
+// WithDummy adds the dummy to the create support bundle params
+func (o *CreateSupportBundleParams) WithDummy(dummy *models.DummyBody) *CreateSupportBundleParams {
+	o.SetDummy(dummy)
+	return o
+}
+
+// SetDummy adds the dummy to the create support bundle params
+func (o *CreateSupportBundleParams) SetDummy(dummy *models.DummyBody) {
+	o.Dummy = dummy
+}
+
 // WithCUUID adds the cUUID to the create support bundle params
 func (o *CreateSupportBundleParams) WithCUUID(cUUID strfmt.UUID) *CreateSupportBundleParams {
 	o.SetCUUID(cUUID)
@@ -151,6 +170,11 @@ func (o *CreateSupportBundleParams) WriteToRequest(r runtime.ClientRequest, reg 
 		return err
 	}
 	var res []error
+	if o.Dummy != nil {
+		if err := r.SetBodyParam(o.Dummy); err != nil {
+			return err
+		}
+	}
 
 	// path param cUUID
 	if err := r.SetPathParam("cUUID", o.CUUID.String()); err != nil {

@@ -14,6 +14,8 @@ import (
 	"github.com/go-openapi/runtime"
 	cr "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
+
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
 // NewCreateCustomerConfigParams creates a new CreateCustomerConfigParams object,
@@ -63,7 +65,7 @@ type CreateCustomerConfigParams struct {
 
 	   Configuration data to be created
 	*/
-	Config interface{}
+	Config *models.CustomerConfig
 
 	// CUUID.
 	//
@@ -124,13 +126,13 @@ func (o *CreateCustomerConfigParams) SetHTTPClient(client *http.Client) {
 }
 
 // WithConfig adds the config to the create customer config params
-func (o *CreateCustomerConfigParams) WithConfig(config interface{}) *CreateCustomerConfigParams {
+func (o *CreateCustomerConfigParams) WithConfig(config *models.CustomerConfig) *CreateCustomerConfigParams {
 	o.SetConfig(config)
 	return o
 }
 
 // SetConfig adds the config to the create customer config params
-func (o *CreateCustomerConfigParams) SetConfig(config interface{}) {
+func (o *CreateCustomerConfigParams) SetConfig(config *models.CustomerConfig) {
 	o.Config = config
 }
 

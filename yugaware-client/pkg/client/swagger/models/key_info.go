@@ -20,6 +20,9 @@ type KeyInfo struct {
 	// air gap install
 	AirGapInstall bool `json:"airGapInstall,omitempty"`
 
+	// delete remote
+	DeleteRemote bool `json:"deleteRemote,omitempty"`
+
 	// install node exporter
 	InstallNodeExporter bool `json:"installNodeExporter,omitempty"`
 
@@ -28,6 +31,9 @@ type KeyInfo struct {
 
 	// node exporter user
 	NodeExporterUser string `json:"nodeExporterUser,omitempty"`
+
+	// ntp servers
+	NtpServers []string `json:"ntpServers"`
 
 	// passwordless sudo access
 	PasswordlessSudoAccess bool `json:"passwordlessSudoAccess,omitempty"`
@@ -40,6 +46,12 @@ type KeyInfo struct {
 
 	// public key
 	PublicKey string `json:"publicKey,omitempty"`
+
+	// set up chrony
+	SetUpChrony bool `json:"setUpChrony,omitempty"`
+
+	// show set up chrony
+	ShowSetUpChrony bool `json:"showSetUpChrony,omitempty"`
 
 	// skip provisioning
 	SkipProvisioning bool `json:"skipProvisioning,omitempty"`

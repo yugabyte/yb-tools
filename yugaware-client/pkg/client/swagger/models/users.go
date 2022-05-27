@@ -27,7 +27,7 @@ type Users struct {
 	AuthTokenIssueDate strfmt.DateTime `json:"authTokenIssueDate,omitempty"`
 
 	// User creation date
-	// Example: 2021-06-17T15:00:05-0400
+	// Example: 2021-06-17T15:00:05-04:00
 	// Read Only: true
 	// Format: date-time
 	CreationDate strfmt.DateTime `json:"creationDate,omitempty"`

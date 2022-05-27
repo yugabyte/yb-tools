@@ -32,7 +32,13 @@ type ClientOption func(*runtime.ClientOperation)
 type ClientService interface {
 	CreateSupportBundle(params *CreateSupportBundleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateSupportBundleOK, error)
 
-	GetSupportBundle(params *GetSupportBundleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) error
+	DeleteSupportBundle(params *DeleteSupportBundleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteSupportBundleOK, error)
+
+	DownloadSupportBundle(params *DownloadSupportBundleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DownloadSupportBundleOK, error)
+
+	GetSupportBundle(params *GetSupportBundleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetSupportBundleOK, error)
+
+	ListSupportBundle(params *ListSupportBundleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListSupportBundleOK, error)
 
 	SetTransport(transport runtime.ClientTransport)
 }
@@ -77,9 +83,87 @@ func (a *Client) CreateSupportBundle(params *CreateSupportBundleParams, authInfo
 }
 
 /*
-  GetSupportBundle downloads support bundle
+  DeleteSupportBundle deletes a support bundle
 */
-func (a *Client) GetSupportBundle(params *GetSupportBundleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) error {
+func (a *Client) DeleteSupportBundle(params *DeleteSupportBundleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteSupportBundleOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewDeleteSupportBundleParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "deleteSupportBundle",
+		Method:             "DELETE",
+		PathPattern:        "/api/v1/customers/{cUUID}/universes/{uniUUID}/support_bundle/{sbUUID}",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &DeleteSupportBundleReader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*DeleteSupportBundleOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for deleteSupportBundle: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  DownloadSupportBundle downloads support bundle
+*/
+func (a *Client) DownloadSupportBundle(params *DownloadSupportBundleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DownloadSupportBundleOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewDownloadSupportBundleParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "downloadSupportBundle",
+		Method:             "GET",
+		PathPattern:        "/api/v1/customers/{cUUID}/universes/{uniUUID}/support_bundle/{sbUUID}/download",
+		ProducesMediaTypes: []string{"application/x-compressed"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &DownloadSupportBundleReader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*DownloadSupportBundleOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for downloadSupportBundle: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  GetSupportBundle gets a support bundle from a universe
+*/
+func (a *Client) GetSupportBundle(params *GetSupportBundleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetSupportBundleOK, error) {
 	// TODO: Validate the params before sending
 	if params == nil {
 		params = NewGetSupportBundleParams()
@@ -88,7 +172,7 @@ func (a *Client) GetSupportBundle(params *GetSupportBundleParams, authInfo runti
 		ID:                 "getSupportBundle",
 		Method:             "GET",
 		PathPattern:        "/api/v1/customers/{cUUID}/universes/{uniUUID}/support_bundle/{sbUUID}",
-		ProducesMediaTypes: []string{"application/x-compressed"},
+		ProducesMediaTypes: []string{"application/json"},
 		ConsumesMediaTypes: []string{"application/json"},
 		Schemes:            []string{"http", "https"},
 		Params:             params,
@@ -101,11 +185,57 @@ func (a *Client) GetSupportBundle(params *GetSupportBundleParams, authInfo runti
 		opt(op)
 	}
 
-	_, err := a.transport.Submit(op)
+	result, err := a.transport.Submit(op)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	success, ok := result.(*GetSupportBundleOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for getSupportBundle: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  ListSupportBundle lists all support bundles from a universe
+*/
+func (a *Client) ListSupportBundle(params *ListSupportBundleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListSupportBundleOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewListSupportBundleParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "listSupportBundle",
+		Method:             "GET",
+		PathPattern:        "/api/v1/customers/{cUUID}/universes/{uniUUID}/support_bundle",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &ListSupportBundleReader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*ListSupportBundleOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for listSupportBundle: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
 }
 
 // SetTransport changes the transport on the client

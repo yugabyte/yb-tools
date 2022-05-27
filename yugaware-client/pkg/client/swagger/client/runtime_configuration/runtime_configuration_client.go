@@ -30,17 +30,17 @@ type ClientOption func(*runtime.ClientOperation)
 
 // ClientService is the interface for Client methods
 type ClientService interface {
-	DeleteKey(params *DeleteKeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) error
+	DeleteKey(params *DeleteKeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteKeyOK, error)
 
 	GetConfig(params *GetConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetConfigOK, error)
 
-	GetConfigurationKey(params *GetConfigurationKeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) error
+	GetConfigurationKey(params *GetConfigurationKeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetConfigurationKeyOK, error)
 
 	ListKeys(params *ListKeysParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListKeysOK, error)
 
 	ListScopes(params *ListScopesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListScopesOK, error)
 
-	SetKey(params *SetKeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) error
+	SetKey(params *SetKeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*SetKeyOK, error)
 
 	SetTransport(transport runtime.ClientTransport)
 }
@@ -48,7 +48,7 @@ type ClientService interface {
 /*
   DeleteKey deletes a configuration key
 */
-func (a *Client) DeleteKey(params *DeleteKeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) error {
+func (a *Client) DeleteKey(params *DeleteKeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteKeyOK, error) {
 	// TODO: Validate the params before sending
 	if params == nil {
 		params = NewDeleteKeyParams()
@@ -70,11 +70,18 @@ func (a *Client) DeleteKey(params *DeleteKeyParams, authInfo runtime.ClientAuthI
 		opt(op)
 	}
 
-	_, err := a.transport.Submit(op)
+	result, err := a.transport.Submit(op)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	success, ok := result.(*DeleteKeyOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for deleteKey: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
 }
 
 /*
@@ -121,7 +128,7 @@ func (a *Client) GetConfig(params *GetConfigParams, authInfo runtime.ClientAuthI
 /*
   GetConfigurationKey gets a configuration key
 */
-func (a *Client) GetConfigurationKey(params *GetConfigurationKeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) error {
+func (a *Client) GetConfigurationKey(params *GetConfigurationKeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetConfigurationKeyOK, error) {
 	// TODO: Validate the params before sending
 	if params == nil {
 		params = NewGetConfigurationKeyParams()
@@ -143,11 +150,18 @@ func (a *Client) GetConfigurationKey(params *GetConfigurationKeyParams, authInfo
 		opt(op)
 	}
 
-	_, err := a.transport.Submit(op)
+	result, err := a.transport.Submit(op)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	success, ok := result.(*GetConfigurationKeyOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for getConfigurationKey: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
 }
 
 /*
@@ -235,7 +249,7 @@ func (a *Client) ListScopes(params *ListScopesParams, authInfo runtime.ClientAut
 /*
   SetKey updates a configuration key
 */
-func (a *Client) SetKey(params *SetKeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) error {
+func (a *Client) SetKey(params *SetKeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*SetKeyOK, error) {
 	// TODO: Validate the params before sending
 	if params == nil {
 		params = NewSetKeyParams()
@@ -257,11 +271,18 @@ func (a *Client) SetKey(params *SetKeyParams, authInfo runtime.ClientAuthInfoWri
 		opt(op)
 	}
 
-	_, err := a.transport.Submit(op)
+	result, err := a.transport.Submit(op)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	success, ok := result.(*SetKeyOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for setKey: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
 }
 
 // SetTransport changes the transport on the client

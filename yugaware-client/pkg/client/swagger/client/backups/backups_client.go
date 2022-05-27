@@ -34,13 +34,27 @@ type ClientService interface {
 
 	CreateMultiTableBackup(params *CreateMultiTableBackupParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateMultiTableBackupOK, error)
 
+	Createbackup(params *CreatebackupParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreatebackupOK, error)
+
+	CreatebackupSchedule(params *CreatebackupScheduleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreatebackupScheduleOK, error)
+
 	DeleteBackups(params *DeleteBackupsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteBackupsOK, error)
+
+	DeleteBackupsv2(params *DeleteBackupsv2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteBackupsv2OK, error)
+
+	EditBackupV2(params *EditBackupV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*EditBackupV2OK, error)
 
 	FetchBackupsByTaskUUID(params *FetchBackupsByTaskUUIDParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*FetchBackupsByTaskUUIDOK, error)
 
+	GetBackupV2(params *GetBackupV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetBackupV2OK, error)
+
+	ListBackupsV2(params *ListBackupsV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListBackupsV2OK, error)
+
 	Restore(params *RestoreParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*RestoreOK, error)
 
-	StopBackup(params *StopBackupParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) error
+	RestoreBackupV2(params *RestoreBackupV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*RestoreBackupV2OK, error)
+
+	StopBackup(params *StopBackupParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*StopBackupOK, error)
 
 	SetTransport(transport runtime.ClientTransport)
 }
@@ -124,6 +138,84 @@ func (a *Client) CreateMultiTableBackup(params *CreateMultiTableBackupParams, au
 }
 
 /*
+  Createbackup creates a backup
+*/
+func (a *Client) Createbackup(params *CreatebackupParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreatebackupOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewCreatebackupParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "createbackup",
+		Method:             "POST",
+		PathPattern:        "/api/v1/customers/{cUUID}/backups",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &CreatebackupReader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*CreatebackupOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for createbackup: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  CreatebackupSchedule creates backup schedule
+*/
+func (a *Client) CreatebackupSchedule(params *CreatebackupScheduleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreatebackupScheduleOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewCreatebackupScheduleParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "createbackupSchedule",
+		Method:             "POST",
+		PathPattern:        "/api/v1/customers/{cUUID}/create_backup_schedule",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &CreatebackupScheduleReader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*CreatebackupScheduleOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for createbackupSchedule: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
   DeleteBackups deletes backups
 */
 func (a *Client) DeleteBackups(params *DeleteBackupsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteBackupsOK, error) {
@@ -159,6 +251,86 @@ func (a *Client) DeleteBackups(params *DeleteBackupsParams, authInfo runtime.Cli
 	// unexpected success response
 	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
 	msg := fmt.Sprintf("unexpected success response for deleteBackups: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  DeleteBackupsv2 deletes backups v2
+*/
+func (a *Client) DeleteBackupsv2(params *DeleteBackupsv2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteBackupsv2OK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewDeleteBackupsv2Params()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "deleteBackupsv2",
+		Method:             "POST",
+		PathPattern:        "/api/v1/customers/{cUUID}/backups/delete",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &DeleteBackupsv2Reader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*DeleteBackupsv2OK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for deleteBackupsv2: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  EditBackupV2 edits a backup v2
+
+  Edit a backup
+*/
+func (a *Client) EditBackupV2(params *EditBackupV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*EditBackupV2OK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewEditBackupV2Params()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "editBackupV2",
+		Method:             "PUT",
+		PathPattern:        "/api/v1/customers/{cUUID}/backups/{backupUUID}",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &EditBackupV2Reader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*EditBackupV2OK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for editBackupV2: API contract not enforced by server. Client expected to get an error, but got: %T", result)
 	panic(msg)
 }
 
@@ -202,6 +374,84 @@ func (a *Client) FetchBackupsByTaskUUID(params *FetchBackupsByTaskUUIDParams, au
 }
 
 /*
+  GetBackupV2 gets backup v2
+*/
+func (a *Client) GetBackupV2(params *GetBackupV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetBackupV2OK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewGetBackupV2Params()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "getBackupV2",
+		Method:             "GET",
+		PathPattern:        "/api/v1/customers/{cUUID}/backups/{backupUUID}",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &GetBackupV2Reader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*GetBackupV2OK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for getBackupV2: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  ListBackupsV2 lists backups paginated v2
+*/
+func (a *Client) ListBackupsV2(params *ListBackupsV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListBackupsV2OK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewListBackupsV2Params()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "listBackupsV2",
+		Method:             "POST",
+		PathPattern:        "/api/v1/customers/{cUUID}/backups/page",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &ListBackupsV2Reader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*ListBackupsV2OK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for listBackupsV2: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
   Restore restores from a backup
 */
 func (a *Client) Restore(params *RestoreParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*RestoreOK, error) {
@@ -241,11 +491,50 @@ func (a *Client) Restore(params *RestoreParams, authInfo runtime.ClientAuthInfoW
 }
 
 /*
+  RestoreBackupV2 restores from a backup v2
+*/
+func (a *Client) RestoreBackupV2(params *RestoreBackupV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*RestoreBackupV2OK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewRestoreBackupV2Params()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "restoreBackupV2",
+		Method:             "POST",
+		PathPattern:        "/api/v1/customers/{cUUID}/restore",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &RestoreBackupV2Reader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*RestoreBackupV2OK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for restoreBackupV2: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
   StopBackup stops a backup
 
   Stop an in-progress backup
 */
-func (a *Client) StopBackup(params *StopBackupParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) error {
+func (a *Client) StopBackup(params *StopBackupParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*StopBackupOK, error) {
 	// TODO: Validate the params before sending
 	if params == nil {
 		params = NewStopBackupParams()
@@ -267,11 +556,18 @@ func (a *Client) StopBackup(params *StopBackupParams, authInfo runtime.ClientAut
 		opt(op)
 	}
 
-	_, err := a.transport.Submit(op)
+	result, err := a.transport.Submit(op)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	success, ok := result.(*StopBackupOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for stopBackup: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
 }
 
 // SetTransport changes the transport on the client

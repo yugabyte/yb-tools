@@ -38,9 +38,9 @@ type ClientService interface {
 
 	GetLogs(params *GetLogsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetLogsOK, error)
 
-	GetPasswordPolicy(params *GetPasswordPolicyParams, opts ...ClientOption) error
-
 	GetSessionInfo(params *GetSessionInfoParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetSessionInfoOK, error)
+
+	RegisterCustomer(params *RegisterCustomerParams, opts ...ClientOption) (*RegisterCustomerOK, error)
 
 	SetTransport(transport runtime.ClientTransport)
 }
@@ -135,7 +135,7 @@ func (a *Client) GetFilteredLogs(params *GetFilteredLogsParams, authInfo runtime
 		ID:                 "getFilteredLogs",
 		Method:             "GET",
 		PathPattern:        "/api/v1/logs",
-		ProducesMediaTypes: []string{"application/json"},
+		ProducesMediaTypes: []string{"text/plain"},
 		ConsumesMediaTypes: []string{"application/json"},
 		Schemes:            []string{"http", "https"},
 		Params:             params,
@@ -204,37 +204,6 @@ func (a *Client) GetLogs(params *GetLogsParams, authInfo runtime.ClientAuthInfoW
 }
 
 /*
-  GetPasswordPolicy get password policy API
-*/
-func (a *Client) GetPasswordPolicy(params *GetPasswordPolicyParams, opts ...ClientOption) error {
-	// TODO: Validate the params before sending
-	if params == nil {
-		params = NewGetPasswordPolicyParams()
-	}
-	op := &runtime.ClientOperation{
-		ID:                 "getPasswordPolicy",
-		Method:             "GET",
-		PathPattern:        "/api/v1/customers/{cUUID}/password_policy",
-		ProducesMediaTypes: []string{"application/json"},
-		ConsumesMediaTypes: []string{"application/json"},
-		Schemes:            []string{"http", "https"},
-		Params:             params,
-		Reader:             &GetPasswordPolicyReader{formats: a.formats},
-		Context:            params.Context,
-		Client:             params.HTTPClient,
-	}
-	for _, opt := range opts {
-		opt(op)
-	}
-
-	_, err := a.transport.Submit(op)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-/*
   GetSessionInfo gets current user customer uuid auth api token
 */
 func (a *Client) GetSessionInfo(params *GetSessionInfoParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetSessionInfoOK, error) {
@@ -270,6 +239,46 @@ func (a *Client) GetSessionInfo(params *GetSessionInfoParams, authInfo runtime.C
 	// unexpected success response
 	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
 	msg := fmt.Sprintf("unexpected success response for getSessionInfo: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  RegisterCustomer registers a customer
+
+  Creates new customer and user
+*/
+func (a *Client) RegisterCustomer(params *RegisterCustomerParams, opts ...ClientOption) (*RegisterCustomerOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewRegisterCustomerParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "registerCustomer",
+		Method:             "POST",
+		PathPattern:        "/api/v1/register",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &RegisterCustomerReader{formats: a.formats},
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*RegisterCustomerOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for registerCustomer: API contract not enforced by server. Client expected to get an error, but got: %T", result)
 	panic(msg)
 }
 

@@ -7,9 +7,12 @@ package node_instances
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/strfmt"
+
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
 // DeleteInstanceReader is a Reader for the DeleteInstance structure.
@@ -19,41 +22,46 @@ type DeleteInstanceReader struct {
 
 // ReadResponse reads a server response into the received o.
 func (o *DeleteInstanceReader) ReadResponse(response runtime.ClientResponse, consumer runtime.Consumer) (interface{}, error) {
-	result := NewDeleteInstanceDefault(response.Code())
-	if err := result.readResponse(response, consumer, o.formats); err != nil {
-		return nil, err
-	}
-	if response.Code()/100 == 2 {
+	switch response.Code() {
+	case 200:
+		result := NewDeleteInstanceOK()
+		if err := result.readResponse(response, consumer, o.formats); err != nil {
+			return nil, err
+		}
 		return result, nil
-	}
-	return nil, result
-}
-
-// NewDeleteInstanceDefault creates a DeleteInstanceDefault with default headers values
-func NewDeleteInstanceDefault(code int) *DeleteInstanceDefault {
-	return &DeleteInstanceDefault{
-		_statusCode: code,
+	default:
+		return nil, runtime.NewAPIError("response status code does not match any response statuses defined for this endpoint in the swagger spec", response, response.Code())
 	}
 }
 
-/* DeleteInstanceDefault describes a response with status code -1, with default header values.
+// NewDeleteInstanceOK creates a DeleteInstanceOK with default headers values
+func NewDeleteInstanceOK() *DeleteInstanceOK {
+	return &DeleteInstanceOK{}
+}
+
+/* DeleteInstanceOK describes a response with status code 200, with default header values.
 
 successful operation
 */
-type DeleteInstanceDefault struct {
-	_statusCode int
+type DeleteInstanceOK struct {
+	Payload *models.YBPSuccess
 }
 
-// Code gets the status code for the delete instance default response
-func (o *DeleteInstanceDefault) Code() int {
-	return o._statusCode
+func (o *DeleteInstanceOK) Error() string {
+	return fmt.Sprintf("[DELETE /api/v1/customers/{cUUID}/providers/{pUUID}/instances/{instanceIP}][%d] deleteInstanceOK  %+v", 200, o.Payload)
+}
+func (o *DeleteInstanceOK) GetPayload() *models.YBPSuccess {
+	return o.Payload
 }
 
-func (o *DeleteInstanceDefault) Error() string {
-	return fmt.Sprintf("[DELETE /api/v1/customers/{cUUID}/providers/{pUUID}/instances/{instanceIP}][%d] deleteInstance default ", o._statusCode)
-}
+func (o *DeleteInstanceOK) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
 
-func (o *DeleteInstanceDefault) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
+	o.Payload = new(models.YBPSuccess)
+
+	// response payload
+	if err := consumer.Consume(response.Body(), o.Payload); err != nil && err != io.EOF {
+		return err
+	}
 
 	return nil
 }

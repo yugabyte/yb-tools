@@ -24,7 +24,7 @@ type AvailabilityZone struct {
 	Active *bool `json:"active,omitempty"`
 
 	// AZ code
-	// Example: AWS
+	// Example: us-west1-a
 	Code string `json:"code,omitempty"`
 
 	// AZ configuration values
@@ -35,7 +35,7 @@ type AvailabilityZone struct {
 	KubeconfigPath string `json:"kubeconfigPath,omitempty"`
 
 	// AZ name
-	// Example: south-east-1
+	// Example: us-west1-a
 	// Required: true
 	Name *string `json:"name"`
 

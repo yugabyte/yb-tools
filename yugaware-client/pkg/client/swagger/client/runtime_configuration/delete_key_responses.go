@@ -7,9 +7,12 @@ package runtime_configuration
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/strfmt"
+
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
 // DeleteKeyReader is a Reader for the DeleteKey structure.
@@ -19,41 +22,46 @@ type DeleteKeyReader struct {
 
 // ReadResponse reads a server response into the received o.
 func (o *DeleteKeyReader) ReadResponse(response runtime.ClientResponse, consumer runtime.Consumer) (interface{}, error) {
-	result := NewDeleteKeyDefault(response.Code())
-	if err := result.readResponse(response, consumer, o.formats); err != nil {
-		return nil, err
-	}
-	if response.Code()/100 == 2 {
+	switch response.Code() {
+	case 200:
+		result := NewDeleteKeyOK()
+		if err := result.readResponse(response, consumer, o.formats); err != nil {
+			return nil, err
+		}
 		return result, nil
-	}
-	return nil, result
-}
-
-// NewDeleteKeyDefault creates a DeleteKeyDefault with default headers values
-func NewDeleteKeyDefault(code int) *DeleteKeyDefault {
-	return &DeleteKeyDefault{
-		_statusCode: code,
+	default:
+		return nil, runtime.NewAPIError("response status code does not match any response statuses defined for this endpoint in the swagger spec", response, response.Code())
 	}
 }
 
-/* DeleteKeyDefault describes a response with status code -1, with default header values.
+// NewDeleteKeyOK creates a DeleteKeyOK with default headers values
+func NewDeleteKeyOK() *DeleteKeyOK {
+	return &DeleteKeyOK{}
+}
+
+/* DeleteKeyOK describes a response with status code 200, with default header values.
 
 successful operation
 */
-type DeleteKeyDefault struct {
-	_statusCode int
+type DeleteKeyOK struct {
+	Payload *models.YBPSuccess
 }
 
-// Code gets the status code for the delete key default response
-func (o *DeleteKeyDefault) Code() int {
-	return o._statusCode
+func (o *DeleteKeyOK) Error() string {
+	return fmt.Sprintf("[DELETE /api/v1/customers/{cUUID}/runtime_config/{scope}/key/{key}][%d] deleteKeyOK  %+v", 200, o.Payload)
+}
+func (o *DeleteKeyOK) GetPayload() *models.YBPSuccess {
+	return o.Payload
 }
 
-func (o *DeleteKeyDefault) Error() string {
-	return fmt.Sprintf("[DELETE /api/v1/customers/{cUUID}/runtime_config/{scope}/key/{key}][%d] deleteKey default ", o._statusCode)
-}
+func (o *DeleteKeyOK) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
 
-func (o *DeleteKeyDefault) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
+	o.Payload = new(models.YBPSuccess)
+
+	// response payload
+	if err := consumer.Consume(response.Body(), o.Payload); err != nil && err != io.EOF {
+		return err
+	}
 
 	return nil
 }
