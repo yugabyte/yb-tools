@@ -42,6 +42,8 @@ type ClientService interface {
 
 	UpgradeSystemd(params *UpgradeSystemdParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpgradeSystemdOK, error)
 
+	UpgradeThirdpartySoftware(params *UpgradeThirdpartySoftwareParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpgradeThirdpartySoftwareOK, error)
+
 	UpgradeTLS(params *UpgradeTLSParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpgradeTLSOK, error)
 
 	UpgradeVMImage(params *UpgradeVMImageParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpgradeVMImageOK, error)
@@ -292,6 +294,47 @@ func (a *Client) UpgradeSystemd(params *UpgradeSystemdParams, authInfo runtime.C
 	// unexpected success response
 	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
 	msg := fmt.Sprintf("unexpected success response for upgradeSystemd: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  UpgradeThirdpartySoftware upgrades third party software
+
+  Queues a task to perform upgrade third-party software in a universe.
+*/
+func (a *Client) UpgradeThirdpartySoftware(params *UpgradeThirdpartySoftwareParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpgradeThirdpartySoftwareOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewUpgradeThirdpartySoftwareParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "upgradeThirdpartySoftware",
+		Method:             "POST",
+		PathPattern:        "/api/v1/customers/{cUUID}/universes/{uniUUID}/upgrade/thirdparty_software",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &UpgradeThirdpartySoftwareReader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*UpgradeThirdpartySoftwareOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for upgradeThirdpartySoftware: API contract not enforced by server. Client expected to get an error, but got: %T", result)
 	panic(msg)
 }
 

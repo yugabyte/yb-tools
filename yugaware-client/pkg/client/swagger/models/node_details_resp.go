@@ -93,7 +93,7 @@ type NodeDetailsResp struct {
 
 	// Node state
 	// Example: Provisioned
-	// Enum: [ToBeAdded InstanceCreated ServerSetup ToJoinCluster Provisioned SoftwareInstalled UpgradeSoftware UpdateGFlags Live Stopping Starting Stopped Unreachable ToBeRemoved Removing Removed Adding BeingDecommissioned Decommissioned UpdateCert ToggleTls Resizing SystemdUpgrade Terminating Terminated]
+	// Enum: [ToBeAdded InstanceCreated ServerSetup ToJoinCluster Reprovisioning Provisioned SoftwareInstalled UpgradeSoftware UpdateGFlags Live Stopping Starting Stopped Unreachable ToBeRemoved Removing Removed Adding BeingDecommissioned Decommissioned UpdateCert ToggleTls Resizing SystemdUpgrade Terminating Terminated]
 	State string `json:"state,omitempty"`
 
 	// Tablet server HTTP port
@@ -303,7 +303,7 @@ var nodeDetailsRespTypeStatePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["ToBeAdded","InstanceCreated","ServerSetup","ToJoinCluster","Provisioned","SoftwareInstalled","UpgradeSoftware","UpdateGFlags","Live","Stopping","Starting","Stopped","Unreachable","ToBeRemoved","Removing","Removed","Adding","BeingDecommissioned","Decommissioned","UpdateCert","ToggleTls","Resizing","SystemdUpgrade","Terminating","Terminated"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["ToBeAdded","InstanceCreated","ServerSetup","ToJoinCluster","Reprovisioning","Provisioned","SoftwareInstalled","UpgradeSoftware","UpdateGFlags","Live","Stopping","Starting","Stopped","Unreachable","ToBeRemoved","Removing","Removed","Adding","BeingDecommissioned","Decommissioned","UpdateCert","ToggleTls","Resizing","SystemdUpgrade","Terminating","Terminated"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -324,6 +324,9 @@ const (
 
 	// NodeDetailsRespStateToJoinCluster captures enum value "ToJoinCluster"
 	NodeDetailsRespStateToJoinCluster string = "ToJoinCluster"
+
+	// NodeDetailsRespStateReprovisioning captures enum value "Reprovisioning"
+	NodeDetailsRespStateReprovisioning string = "Reprovisioning"
 
 	// NodeDetailsRespStateProvisioned captures enum value "Provisioned"
 	NodeDetailsRespStateProvisioned string = "Provisioned"

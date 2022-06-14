@@ -126,7 +126,7 @@ func (a *Client) Delete(params *DeleteParams, authInfo runtime.ClientAuthInfoWri
 /*
   GetMaintenanceWindow gets details of a maintenance window
 
-  Changes from upstram: This method is called simply 'get' in the upstream swagger.json
+  Changes from upstream: This method is called simply 'get' in the upstream swagger.json
 */
 func (a *Client) GetMaintenanceWindow(params *GetMaintenanceWindowParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetMaintenanceWindowOK, error) {
 	// TODO: Validate the params before sending

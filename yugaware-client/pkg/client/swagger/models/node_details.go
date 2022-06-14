@@ -87,7 +87,7 @@ type NodeDetails struct {
 
 	// Node state
 	// Example: Provisioned
-	// Enum: [ToBeAdded InstanceCreated ServerSetup ToJoinCluster Provisioned SoftwareInstalled UpgradeSoftware UpdateGFlags Live Stopping Starting Stopped Unreachable ToBeRemoved Removing Removed Adding BeingDecommissioned Decommissioned UpdateCert ToggleTls Resizing SystemdUpgrade Terminating Terminated]
+	// Enum: [ToBeAdded InstanceCreated ServerSetup ToJoinCluster Reprovisioning Provisioned SoftwareInstalled UpgradeSoftware UpdateGFlags Live Stopping Starting Stopped Unreachable ToBeRemoved Removing Removed Adding BeingDecommissioned Decommissioned UpdateCert ToggleTls Resizing SystemdUpgrade Terminating Terminated]
 	State string `json:"state,omitempty"`
 
 	// Tablet server HTTP port
@@ -253,7 +253,7 @@ var nodeDetailsTypeStatePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["ToBeAdded","InstanceCreated","ServerSetup","ToJoinCluster","Provisioned","SoftwareInstalled","UpgradeSoftware","UpdateGFlags","Live","Stopping","Starting","Stopped","Unreachable","ToBeRemoved","Removing","Removed","Adding","BeingDecommissioned","Decommissioned","UpdateCert","ToggleTls","Resizing","SystemdUpgrade","Terminating","Terminated"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["ToBeAdded","InstanceCreated","ServerSetup","ToJoinCluster","Reprovisioning","Provisioned","SoftwareInstalled","UpgradeSoftware","UpdateGFlags","Live","Stopping","Starting","Stopped","Unreachable","ToBeRemoved","Removing","Removed","Adding","BeingDecommissioned","Decommissioned","UpdateCert","ToggleTls","Resizing","SystemdUpgrade","Terminating","Terminated"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -274,6 +274,9 @@ const (
 
 	// NodeDetailsStateToJoinCluster captures enum value "ToJoinCluster"
 	NodeDetailsStateToJoinCluster string = "ToJoinCluster"
+
+	// NodeDetailsStateReprovisioning captures enum value "Reprovisioning"
+	NodeDetailsStateReprovisioning string = "Reprovisioning"
 
 	// NodeDetailsStateProvisioned captures enum value "Provisioned"
 	NodeDetailsStateProvisioned string = "Provisioned"
