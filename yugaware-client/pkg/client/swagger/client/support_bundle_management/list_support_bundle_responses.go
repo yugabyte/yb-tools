@@ -11,6 +11,8 @@ import (
 
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/strfmt"
+
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
 // ListSupportBundleReader is a Reader for the ListSupportBundle structure.
@@ -42,13 +44,13 @@ func NewListSupportBundleOK() *ListSupportBundleOK {
 successful operation
 */
 type ListSupportBundleOK struct {
-	Payload []interface{}
+	Payload []*models.SupportBundle
 }
 
 func (o *ListSupportBundleOK) Error() string {
 	return fmt.Sprintf("[GET /api/v1/customers/{cUUID}/universes/{uniUUID}/support_bundle][%d] listSupportBundleOK  %+v", 200, o.Payload)
 }
-func (o *ListSupportBundleOK) GetPayload() []interface{} {
+func (o *ListSupportBundleOK) GetPayload() []*models.SupportBundle {
 	return o.Payload
 }
 

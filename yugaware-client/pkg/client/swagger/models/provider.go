@@ -76,6 +76,9 @@ type Provider struct {
 	SetUpChrony bool `json:"setUpChrony,omitempty"`
 
 	// Transient property - only present in mutate API request
+	ShowSetUpChrony bool `json:"showSetUpChrony,omitempty"`
+
+	// Transient property - only present in mutate API request
 	SSHPort int32 `json:"sshPort,omitempty"`
 
 	// Transient property - only present in mutate API request

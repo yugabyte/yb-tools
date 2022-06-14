@@ -14,6 +14,8 @@ import (
 	"github.com/go-openapi/runtime"
 	cr "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
+
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
 // NewGetMasterAddressesParams creates a new GetMasterAddressesParams object,
@@ -58,6 +60,12 @@ func NewGetMasterAddressesParamsWithHTTPClient(client *http.Client) *GetMasterAd
    Typically these are written to a http.Request.
 */
 type GetMasterAddressesParams struct {
+
+	/* Dummy.
+
+	   Dummy value to work around platform bug PLAT-2076
+	*/
+	Dummy *models.DummyBody
 
 	// CUUID.
 	//
@@ -122,6 +130,17 @@ func (o *GetMasterAddressesParams) SetHTTPClient(client *http.Client) {
 	o.HTTPClient = client
 }
 
+// WithDummy adds the dummy to the get master addresses params
+func (o *GetMasterAddressesParams) WithDummy(dummy *models.DummyBody) *GetMasterAddressesParams {
+	o.SetDummy(dummy)
+	return o
+}
+
+// SetDummy adds the dummy to the get master addresses params
+func (o *GetMasterAddressesParams) SetDummy(dummy *models.DummyBody) {
+	o.Dummy = dummy
+}
+
 // WithCUUID adds the cUUID to the get master addresses params
 func (o *GetMasterAddressesParams) WithCUUID(cUUID strfmt.UUID) *GetMasterAddressesParams {
 	o.SetCUUID(cUUID)
@@ -151,6 +170,11 @@ func (o *GetMasterAddressesParams) WriteToRequest(r runtime.ClientRequest, reg s
 		return err
 	}
 	var res []error
+	if o.Dummy != nil {
+		if err := r.SetBodyParam(o.Dummy); err != nil {
+			return err
+		}
+	}
 
 	// path param cUUID
 	if err := r.SetPathParam("cUUID", o.CUUID.String()); err != nil {

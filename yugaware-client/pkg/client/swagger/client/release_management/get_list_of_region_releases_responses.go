@@ -46,7 +46,7 @@ type GetListOfRegionReleasesOK struct {
 }
 
 func (o *GetListOfRegionReleasesOK) Error() string {
-	return fmt.Sprintf("[GET /api/v1/customers/{cUUID}/providers/{pUUID}/regions/{rUUID}/releases][%d] getListOfRegionReleasesOK  %+v", 200, o.Payload)
+	return fmt.Sprintf("[GET /api/v1/customers/{cUUID}/providers/{pUUID}/releases][%d] getListOfRegionReleasesOK  %+v", 200, o.Payload)
 }
 func (o *GetListOfRegionReleasesOK) GetPayload() map[string]interface{} {
 	return o.Payload

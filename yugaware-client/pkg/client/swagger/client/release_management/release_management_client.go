@@ -134,7 +134,7 @@ func (a *Client) GetListOfRegionReleases(params *GetListOfRegionReleasesParams, 
 	op := &runtime.ClientOperation{
 		ID:                 "getListOfRegionReleases",
 		Method:             "GET",
-		PathPattern:        "/api/v1/customers/{cUUID}/providers/{pUUID}/regions/{rUUID}/releases",
+		PathPattern:        "/api/v1/customers/{cUUID}/providers/{pUUID}/releases",
 		ProducesMediaTypes: []string{"application/json"},
 		ConsumesMediaTypes: []string{"application/json"},
 		Schemes:            []string{"http", "https"},

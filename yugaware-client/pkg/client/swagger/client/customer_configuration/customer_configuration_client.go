@@ -206,7 +206,7 @@ func (a *Client) EditCustomerConfig(params *EditCustomerConfigParams, authInfo r
 /*
   EditCustomerConfigV2 updates a customer configuration v2
 
-  Changes from upstram: This method is called 'editCustomerConfig' in the upstream swagger.json
+  Changes from upstream: This method is called 'editCustomerConfig' in the upstream swagger.json
 */
 func (a *Client) EditCustomerConfigV2(params *EditCustomerConfigV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*EditCustomerConfigV2OK, error) {
 	// TODO: Validate the params before sending

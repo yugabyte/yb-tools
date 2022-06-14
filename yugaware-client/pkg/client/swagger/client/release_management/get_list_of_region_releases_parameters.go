@@ -73,11 +73,6 @@ type GetListOfRegionReleasesParams struct {
 	// Format: uuid
 	PUUID strfmt.UUID
 
-	// RUUID.
-	//
-	// Format: uuid
-	RUUID strfmt.UUID
-
 	timeout    time.Duration
 	Context    context.Context
 	HTTPClient *http.Client
@@ -175,17 +170,6 @@ func (o *GetListOfRegionReleasesParams) SetPUUID(pUUID strfmt.UUID) {
 	o.PUUID = pUUID
 }
 
-// WithRUUID adds the rUUID to the get list of region releases params
-func (o *GetListOfRegionReleasesParams) WithRUUID(rUUID strfmt.UUID) *GetListOfRegionReleasesParams {
-	o.SetRUUID(rUUID)
-	return o
-}
-
-// SetRUUID adds the rUuid to the get list of region releases params
-func (o *GetListOfRegionReleasesParams) SetRUUID(rUUID strfmt.UUID) {
-	o.RUUID = rUUID
-}
-
 // WriteToRequest writes these params to a swagger request
 func (o *GetListOfRegionReleasesParams) WriteToRequest(r runtime.ClientRequest, reg strfmt.Registry) error {
 
@@ -218,11 +202,6 @@ func (o *GetListOfRegionReleasesParams) WriteToRequest(r runtime.ClientRequest, 
 
 	// path param pUUID
 	if err := r.SetPathParam("pUUID", o.PUUID.String()); err != nil {
-		return err
-	}
-
-	// path param rUUID
-	if err := r.SetPathParam("rUUID", o.RUUID.String()); err != nil {
 		return err
 	}
 

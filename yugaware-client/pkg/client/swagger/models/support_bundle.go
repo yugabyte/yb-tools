@@ -29,10 +29,20 @@ type SupportBundle struct {
 	// Format: uuid
 	BundleUUID *strfmt.UUID `json:"bundleUUID"`
 
+	// creation date
+	// Required: true
+	// Format: date-time
+	CreationDate *strfmt.DateTime `json:"creationDate"`
+
 	// end date
 	// Required: true
 	// Format: date-time
 	EndDate *strfmt.DateTime `json:"endDate"`
+
+	// expiration date
+	// Required: true
+	// Format: date-time
+	ExpirationDate *strfmt.DateTime `json:"expirationDate"`
 
 	// path
 	// Required: true
@@ -66,7 +76,15 @@ func (m *SupportBundle) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
+	if err := m.validateCreationDate(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validateEndDate(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateExpirationDate(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -125,6 +143,19 @@ func (m *SupportBundle) validateBundleUUID(formats strfmt.Registry) error {
 	return nil
 }
 
+func (m *SupportBundle) validateCreationDate(formats strfmt.Registry) error {
+
+	if err := validate.Required("creationDate", "body", m.CreationDate); err != nil {
+		return err
+	}
+
+	if err := validate.FormatOf("creationDate", "body", "date-time", m.CreationDate.String(), formats); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (m *SupportBundle) validateEndDate(formats strfmt.Registry) error {
 
 	if err := validate.Required("endDate", "body", m.EndDate); err != nil {
@@ -132,6 +163,19 @@ func (m *SupportBundle) validateEndDate(formats strfmt.Registry) error {
 	}
 
 	if err := validate.FormatOf("endDate", "body", "date-time", m.EndDate.String(), formats); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *SupportBundle) validateExpirationDate(formats strfmt.Registry) error {
+
+	if err := validate.Required("expirationDate", "body", m.ExpirationDate); err != nil {
+		return err
+	}
+
+	if err := validate.FormatOf("expirationDate", "body", "date-time", m.ExpirationDate.String(), formats); err != nil {
 		return err
 	}
 

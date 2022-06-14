@@ -180,25 +180,6 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 			})
 		})
 
-		// TODO: This returns a value similar to:
-		//          {"minLength":8,"minUppercase":1,"minLowercase":1,"minDigits":1,"minSpecialCharacters":1}
-		//       The default swagger.json does not mark these values as required
-		XWhen("Requesting the password policy", func() {
-			var (
-				err error
-			)
-			BeforeEach(func() {
-				params := session_management.NewGetPasswordPolicyParams().
-					WithCUUID(ywContext.CustomerUUID())
-
-				err = ywContext.PlatformAPIs.SessionManagement.GetPasswordPolicy(params)
-
-			})
-			It("Returns a valid password policy", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-		})
-
 		When("Requesting the session info", func() {
 			var (
 				sessionInfo *models.SessionInfo

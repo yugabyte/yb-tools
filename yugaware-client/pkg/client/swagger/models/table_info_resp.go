@@ -23,6 +23,13 @@ type TableInfoResp struct {
 	// Keyspace
 	KeySpace string `json:"keySpace,omitempty"`
 
+	// Namespace or Schema
+	NameSpace string `json:"nameSpace,omitempty"`
+
+	// Parent Table UUID
+	// Format: uuid
+	ParentTableUUID strfmt.UUID `json:"parentTableUUID,omitempty"`
+
 	// Relation type
 	// Enum: [SYSTEM_TABLE_RELATION USER_TABLE_RELATION INDEX_TABLE_RELATION]
 	RelationType string `json:"relationType,omitempty"`
@@ -33,6 +40,9 @@ type TableInfoResp struct {
 
 	// Table name
 	TableName string `json:"tableName,omitempty"`
+
+	// Table space
+	TableSpace string `json:"tableSpace,omitempty"`
 
 	// Table type
 	// Enum: [YQL_TABLE_TYPE REDIS_TABLE_TYPE PGSQL_TABLE_TYPE TRANSACTION_STATUS_TABLE_TYPE]
@@ -47,6 +57,10 @@ type TableInfoResp struct {
 // Validate validates this table info resp
 func (m *TableInfoResp) Validate(formats strfmt.Registry) error {
 	var res []error
+
+	if err := m.validateParentTableUUID(formats); err != nil {
+		res = append(res, err)
+	}
 
 	if err := m.validateRelationType(formats); err != nil {
 		res = append(res, err)
@@ -63,6 +77,18 @@ func (m *TableInfoResp) Validate(formats strfmt.Registry) error {
 	if len(res) > 0 {
 		return errors.CompositeValidationError(res...)
 	}
+	return nil
+}
+
+func (m *TableInfoResp) validateParentTableUUID(formats strfmt.Registry) error {
+	if swag.IsZero(m.ParentTableUUID) { // not required
+		return nil
+	}
+
+	if err := validate.FormatOf("parentTableUUID", "body", "uuid", m.ParentTableUUID.String(), formats); err != nil {
+		return err
+	}
+
 	return nil
 }
 
