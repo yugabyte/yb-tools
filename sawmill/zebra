@@ -1,0 +1,10 @@
+#!/usr/bin/env perl
+# pretty print spaced lines while removing duplicate blank lines
+
+$| = 1;
+while (<>) {
+	if ($_ !~ /^$/) {
+		print $n ? "\n" : '' , $_; # very first line will have no preceeding \n
+		$n=1;
+	}
+}
