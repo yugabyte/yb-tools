@@ -1,0 +1,5 @@
+#!/bin/sh
+# convert a JDBC connection string from the GUI into a space separated list
+# 10.6.0.13:5433,10.6.0.14:5433,10.6.0.15:5433 => 10.6.0.13 10.6.0.14 10.6.0.15
+
+echo $* | perl -pe 's/:5433,?/ /g;'

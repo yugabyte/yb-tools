@@ -1,0 +1,38 @@
+#!/usr/bin/env perl
+# heatseeker: find hot shards by aggregating disk usage by tablet by node
+
+# input files from: find /mnt/d0/yb-data/tserver/data/rocksdb -type f -exec stat -c '%s %n' '{}' \; > data.$ip
+# 4295 /mnt/d0/yb-data/tserver/data/rocksdb/table-000033e6000030008000000000004000/tablet-05f3d934b35c4a618e40d46e597402f9/OPTIONS-000069
+# 16 /mnt/d0/yb-data/tserver/data/rocksdb/table-000033e6000030008000000000004000/tablet-05f3d934b35c4a618e40d46e597402f9.intents/CURRENT
+
+while (<>) {
+	$ip = $ARGV; # $ARGV set to current filename
+	$ip =~ s#[^\d]*(\d+\.\d+\.\d+\.\d+).*#\1#;
+	($bytes, $path) = split;
+	$path =~ s#.*/rocksdb/##;
+	($table, $tablet, $file) = split(m#/#, $path);
+	$tablet =~ s#\..*##; # turf .intents
+	#print "ip = $ip, bytes = $bytes, table = $table, tablet = $tablet\n"; # DEBUG
+
+	$summation{$table}{"$tablet,$ip"} += $bytes;
+}
+
+foreach $table (keys %summation) {
+	foreach $tuple (keys %{$summation{$table}}) {
+		# build an array of sums for each table/tablet corresponding to each ip
+		$bytes = $summation{$table}{$tuple};
+		($tablet, $ip) = split(/,/, $tuple);
+		#print "$table $tablet bytes = $bytes\n"; # DEBUG
+		push(@{$report{$table}{$tablet}}, $bytes);
+	}
+}
+
+foreach $table (keys %summation) {
+	print "$table" . " (" . scalar(keys %{$report{$table}}) . " shards)\n"; 
+	foreach $tablet (keys %{$report{$table}}) {
+		print "$tablet ";
+		@bytes = @{$report{$table}{$tablet}};
+		print join(", ", @bytes);
+		print "\n";
+	}
+}
