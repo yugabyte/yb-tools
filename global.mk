@@ -15,9 +15,13 @@ ${GOBIN_DIR}:
 ${OUT_DIR}/creds: ${OUT_DIR}
 	@mkdir -p ${OUT_DIR}/creds
 
+clean:
+	rm -rf ${GOBIN_DIR}
+	rm -rf ${OUT_DIR}
+
 # Run tests
 test: fmt vet lint
-	go test ./... -coverprofile cover.out
+	go test -v ./... -coverprofile cover.out
 
 lint: tools
 	golangci-lint run
@@ -38,8 +42,8 @@ ${GOBIN}/protoc-gen-ybrpc:
 ####################################
 #             TOOLS
 ####################################
-.PHONY: tools golangci-lint ginkgo cobra swagger protoc-gen-go
-tools: golangci-lint ginkgo cobra swagger protoc-gen-go
+.PHONY: tools golangci-lint ginkgo cobra swagger protoc-gen-go oapi-codegen
+tools: golangci-lint ginkgo cobra swagger protoc-gen-go oapi-codegen
 
 golangci-lint: ${GOBIN_DIR}/golangci-lint
 ${GOBIN_DIR}/golangci-lint:
@@ -56,3 +60,7 @@ ${GOBIN}/swagger:
 protoc-gen-go: ${GOBIN}/protoc-gen-go
 ${GOBIN}/protoc-gen-go:
 	go install -modfile=${TOP_BUILDDIR}/go.mod google.golang.org/protobuf/cmd/protoc-gen-go
+
+oapi-codegen: ${GOBIN}/oapi-codegen
+${GOBIN}/oapi-codegen:
+	go install -modfile=${TOP_BUILDDIR}/go.mod github.com/deepmap/oapi-codegen/cmd/oapi-codegen
