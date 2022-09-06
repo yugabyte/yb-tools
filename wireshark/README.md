@@ -1,7 +1,7 @@
-# Yugabyte wireshark plugins
+# YugabyteDB wireshark plugins
 
 ## ybrpc.lua
-`plugins/ybrpc.lua` is a wireshark dissector for Yugabyte RPC traffic
+`plugins/ybrpc.lua` is a wireshark dissector for YugabyteDB RPC traffic
 
 ![wireshark_dissection](./images/ybrpc_dissection.png)
 
@@ -19,4 +19,4 @@ In `Edit -> Preferences -> Protocols -> ProtoBuf -> Protobuf search paths` point
 
 ![protobuf_searchpath](./images/protobuf_searchpath.png)
 
-Open a wireshark capture of the Yugabyte database to see the protocol dissection
+Open a wireshark capture of the YugabyteDB database to see the protocol dissection
