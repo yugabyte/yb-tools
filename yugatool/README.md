@@ -1,6 +1,6 @@
 # yugatool
 
-`yugatool` is a Yugabyte DB supportability utility.
+`yugatool` is a YugabyteDB supportability utility.
 
 ## Building
 
