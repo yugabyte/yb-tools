@@ -10,9 +10,12 @@ This can be used to analyze table/tablet status, check replication factors, look
    $ perl tablet_report_parser.pl  tablet-report-09-20T14.out | sqlite3 tablet-report-09-20T14.sqlite
 
 ### Sample Run:
-## $ ./tablet_report_parser.pl tablet-report-cup2-006430.out | sqlite3 tablet-analysis.sqlite
 
-```./tablet_report_parser.pl Version 0.06 generating SQL on Sat Sep 24 12:59:50 2022
+
+```
+$ ./tablet_report_parser.pl tablet-report-cup2-006430.out | sqlite3 tablet-analysis.sqlite
+
+./tablet_report_parser.pl Version 0.06 generating SQL on Sat Sep 24 12:59:50 2022
 ... 1 CLUSTER items processed.
 Processing line# 4 :MASTER from [ Masters ]
 ... 3 MASTER items processed.
