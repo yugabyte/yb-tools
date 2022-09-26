@@ -52,7 +52,7 @@ func init() {
 		limit := 10 * 1024
 
 		if mathx.AbsInt(size) < limit {
-			result = ajson.StringNode("", fmt.Sprintf("%d bytes", size))
+			result = ajson.StringNode("", fmt.Sprintf("%d B", size))
 		} else {
 			size /= 1 << 10
 			if size < limit {
