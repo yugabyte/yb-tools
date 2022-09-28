@@ -57,6 +57,7 @@ type ClusterInfoOptions struct {
 	NamespaceFilter      string
 	LeadersOnlyFilter    bool
 	ShowTombstonedFilter bool
+	ShowTableId          bool
 }
 
 func (o *ClusterInfoOptions) AddFlags(cmd *cobra.Command) {
@@ -67,6 +68,7 @@ func (o *ClusterInfoOptions) AddFlags(cmd *cobra.Command) {
 	flags.StringVar(&o.NamespaceFilter, "namespace", "", "in tablet report mode, display only tablets from this namespace")
 	flags.BoolVar(&o.LeadersOnlyFilter, "leaders-only", false, "in tablet report mode, display only tablet leaders")
 	flags.BoolVar(&o.ShowTombstonedFilter, "show-tombstoned", false, "in tablet report mode, display tombstoned tablets")
+	flags.BoolVar(&o.ShowTableId, "show-tableid", false, "in tablet report mode, include the table id of each table")
 }
 
 func (o *ClusterInfoOptions) Validate() error {
@@ -254,6 +256,12 @@ func clusterInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) erro
 						{Name: "LEASE_STATUS", JSONPath: "$.consensus_state.leaderLeaseStatus"},
 					},
 					Filter: filter.String(),
+				}
+
+				if options.ShowTableId {
+					tabletReport.TableColumns = append(tabletReport.TableColumns, format.Column{})
+					copy(tabletReport.TableColumns[3:], tabletReport.TableColumns[2:])
+					tabletReport.TableColumns[2] = format.Column{Name: "TABLE_ID", JSONPath: "$.tablet.tablet_status.tableId"}
 				}
 
 				log.V(1).Info("returning report")
