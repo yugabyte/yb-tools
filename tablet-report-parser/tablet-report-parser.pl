@@ -19,7 +19,7 @@
 # 2: Run THIS script  - which reads the tablet report and generates SQL.
 #    Feed the generated SQL into sqlite3:
 
-#        $ perl tablet_report_parser.pl < tablet-report-09-20T14.out | sqlite3 tablet-report-09-20T14.sqlite
+#        $ perl tablet_report_parser.pl tablet-report-09-20T14.out | sqlite3 tablet-report-09-20T14.sqlite
 
 # 3: Run Analysis using SQLITE ---
 
@@ -40,7 +40,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.08";
+our $VERSION = "0.09";
 use strict;
 use warnings;
 
@@ -104,8 +104,6 @@ CREATE VIEW summary_report AS
 CREATE VIEW version_info AS 
     SELECT '$0' as program, '$VERSION' as version, '$opt{STARTTIME}' AS run_on, '$opt{HOSTNAME}' as host;
 __SQL__
-#F[15] and next; m/\[ Tablet Report.*host:"([^"]+)".+\((\w+)\)/ and do{$node=$2;$host=$1}
-#  ;$F[13] or next; print "$F[0],$node,$F[1],$F[13],\[$F[14]\],$host\n" '
 
 my ( $line, $current_entity, $in_transaction);
 my %entity = (
@@ -181,17 +179,15 @@ print << "__ENDING_STUFF__";
 .print --- Summary Report ---
 SELECT '     ',* FROM summary_report;
 
--- .print DEBUG output file is $tmpfile 
+-- .print DEBUG output file is $tmpfile. Much work, just to get sqlite file name.
 .output $tmpfile
 .show
 .output
 .print --- To get a report, run: ---
---  Note: strange escaping below for the benefit of perl, sqlite, and the shell 
+-- Note: strange escaping below for the benefit of perl, sqlite, and the shell. Wierdness just to get sqlite file name.
 .shell perl -nE 'm/filename: (\\S+)/ and say qq^\\\tsqlite3 -header -column \\\$1 \\"SELECT \\* from REPORT-NAME\\"^'  $tmpfile
 .shell rm $tmpfile
 __ENDING_STUFF__
-
-
 
 exit 0;
 
@@ -312,7 +308,7 @@ my %field      = (   # Key=Database field name
 	NAMESPACE		=>{TYPE=>'TEXT', SOURCE=>'namespace' , SEQ=>1},
 	TABLENAME		=>{TYPE=>'TEXT', SOURCE=>'tablename',  SEQ=>2},
 	TOT_TABLET_COUNT=>   {TYPE=>'INTEGER',VALUE=>0, SEQ=>4},
-	UNIQ_TABLET_COUNT=>  {TYPE=>'INTEGER',VALUE=>0,  INSERT=>sub{return "(SELECT unique_tablet_count from table_detail WHERE table_name='" 
+	UNIQ_TABLET_COUNT=>  {TYPE=>'INTEGER',VALUE=>0,  INSERT=>sub{return "(SELECT unique_tablet_count from temp_table_detail WHERE table_name='" 
 	                                                             . $_[0]->{TABLENAME} . "' and namespace='"
 																 . $_[0]->{NAMESPACE} . "')"}
 						, SEQ=>5} ,
@@ -322,6 +318,7 @@ my %field      = (   # Key=Database field name
 	NODE_TABLET_MAX  => {TYPE=>'INTEGER',VALUE=>{}, INSERT=>sub{my $n=0; $_ > $n? $n=$_:0 for values %{$_[0]->{NODE_TABLET_COUNT}}; $n}, SEQ=>9} ,
     KEYS_PER_TABLET	 => {TYPE=>'INTEGER',VALUE=>0, SEQ=>10 },
     UNMATCHED_KEY_SIZE=>{TYPE=>'INTEGER',VALUE=>0, SEQ=>11 },	
+	COMMENT           =>{TYPE=>'TEXT'   ,VALUE=>'', SEQ=>12 },	
 
 );
 
@@ -361,12 +358,11 @@ sub collect{
 }
 
 sub Table_Report{ # CLass method
-    #CREATE TABLE tableinfo(table_name,table_uuid, namespace, tablets_unique INTEGER, tablets_replicas INTEGER, 
-    #               tablet_rf_min INTEGER, tablet_rf_max INTEGER,all_keys_prsent INTEGER, comment TEXT);
-    #CREATE UNIQUE INDEX tableinfo_key ON tableinfo (namespace,table_name,table_uuid);
 	print  "CREATE TABLE tableinfo(" 
 	      , join(", ",  map {"$_ ". $field{$_}{TYPE} } sort {$field{$a}{SEQ} <=> $field{$b}{SEQ}} keys %field)
 		  , ");\n";
+	# Create temp table from a view, to make extraction faster ...
+	print "CREATE TEMP TABLE temp_table_detail  AS SELECT * from table_detail;\n";
 	
 	for my $tkey (sort keys %collection){
 	   my $t = $collection{$tkey};	
@@ -378,22 +374,13 @@ sub Table_Report{ # CLass method
 				  $unbalanced="(Unbalanced)";
 			  }
 	   }
-	   #print STDERR  "-- Table $tkey \t$t->{TABLETCOUNT} tablets+replicas $unbalanced, "
-	   #    ,sprintf('%d',$t->{UNIQ_TABLETS})," Uniq tablets per table, "
-	   #    ,scalar(@{$t->{KEYRANGELIST}})," slots, "
-		#	,$t->{KEYS_PER_TABLET}  ," Keys per tablet:\n";
-	  ## print "INSERT INTO tableinfo(table_name,table_uuid, namespace, tablets_unique , tablets_replicas , \n",
-      ##       "        tablet_rf_min , tablet_rf_max ,all_keys_prsent ,comment) values(\n",
-	  ##       map({ "'" . ($t->{$_} || ""). "',"} qw|TABLENAME TABLE_UUID  NAMESPACE| ), "\n     ",
-		##	 map({ ($t->{$_} || 0). ","} qw|UNIQ_TABLETS TABLETCOUNT | ), "\n     ",
-	  ##       ",0,0,0,'$unbalanced test data');"
-	  ## ;
-       my $out="\t";
+       $t->{COMMENT}.=$unbalanced."KeyCounts=";
+       
        for my $i (0..$t->{UNIQ_TABLETS_ESTIMATE} - 1){
-		   $i%10 == 0 and $out .= "[$i]";
-		  $out.= ($t->{KEYRANGELIST}[$i]||0) .",";
+		   $i%10 == 0 and $t->{COMMENT} .= "[$i]";
+		   $t->{COMMENT}.= ($t->{KEYRANGELIST}[$i]||0) .",";
 	   }
-	   #print STDERR "$out\n";
+	   
 	   print "INSERT INTO tableinfo (",
 	      , join(",",keys %field)
 		  , ") values(\n   ",
@@ -403,6 +390,7 @@ sub Table_Report{ # CLass method
 		  ,");\n";
 	}
 	
+	print "DROP TABLE temp_table_detail;\n"; # No longer needed 
 };
 1;	
 } # End of TableInfo
