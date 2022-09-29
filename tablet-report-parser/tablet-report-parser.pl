@@ -40,7 +40,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.09";
+our $VERSION = "0.10";
 use strict;
 use warnings;
 
@@ -312,13 +312,14 @@ my %field      = (   # Key=Database field name
 	                                                             . $_[0]->{TABLENAME} . "' and namespace='"
 																 . $_[0]->{NAMESPACE} . "')"}
 						, SEQ=>5} ,
-	KEYRANGELIST	=>  {TYPE=>'INTEGER',VALUE=>[], INSERT=>sub{return scalar(@{ $_[0]->{KEYRANGELIST} })}, SEQ=>6} ,
-	UNIQ_TABLETS_ESTIMATE =>  {TYPE=>'INTEGER',VALUE=>0,  INSERT=>sub{sprintf '%.2f',$_[0]->{UNIQ_TABLETS_ESTIMATE} }, SEQ=>7},
-	NODE_TABLET_MIN  => {TYPE=>'INTEGER',VALUE=>{}, INSERT=>sub{my $n=999999999; $_ < $n? $n=$_:0 for values %{$_[0]->{NODE_TABLET_COUNT}}; $n}, SEQ=>8} ,
-	NODE_TABLET_MAX  => {TYPE=>'INTEGER',VALUE=>{}, INSERT=>sub{my $n=0; $_ > $n? $n=$_:0 for values %{$_[0]->{NODE_TABLET_COUNT}}; $n}, SEQ=>9} ,
-    KEYS_PER_TABLET	 => {TYPE=>'INTEGER',VALUE=>0, SEQ=>10 },
-    UNMATCHED_KEY_SIZE=>{TYPE=>'INTEGER',VALUE=>0, SEQ=>11 },	
-	COMMENT           =>{TYPE=>'TEXT'   ,VALUE=>'', SEQ=>12 },	
+	## KEYRANGELIST	=>  {TYPE=>'INTEGER',VALUE=>[], INSERT=>sub{return scalar(@{ $_[0]->{KEYRANGELIST} })}, SEQ=>6} ,
+	UNIQ_TABLETS_ESTIMATE => {TYPE=>'INTEGER',VALUE=>0,   SEQ=>7},
+	LEADER_TABLETS   => {TYPE=>'INTEGER',VALUE=>0,   SEQ=>8},
+	NODE_TABLET_MIN  => {TYPE=>'INTEGER',VALUE=>{}, INSERT=>sub{my $n=9e99; $_ < $n? $n=$_:0 for values %{$_[0]->{NODE_TABLET_COUNT}}; $n}, SEQ=>8} ,
+	NODE_TABLET_MAX  => {TYPE=>'INTEGER',VALUE=>{}, INSERT=>sub{my $n=0; $_ > $n? $n=$_:0 for values %{$_[0]->{NODE_TABLET_COUNT}}; $n}, SEQ=>10} ,
+    KEYS_PER_TABLET	 => {TYPE=>'INTEGER',VALUE=>0, SEQ=>11 },
+    UNMATCHED_KEY_SIZE=>{TYPE=>'INTEGER',VALUE=>0, SEQ=>12 },	
+	COMMENT           =>{TYPE=>'TEXT'   ,VALUE=>'', SEQ=>13 },	
 
 );
 
@@ -343,18 +344,19 @@ sub collect{
 	my $start_key = hex($tablet->{start_key} || '0x0000'); # Convert to a binary number 
 	my $end_key   = hex($tablet->{end_key}   || '0xffff');
 	
-	if (0 == ($self->{UNIQ_TABLETS}||=0)){
+	if (0 == ($self->{UNIQ_TABLETS_ESTIMATE}||=0)){
 	   # Need to calcuate this 	
-	   $self->{KEYS_PER_TABLET}        = $end_key - $start_key + 1; 
-	   $self->{UNIQ_TABLETS_ESTIMATE} = (0xffff + 1) / $self->{KEYS_PER_TABLET} ; 
+	   $self->{KEYS_PER_TABLET}        = $end_key - $start_key; # keys < $end key, so don't add 1. 
+	   $self->{UNIQ_TABLETS_ESTIMATE} = int( (0xffff) / $self->{KEYS_PER_TABLET} ); # Truncate decimals 
 	}
+	$tablet->{lease_status} eq 'HAS_LEASE' and $self->{LEADER_TABLETS}++;
 	if (($end_key - $start_key) ==  $self->{KEYS_PER_TABLET}){
 		# Matches previous tablets .. all is well
 	}else{
 		#print ".print ERROR:Line $.: Tablet $tablet->{tablet_uuid} offsets $end_key - $start_key dont match diff=$self->{KEYS_PER_TABLET}\n";
 		$self->{UNMATCHED_KEY_SIZE}++;
 	}
-	$self->{KEYRANGELIST}[$start_key / $self->{KEYS_PER_TABLET} ] ++;
+	$self->{KEYRANGELIST}[int($start_key / $self->{KEYS_PER_TABLET}) ] ++;
 }
 
 sub Table_Report{ # CLass method
@@ -374,12 +376,18 @@ sub Table_Report{ # CLass method
 				  $unbalanced="(Unbalanced)";
 			  }
 	   }
-       $t->{COMMENT}.=$unbalanced."KeyCounts=";
+       $t->{COMMENT}.=$unbalanced;
+	   #UNIQ_tablet_count is not available YET. $t->{UNIQ_TABLET_COUNT} > $t->{UNIQ_TABLETS_ESTIMATE} and $t->{COMMENT}.="[Excess tablets]";
        
+	   my $not_found_count = 0;
        for my $i (0..$t->{UNIQ_TABLETS_ESTIMATE} - 1){
-		   $i%10 == 0 and $t->{COMMENT} .= "[$i]";
-		   $t->{COMMENT}.= ($t->{KEYRANGELIST}[$i]||0) .",";
+		   #$i%10 == 0 and $t->{COMMENT} .= "[$i]";
+		   $t->{KEYRANGELIST}[$i] and next;
+		   $not_found_count++;
+		   $not_found_count==1 and $t->{COMMENT}.="[".sprintf('0x%x',$i*$t->{KEYS_PER_TABLET})." \@$i not found]";
+		   #$t->{COMMENT}.= ($t->{KEYRANGELIST}[$i]||0) .",";
 	   }
+	   $not_found_count>1 and $t->{COMMENT}.="[$not_found_count key ranges not found]";
 	   
 	   print "INSERT INTO tableinfo (",
 	      , join(",",keys %field)
@@ -391,6 +399,7 @@ sub Table_Report{ # CLass method
 	}
 	
 	print "DROP TABLE temp_table_detail;\n"; # No longer needed 
+	print "UPDATE  tableinfo SET COMMENT=COMMENT || '[Excess tablets]'  WHERE UNIQ_TABLET_COUNT > UNIQ_TABLETS_ESTIMATE;\n";
 };
 1;	
 } # End of TableInfo
