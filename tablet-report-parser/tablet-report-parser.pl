@@ -40,7 +40,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.10";
+our $VERSION = "0.11";
 use strict;
 use warnings;
 
@@ -80,7 +80,7 @@ CREATE VIEW leaderless AS
 	 from tablet t,cluster ,tablet_replica_detail trd
 	 WHERE length(leader) < 3 AND cluster.type='TSERVER' AND cluster.uuid=node_uuid
 	       AND  t.tablet_uuid=trd.tablet_uuid;
-CREATE VIEW delete_laderless_be_careful AS 
+CREATE VIEW delete_leaderless_be_careful AS 
      SELECT '\$HOME/tserver/bin/yb-ts-cli delete_tablet '|| tablet_uuid ||' -certs_dir_name \$TLSDIR -server_address '||ip ||':9100  Your_REASON_tktnbr'
 	   AS generated_delete_command
      FROM leaderless;
@@ -237,15 +237,36 @@ sub Parse_Tablet_line{
 	    #Regex failed to match 
          die "ERROR: Line $. failed to match tablet regex";		
 	}
-
+	my %save_val=%+; # Save collected regex named capture hash (before it gets clobbered by next regex)
+    if ($save_val{namespace} eq "RUNNING"){
+	   # We have mis-interpreted this line because NAMESPACE wa missing - re-interpret without namespace
+       $line =~m/^\s(?<tablet_uuid>(\w{32}))\s{3}
+					(?<tablename>(\w+))\s+
+					(?<table_uuid>(\w{32})?)\s* # This exists only if --show_table_uuid is set
+					# NOTE: <namespace> has been REMOVED from this regex
+					(?<state>(\w+))\s+
+					(?<status>(\w+))\s+
+					(?<start_key>(0x\w+)?)\s* 
+					(?<end_key>(0x\w+)?)\s*  
+					(?<sst_size>(\d+\s\w+))\s+
+					(?<wal_size>(\d+\s\w+))\s+
+					(?<cterm>(\d+))\s*
+					(?<cidx>(\d+))\s+
+					(?<leader>([\[\]\w]+))\s+
+					(?<lease_status>(\w+)?) 
+                  /x or die "ERROR parsing tablet line#$.";					
+	    print "-- line#$. : No NAMESPACE found for table '$+{tablename}' tablet $+{tablet_uuid}\n";
+	    %save_val=%+; # clobber it with new info
+		$save_val{namespace} = '';
+	}
 	print "INSERT INTO tablet (node_uuid,tablet_uuid , table_name,table_uuid,namespace,state,status,",
                   "start_key, end_key, sst_size, wal_size, cterm, cidx, leader, lease_status) VALUES('",
 				  $entity{TABLET}{NODE_UUID},"'", 
-	              map({ ",'" . ($+{$_}||'') . "'" } 
+	              map({ ",'" . ($save_val{$_}||'') . "'" } 
         		  qw|tablet_uuid tablename table_uuid namespace  state status  start_key end_key sst_size  wal_size 
              		  cterm cidx leader lease_status|  
 		  ),");\n";
-	my %save_val=%+; # Save collected regex named capture hash (before it gets clobbered by next regex)
+
 	if ( $save_val{start_key} and !$save_val{end_key}
 	    and $line =~/\s{12}$save_val{start_key}   /
 	){
@@ -315,11 +336,12 @@ my %field      = (   # Key=Database field name
 	## KEYRANGELIST	=>  {TYPE=>'INTEGER',VALUE=>[], INSERT=>sub{return scalar(@{ $_[0]->{KEYRANGELIST} })}, SEQ=>6} ,
 	UNIQ_TABLETS_ESTIMATE => {TYPE=>'INTEGER',VALUE=>0,   SEQ=>7},
 	LEADER_TABLETS   => {TYPE=>'INTEGER',VALUE=>0,   SEQ=>8},
-	NODE_TABLET_MIN  => {TYPE=>'INTEGER',VALUE=>{}, INSERT=>sub{my $n=9e99; $_ < $n? $n=$_:0 for values %{$_[0]->{NODE_TABLET_COUNT}}; $n}, SEQ=>8} ,
+	NODE_TABLET_MIN  => {TYPE=>'INTEGER',VALUE=>{}, INSERT=>sub{my $n=9e99; $_ < $n? $n=$_:0 for values %{$_[0]->{NODE_TABLET_COUNT}}; $n}, SEQ=>9} ,
 	NODE_TABLET_MAX  => {TYPE=>'INTEGER',VALUE=>{}, INSERT=>sub{my $n=0; $_ > $n? $n=$_:0 for values %{$_[0]->{NODE_TABLET_COUNT}}; $n}, SEQ=>10} ,
     KEYS_PER_TABLET	 => {TYPE=>'INTEGER',VALUE=>0, SEQ=>11 },
-    UNMATCHED_KEY_SIZE=>{TYPE=>'INTEGER',VALUE=>0, SEQ=>12 },	
-	COMMENT           =>{TYPE=>'TEXT'   ,VALUE=>'', SEQ=>13 },	
+	KEY_RANGE_OVERLAP=> {TYPE=>'INTEGER',VALUE=>0, SEQ=>12 },
+    UNMATCHED_KEY_SIZE=>{TYPE=>'INTEGER',VALUE=>0, SEQ=>13 },	
+	COMMENT           =>{TYPE=>'TEXT'   ,VALUE=>'', SEQ=>14 },	
 
 );
 
@@ -350,12 +372,15 @@ sub collect{
 	   $self->{UNIQ_TABLETS_ESTIMATE} = int( (0xffff) / $self->{KEYS_PER_TABLET} ); # Truncate decimals 
 	}
 	$tablet->{lease_status} eq 'HAS_LEASE' and $self->{LEADER_TABLETS}++;
-	if (($end_key - $start_key) ==  $self->{KEYS_PER_TABLET}){
+	if ($end_key == 0xffff){
+		# The tablet containing the LAST key can have different numbers of keys - so ignore this 
+	}elsif (($end_key - $start_key) ==  $self->{KEYS_PER_TABLET}){
 		# Matches previous tablets .. all is well
 	}else{
 		#print ".print ERROR:Line $.: Tablet $tablet->{tablet_uuid} offsets $end_key - $start_key dont match diff=$self->{KEYS_PER_TABLET}\n";
 		$self->{UNMATCHED_KEY_SIZE}++;
 	}
+	$start_key % $self->{KEYS_PER_TABLET} != 0 and $self->{KEY_RANGE_OVERLAP}++; 
 	$self->{KEYRANGELIST}[int($start_key / $self->{KEYS_PER_TABLET}) ] ++;
 }
 
