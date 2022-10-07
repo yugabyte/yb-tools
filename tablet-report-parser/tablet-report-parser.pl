@@ -15,6 +15,8 @@
 #		  $TLS_CONFIG \
 #		  --tablet-report \
 #		  > /tmp/tablet-report-$(hostname).out
+#
+#       You can also use the "-o json" option. This code accepts that output also.
 
 # 2: Run THIS script  - which reads the tablet report and generates SQL.
 #    Feed the generated SQL into sqlite3:
@@ -40,17 +42,21 @@
 
 
 ##########################################################################
-our $VERSION = "0.11";
+our $VERSION = "0.12";
 use strict;
 use warnings;
+use JSON qw( );
+use MIME::Base64;
 
-BEGIN{ # Namespace declaration
+BEGIN{ # Namespace forward declarations
   package TableInfo;
+  package JSON_Analyzer;
 } # End of namespace declaration 
 my %opt=(
 	STARTTIME	=>  scalar(localtime),
 	DEBUG		=> 0,
 	HOSTNAME    => $ENV{HOST} || $ENV{HOSTNAME} || $ENV{NAME} || qx|hostname|,
+	JSON        => 0, # Auto set to 1 when  "JSON" discovered. default is Reading "table" style.
 );
 print << "__SQL__";
 .print $0 Version $VERSION generating SQL on $opt{STARTTIME} 
@@ -105,7 +111,7 @@ CREATE VIEW version_info AS
     SELECT '$0' as program, '$VERSION' as version, '$opt{STARTTIME}' AS run_on, '$opt{HOSTNAME}' as host;
 __SQL__
 
-my ( $line, $current_entity, $in_transaction);
+my ( $line, $json_line, $current_entity, $in_transaction);
 my %entity = (
     CLUSTER => {REGEX=>'XXX-INVALID-NONEXISTANTXXX', HANDLER=>\&Parse_Cluster_line},
 	MASTER  => {REGEX=>'^\[ Masters \]',       		 HANDLER=>\&Parse_Master_line},
@@ -126,7 +132,7 @@ my %entity = (
 					(?<sst_size>(\d+\s\w+))\s+
 					(?<wal_size>(\d+\s\w+))\s+
 					(?<cterm>(\d+))\s*
-					(?<cidx>(\d+))\s+
+					(?<cidx>(-?\d+))\s+       #  Can have a leading minus 
 					(?<leader>([\[\]\w]+))\s+
 					(?<lease_status>(\w+)?)|x,
 									 
@@ -134,11 +140,27 @@ my %entity = (
 );
 my $entity_regex = join "|", map {$entity{$_}{REGEX}} keys %entity;
 $current_entity = "CLUSTER"; # This line should have been in the report, but first item is the cluster 
+#--- Main input & processing loop -----
 while ($line=<>){
-	if (length($line) < 5){ # Blank line 
-	   #causes problems# $current_entity = undef;	
+	if ($opt{JSON}){
+		$json_line .= $line;
+	    if ($line =~m/^\s?}[\s,]*$/){
+		   # Process previous JSON segment
+		   JSON_Analyzer::Process_line($json_line);
+		   #$tot_bytes += length($json_line);
+		   $json_line = ""; # Zap it   
+	    }
+		next;
+	}
+	if (length($line) < 5){ # Blank line ?
+	   if ($. < 2  and  $line=~/^\s*{\s*$/ ){
+		   $opt{JSON}=1;
+		   print ".print JSON input detected.\n";
+		   $json_line .= $line;
+	   }
 	   next;
 	}
+
 	if ($line =~m/$entity_regex/){
 		print ".print  ... $entity{$current_entity}{COUNT} $current_entity items processed.\n"; # For previous enity 
 	    ($current_entity) = grep {$line =~m/$entity{$_}{REGEX}/ } keys %entity;
@@ -161,16 +183,20 @@ while ($line=<>){
 	$entity{$current_entity}{HANDLER}->(); # $line is global
 	$entity{$current_entity}{COUNT}++;
 }
+# --- End of Main loop ----
 Set_Transaction(0);
-print << "__MAIN_COMPLETE__";
+
+if ($opt{JSON}){
+	# no table report
+}else{
+	print << "__MAIN_COMPLETE__";
 .print  ... $entity{$current_entity}{COUNT} $current_entity items processed.
 .print Main SQL loading Completed. Generating table stats...
 __MAIN_COMPLETE__
-
-Set_Transaction(1);
-TableInfo::Table_Report();
-Set_Transaction(0);
-
+	Set_Transaction(1);
+	TableInfo::Table_Report();
+	Set_Transaction(0);
+}
 my $tmpfile = "/tmp/tablet-report-analysis-settings$$";
 
 print << "__ENDING_STUFF__";
@@ -197,6 +223,7 @@ sub Parse_Cluster_line{
 	print "INSERT INTO cluster(type,uuid,zone) VALUES('CLUSTER',",
 	       "'$uuid','$zone');\n";
     if ($. > 3){
+	   print ".print ERROR: This does not appear to be a TABLET REPORT (too many 'CLUSTER' lines)\n";	
 	   die "ERROR: This does not appear to be a TABLET REPORT (too many 'CLUSTER' lines)";	
 	}
 }
@@ -235,7 +262,8 @@ sub Parse_Tablet_line{
 		# Fall through and process it
 	}else{
 	    #Regex failed to match 
-         die "ERROR: Line $. failed to match tablet regex";		
+		print ".print ERROR: Line $. failed to match tablet regex\n"; # so sqlite can show the error also 
+        die "ERROR: Line $. failed to match tablet regex";		
 	}
 	my %save_val=%+; # Save collected regex named capture hash (before it gets clobbered by next regex)
     if ($save_val{namespace} eq "RUNNING"){
@@ -429,3 +457,124 @@ sub Table_Report{ # CLass method
 1;	
 } # End of TableInfo
 ####################################################################################
+#--------------------------------------------------------------------------------
+#NOTE:  The JSON output from the "-o json" option of yugatool is NOT WELL FORMED.
+#       This package compensates for that - it parses pices collected by a higher level.
+BEGIN{
+package JSON_Analyzer;
+# Package globals ---
+my %dispatch_by_type = (
+	cluster 		=> \&Parse_Cluster_line,
+	Masters 		=> sub{Parse_Master_line($_[0],$_)  for @{$_[0]->{content}}},
+	"Tablet Servers"=> sub{Parse_Tserver_line($_[0],$_) for @{$_[0]->{content}}},
+	"Tablet Report" => sub{Parse_Tablet_line($_[0],$_)  for @{$_[0]->{content}}},
+);
+
+my $packed_zero = pack 'H4',0;      # Default value for start_key
+my $packed_ffff = pack 'H4','ffff'; # ... and ed_key
+my $json = JSON->new;
+   
+sub Process_line{
+   my ($j) = @_;
+
+   #print "GOT ",length($j)," bytes at rec#$.\n";
+   	my $data = $json->decode($j);
+    my $msg = $data->{msg} || "cluster"; # Initial JSON for cluster does not have "msg"
+	$msg=~s/[^\w\s].*//; # Zap everything after text (Tablet report contains other stuff....
+    ## print "-----", join(",",keys %$data),
+    ##       " msg=",($msg),
+    ##       " content=",scalar(@{$data->{content} || []}), "\n";
+    ## 
+	my $dispatch = $dispatch_by_type{$msg} or die "ERROR: No handler for $msg at $.";
+	$dispatch->($data);
+}
+
+sub Parse_Cluster_line{
+	my ($uuid,$zone) = @{$_[0]}{qw|clusterUuid zone|}; # No zone?
+	$zone ||= "Version:" . $_[0]->{version};
+	print "INSERT INTO cluster(type,uuid,zone) VALUES('CLUSTER',",
+	       "'$uuid','$zone');\n";
+    if ($. > 5){
+	   die "ERROR: This does not appear to be a TABLET REPORT json (too many 'CLUSTER' lines)";	
+	}
+}
+
+sub Parse_Master_line{
+	my ($d,$m)=@_;
+	my ($uuid, $host, $port, $region,$zone,$role) =
+	    (MIME::Base64::decode_base64($m->{instanceId}{permanentUuid}),
+		 $m->{registration}{privateRpcAddresses}[0]{host},
+		 $m->{registration}{privateRpcAddresses}[0]{port},
+		 $m->{registration}{cloudInfo}{placementRegion},
+		 $m->{registration}{cloudInfo}{placementZone},
+		 $m->{role}
+		);
+	print "INSERT INTO cluster(type, uuid , ip, port, region, zone ,role)\n",
+	      "  VALUES('MASTER','",
+          join("','", $uuid,$host,$port,$region,$zone,$role),
+		  "');\n";
+}
+
+sub Parse_Tserver_line{
+	my ($d, $t) = @_;
+
+	my ($uuid,$host,$port,$region,$zone,$alive,$reads,$writes,$heartbeat,$uptime,
+        $sst_size,$sst_uncompressed,$sst_files,$memory) = (
+		MIME::Base64::decode_base64($t->{instance_id}{permanentUuid}),
+		$t->{registration}{common}{privateRpcAddresses}[0]{host},
+		$t->{registration}{common}{privateRpcAddresses}[0]{port},
+		$t->{registration}{common}{cloudInfo}{placementRegion},
+		$t->{registration}{common}{cloudInfo}{placementZone},
+        $t->{alive},
+         undef, # reads
+		 undef, # writes
+		  undef, # heartbeat
+		$t->{metrics}{uptimeSeconds},
+		);
+		;
+	print "INSERT INTO cluster(type, uuid , ip, port, region, zone ,uptime)\n",
+	      "  VALUES('TSERVER','",
+          join("','", $uuid,$host,$port,$region,$zone,$uptime),
+		  "');\n";
+}
+
+sub Parse_Tablet_line{
+	my ($d,$t) = @_;
+	my ($host_name, $host_port,$host_uuid) 
+	   = $d->{msg} =~m/\[host:"([^"]+)"\s+port:(\d+)\] \((\w+)/;
+
+	my %values;
+	@values{ qw|tablet_uuid tablename table_uuid namespace  state status  
+	           start_key end_key         sst_size  wal_size 
+				cterm cidx leader lease_status| }
+			= (
+			$t->{tablet}{tablet_status}{tabletId},
+			$t->{tablet}{tablet_status}{tableName},
+			$t->{tablet}{tablet_status}{tableId},
+			$t->{tablet}{tablet_status}{namespaceName},
+			$t->{tablet}{tablet_status}{state},
+			$t->{tablet}{tablet_status}{tabletDataState},
+			# start_key & end_key are base-64 encoded binary values 
+			# They need to be decoded, then converted into ("0xABCD") "hex encoded binary"
+			"0x". unpack('H4', MIME::Base64::decode_base64(
+			   $t->{tablet}{tablet_status}{partition}{partitionKeyStart}) || $packed_zero),
+			"0x". unpack('H4', MIME::Base64::decode_base64(
+			   $t->{tablet}{tablet_status}{partition}{partitionKeyEnd})   || $packed_ffff),
+	        $t->{tablet}{tablet_status}{sstFilesDiskSize},
+			$t->{tablet}{tablet_status}{walFilesDiskSize},
+			$t->{consensus_state}{cstate}{currentTerm},
+			$t->{consensus_state}{cstate}{config}{opidIndex},
+			$t->{consensus_state}{cstate}{leaderUuid},
+			$t->{consensus_state}{leaderLeaseStatus},
+	);
+
+    print "INSERT INTO tablet (node_uuid,tablet_uuid , table_name,table_uuid,namespace,state,status,",
+                  "start_key, end_key, sst_size, wal_size, cterm, cidx, leader, lease_status)\n  VALUES('",
+				  $host_uuid,"'", 
+	              map({ ",'" . ($values{$_}||'') . "'" } 
+        		  qw|tablet_uuid tablename table_uuid namespace  state status  start_key end_key sst_size  wal_size 
+             		  cterm cidx leader lease_status|  
+		  ),");\n";
+}
+
+} # ----- ENd of JSON_Analyzer ---------------------------------------
