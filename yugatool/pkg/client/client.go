@@ -75,6 +75,15 @@ func (c *YBClient) Connect() error {
 
 	}
 	if c.Master == nil {
+		if util.HasTLS(c.Config.GetTlsOpts()) {
+			c.Log.V(1).Info("could not connect to master leader, disabling TLS and trying again", "error", err)
+
+			c.Config.TlsOpts = nil
+			// Deallocate the existing dialer so a new non-TLS dialer will be created during Connect()
+			c.dialer = nil
+
+			return c.Connect()
+		}
 		return errors.Errorf("could not connect to master leader")
 	}
 	return err
