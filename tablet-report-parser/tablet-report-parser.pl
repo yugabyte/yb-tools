@@ -15,11 +15,13 @@
 #		  $TLS_CONFIG \
 #		  --tablet-report \
 #		  > /tmp/tablet-report-$(hostname).out
+#
+#       You can also use the "-o json" option. This code accepts that output also.
 
 # 2: Run THIS script  - which reads the tablet report and generates SQL.
 #    Feed the generated SQL into sqlite3:
 
-#        $ perl tablet_report_parser.pl < tablet-report-09-20T14.out | sqlite3 tablet-report-09-20T14.sqlite
+#        $ perl tablet_report_parser.pl tablet-report-09-20T14.out | sqlite3 tablet-report-09-20T14.sqlite
 
 # 3: Run Analysis using SQLITE ---
 
@@ -40,24 +42,32 @@
 
 
 ##########################################################################
-our $VERSION = "0.06";
+our $VERSION = "0.12";
 use strict;
 use warnings;
+use JSON qw( );
+use MIME::Base64;
 
+BEGIN{ # Namespace forward declarations
+  package TableInfo;
+  package JSON_Analyzer;
+} # End of namespace declaration 
 my %opt=(
 	STARTTIME	=>  scalar(localtime),
 	DEBUG		=> 0,
 	HOSTNAME    => $ENV{HOST} || $ENV{HOSTNAME} || $ENV{NAME} || qx|hostname|,
+	JSON        => 0, # Auto set to 1 when  "JSON" discovered. default is Reading "table" style.
 );
 print << "__SQL__";
 .print $0 Version $VERSION generating SQL on $opt{STARTTIME} 
 CREATE TABLE cluster(type, uuid TEXT PRIMARY KEY, ip, port, region, zone ,role, uptime);
-CREATE TABLE tablet (node_uuid,tablet_uuid TEXT , table_name,namespace,state,status,
+CREATE TABLE tablet (node_uuid,tablet_uuid TEXT , table_name,table_uuid, namespace,state,status,
                   start_key, end_key, sst_size, wal_size, cterm, cidx, leader, lease_status);
 CREATE UNIQUE INDEX tablet_idx ON tablet (node_uuid,tablet_uuid);
-CREATE VIEW tablets_per_table AS
-     SELECT  table_name, count(*) as tablet_count, count(DISTINCT node_uuid) as nodes
-	 FROM tablet GROUP BY table_name;
+
+CREATE VIEW table_detail AS
+     SELECT  namespace,table_name, count(*) as total_tablet_count,count(DISTINCT tablet_uuid) as unique_tablet_count, count(DISTINCT node_uuid) as nodes
+	 FROM tablet GROUP BY namespace,table_name;
 CREATE VIEW tablets_per_node AS
     SELECT node_uuid,min(ip) as node_ip,min(zone) as zone,  count(*) as tablet_count,
            count(DISTINCT table_name) as table_count	
@@ -66,19 +76,25 @@ CREATE VIEW tablets_per_node AS
 	GROUP BY node_uuid
 	ORDER BY tablet_count;
 CREATE VIEW tablet_replica_detail AS
-	SELECT tablet_uuid,count(*) as replicas  from tablet GROUP BY tablet_uuid;
+	SELECT namespace,table_name,table_uuid,tablet_uuid,count(*) as replicas  
+	from tablet 
+	GROUP BY namespace,table_name,table_uuid,tablet_uuid;
 CREATE VIEW tablet_replica_summary AS
 	SELECT replicas,count(*) as tablet_count FROM  tablet_replica_detail GROUP BY replicas;
 CREATE VIEW leaderless AS 
-     SELECT t.tablet_uuid, replicas,table_name,node_uuid,status,ip 
+     SELECT t.tablet_uuid, replicas,t.table_name,node_uuid,status,ip 
 	 from tablet t,cluster ,tablet_replica_detail trd
 	 WHERE length(leader) < 3 AND cluster.type='TSERVER' AND cluster.uuid=node_uuid
 	       AND  t.tablet_uuid=trd.tablet_uuid;
--- table to handle hex values from 0x0000 to 0xffff
-CREATE table hexval(h text primary key,i integer, covered integer);
-WITH RECURSIVE
-     cnt(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM cnt WHERE x<0xffff)
-    INSERT INTO hexval  SELECT printf('0x%0.4x',x) ,x, NULL  FROM cnt;
+CREATE VIEW delete_leaderless_be_careful AS 
+     SELECT '\$HOME/tserver/bin/yb-ts-cli delete_tablet '|| tablet_uuid ||' -certs_dir_name \$TLSDIR -server_address '||ip ||':9100  Your_REASON_tktnbr'
+	   AS generated_delete_command
+     FROM leaderless;
+-- table to handle hex values from 0x0000 to 0xffff (Not requird) 
+--CREATE table hexval(h text primary key,i integer, covered integer);
+--WITH RECURSIVE
+--     cnt(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM cnt WHERE x<0xffff)
+--    INSERT INTO hexval  SELECT printf('0x%0.4x',x) ,x, NULL  FROM cnt;
 --- Summary report ----
 CREATE VIEW summary_report AS
 	SELECT (SELECT count(*) from cluster where type="TSERVER") || ' TSERVERs, '
@@ -94,35 +110,62 @@ CREATE VIEW summary_report AS
 CREATE VIEW version_info AS 
     SELECT '$0' as program, '$VERSION' as version, '$opt{STARTTIME}' AS run_on, '$opt{HOSTNAME}' as host;
 __SQL__
-#F[15] and next; m/\[ Tablet Report.*host:"([^"]+)".+\((\w+)\)/ and do{$node=$2;$host=$1}
-#  ;$F[13] or next; print "$F[0],$node,$F[1],$F[13],\[$F[14]\],$host\n" '
 
-my ( $line, $current_entity, $in_transaction);
+my ( $line, $json_line, $current_entity, $in_transaction);
 my %entity = (
     CLUSTER => {REGEX=>'XXX-INVALID-NONEXISTANTXXX', HANDLER=>\&Parse_Cluster_line},
 	MASTER  => {REGEX=>'^\[ Masters \]',       		 HANDLER=>\&Parse_Master_line},
 	TSERVER => {REGEX=>'^\[ Tablet Servers \]',		 HANDLER=>\&Parse_Tserver_line },
 	TABLET  => {REGEX=>'^\[ Tablet Report: ', 
-	            HDR_EXTRACT => sub{$_[0] =~m/\[host:"([^"]+)" port:(\d+)\] \((\w+)/},
+	            HDR_EXTRACT => sub{$_[0] =~m/\[host:"([^"]+)"\s+port:(\d+)\] \((\w+)/},
 				HDR_KEYS    => [qw|HOST PORT NODE_UUID|],
 				HANDLER=>\&Parse_Tablet_line,
-				FIELD_LEN => [qw|35 63 13  10 20  12 10  11 11   8 11 35 55|], # unused
 				LINE_REGEX =>
-                 qr{\s(?<tablet_uuid>(\w{32}))\s{3}(?<tablename>(\w+))\s+(?<namespace>(\w+))\s+(?<state>(\w+))\s+(?<status>(\w+))\s+(?<start_key>(0x\w+)?)\s*(?<end_key>(0x\w+)?)\s*(?<sst_size>(\d+\s\w+))\s+(?<wal_size>(\d+\s\w+))\s+\s*(?<cterm>(\d+))\s*(?<cidx>(\d+))\s+(?<leader>([\[\]\w]+))\s+(?<lease_status>(\w+)?)},
-				 
+                 	qr| ^\s(?<tablet_uuid>(\w{32}))\s{3}
+					(?<tablename>(\w+))\s+
+					(?<table_uuid>(\w{32})?)\s* # This exists only if --show_table_uuid is set
+					(?<namespace>(\w+))\s+
+					(?<state>(\w+))\s+
+					(?<status>(\w+))\s+
+					(?<start_key>(0x\w+)?)\s* # This could be EMPTY. If so, start_key value will contain END!
+					(?<end_key>(0x\w+)?)\s*   # This could also be EMPTY, but start exists in that case
+					(?<sst_size>(\d+\s\w+))\s+
+					(?<wal_size>(\d+\s\w+))\s+
+					(?<cterm>(\d+))\s*
+					(?<cidx>(-?\d+))\s+       #  Can have a leading minus 
+					(?<leader>([\[\]\w]+))\s+
+					(?<lease_status>(\w+)?)|x,
+									 
 	},
 );
 my $entity_regex = join "|", map {$entity{$_}{REGEX}} keys %entity;
 $current_entity = "CLUSTER"; # This line should have been in the report, but first item is the cluster 
+#--- Main input & processing loop -----
 while ($line=<>){
-	if (length($line) < 5){ # Blank line 
-	   #causes problems# $current_entity = undef;	
+	if ($opt{JSON}){
+		$json_line .= $line;
+	    if ($line =~m/^\s?}[\s,]*$/){
+		   # Process previous JSON segment
+		   JSON_Analyzer::Process_line($json_line);
+		   #$tot_bytes += length($json_line);
+		   $json_line = ""; # Zap it   
+	    }
+		next;
+	}
+	if (length($line) < 5){ # Blank line ?
+	   if ($. < 2  and  $line=~/^\s*{\s*$/ ){
+		   $opt{JSON}=1;
+		   print ".print JSON input detected.\n";
+		   $json_line .= $line;
+	   }
 	   next;
 	}
+
 	if ($line =~m/$entity_regex/){
 		print ".print  ... $entity{$current_entity}{COUNT} $current_entity items processed.\n"; # For previous enity 
 	    ($current_entity) = grep {$line =~m/$entity{$_}{REGEX}/ } keys %entity;
-		print ".print Processing line# $. :$current_entity from $line";
+		chomp $line;
+		print ".print Processing $current_entity from $line (Line#$.)\n";
 		$entity{$current_entity}{COUNT} = 0;
 		Set_Transaction(1,"Starting $current_entity");
 		next unless my $extract_sub = $entity{$current_entity}{HDR_EXTRACT};
@@ -140,23 +183,34 @@ while ($line=<>){
 	$entity{$current_entity}{HANDLER}->(); # $line is global
 	$entity{$current_entity}{COUNT}++;
 }
+# --- End of Main loop ----
 Set_Transaction(0);
+
+if ($opt{JSON}){
+	# no table report
+}else{
+	print << "__MAIN_COMPLETE__";
+.print  ... $entity{$current_entity}{COUNT} $current_entity items processed.
+.print Main SQL loading Completed. Generating table stats...
+__MAIN_COMPLETE__
+	Set_Transaction(1);
+	TableInfo::Table_Report();
+	Set_Transaction(0);
+}
 my $tmpfile = "/tmp/tablet-report-analysis-settings$$";
 
 print << "__ENDING_STUFF__";
-.print  ... $entity{$current_entity}{COUNT} $current_entity items processed.
-.print SQL loading Completed.
-.print --- Available REPORT-NAMEs ---
+.print --- Completed. Available REPORT-NAMEs ---
 .tables
 .print --- Summary Report ---
 SELECT '     ',* FROM summary_report;
 
--- .print DEBUG output file is $tmpfile 
+-- .print DEBUG output file is $tmpfile. Much work, just to get sqlite file name.
 .output $tmpfile
 .show
 .output
 .print --- To get a report, run: ---
---  Note: strange escaping below for the benefit of perl, sqlite, and the shell 
+-- Note: strange escaping below for the benefit of perl, sqlite, and the shell. Wierdness just to get sqlite file name.
 .shell perl -nE 'm/filename: (\\S+)/ and say qq^\\\tsqlite3 -header -column \\\$1 \\"SELECT \\* from REPORT-NAME\\"^'  $tmpfile
 .shell rm $tmpfile
 __ENDING_STUFF__
@@ -169,6 +223,7 @@ sub Parse_Cluster_line{
 	print "INSERT INTO cluster(type,uuid,zone) VALUES('CLUSTER',",
 	       "'$uuid','$zone');\n";
     if ($. > 3){
+	   print ".print ERROR: This does not appear to be a TABLET REPORT (too many 'CLUSTER' lines)\n";	
 	   die "ERROR: This does not appear to be a TABLET REPORT (too many 'CLUSTER' lines)";	
 	}
 }
@@ -181,6 +236,11 @@ sub Parse_Master_line{
 }
 
 sub Parse_Tserver_line{
+	if (substr($line,0,1) eq "{"){ # Some sort of error message - ignore
+	    chomp $line;
+		print ".print ERROR in input line# $. : ",substr($line,0,40)," ... ignored.\n";
+		return;
+	}
 	my ($uuid,$host,$port,$region,$zone,$alive,$reads,$writes,$heartbeat,$uptime,
         $sst_size,$sst_uncompressed,$sst_files,$memory)
 		= split /\s\s+/,$line ;
@@ -197,31 +257,44 @@ sub Parse_Tserver_line{
 sub Parse_Tablet_line{
 
 # 0a2aa531ce7541f4bfffc634200d16c5   brokerageaccountphone                                          titan_prod   RUNNING   TABLET_DATA_READY   0x728e      0x7538    21 MB      2048 kB    27      288541     b686d09824b4455997873522dedcd3a9   HAS_LEASE
-	##my ($tablet,$table,$namespace,$state,$status,$start_key,$end_key,
-	##    $sst_size,$wal_size,$cterm,$cidx,$leader,$lease_status)
-	##	= unpack("x1 A32 x3 A63 A13  A10 A20  A12 A10  A11 A11   A8 A11 A35 A55",$line);
-	##if ($table =~/\s/){
-	##   # We have mis-parsed this line (Offsets are not what we expected.
-	##   print "--Line $. unpack error. table=$table\n";
-	##}		
+
     if ($line =~ $entity{$current_entity}{LINE_REGEX}){
 		# Fall through and process it
 	}else{
 	    #Regex failed to match 
-         die "ERROR: Line $. failed to match tablet regex";		
+		print ".print ERROR: Line $. failed to match tablet regex\n"; # so sqlite can show the error also 
+        die "ERROR: Line $. failed to match tablet regex";		
 	}
-    ##print "INSERT INTO tablet (tablet_uuid,table_name,node_uuid, leader,status) VALUES('",
-	##     join("','",$tablet, $table, $entity{TABLET}{NODE_UUID}, $leader, $lease_status),
-	##	 "');\n";
-
-	print "INSERT INTO tablet (node_uuid,tablet_uuid , table_name,namespace,state,status,",
+	my %save_val=%+; # Save collected regex named capture hash (before it gets clobbered by next regex)
+    if ($save_val{namespace} eq "RUNNING"){
+	   # We have mis-interpreted this line because NAMESPACE wa missing - re-interpret without namespace
+       $line =~m/^\s(?<tablet_uuid>(\w{32}))\s{3}
+					(?<tablename>(\w+))\s+
+					(?<table_uuid>(\w{32})?)\s* # This exists only if --show_table_uuid is set
+					# NOTE: <namespace> has been REMOVED from this regex
+					(?<state>(\w+))\s+
+					(?<status>(\w+))\s+
+					(?<start_key>(0x\w+)?)\s* 
+					(?<end_key>(0x\w+)?)\s*  
+					(?<sst_size>(\d+\s\w+))\s+
+					(?<wal_size>(\d+\s\w+))\s+
+					(?<cterm>(\d+))\s*
+					(?<cidx>(\d+))\s+
+					(?<leader>([\[\]\w]+))\s+
+					(?<lease_status>(\w+)?) 
+                  /x or die "ERROR parsing tablet line#$.";					
+	    print "-- line#$. : No NAMESPACE found for table '$+{tablename}' tablet $+{tablet_uuid}\n";
+	    %save_val=%+; # clobber it with new info
+		$save_val{namespace} = '';
+	}
+	print "INSERT INTO tablet (node_uuid,tablet_uuid , table_name,table_uuid,namespace,state,status,",
                   "start_key, end_key, sst_size, wal_size, cterm, cidx, leader, lease_status) VALUES('",
 				  $entity{TABLET}{NODE_UUID},"'", 
-	              map({ ",'" . $+{$_} . "'" } 
-        		  qw|tablet_uuid tablename namespace  state status  start_key end_key sst_size  wal_size 
+	              map({ ",'" . ($save_val{$_}||'') . "'" } 
+        		  qw|tablet_uuid tablename table_uuid namespace  state status  start_key end_key sst_size  wal_size 
              		  cterm cidx leader lease_status|  
 		  ),");\n";
-	my %save_val=%+; # Save collected regex named capture hash (before it gets clobbered by next regex)
+
 	if ( $save_val{start_key} and !$save_val{end_key}
 	    and $line =~/\s{12}$save_val{start_key}   /
 	){
@@ -229,13 +302,12 @@ sub Parse_Tablet_line{
 	   print "UPDATE tablet SET start_key='', end_key='$save_val{start_key}' ",
 	         " WHERE tablet_uuid='$save_val{tablet_uuid}' AND node_uuid='",
 			 $entity{TABLET}{NODE_UUID}, "'; -- correction for line $.\n";
-       	   
+       $save_val{end_key}   = $save_val{start_key};
+       $save_val{start_key} = undef;	   
 	}
-	#print "INSERT INTO tablet (node_uuid,tablet_uuid , table_name,namespace,state,status,",
-    #              "start_key, end_key, sst_size, wal_size, cterm, cidx, leader, lease_status) VALUES('",
-	#     join("','",$entity{TABLET}{NODE_UUID},$tablet, $table, $namespace,$state,$status,
-    #                $start_key, $end_key, $sst_size, $wal_size, $cterm, $cidx,$leader, $lease_status),
-	#	 "');\n";	 
+	
+    TableInfo::find_or_new( \%save_val )
+	        ->collect(\%save_val, $entity{TABLET}{NODE_UUID});
 }
 
 sub Process_Headers{
@@ -253,6 +325,7 @@ sub Process_Headers{
 			$hdr_idx++;
 		}
 }
+
 
 sub Set_Transaction{
    my ($start, $msg)=@_;	
@@ -274,3 +347,234 @@ sub Set_Transaction{
 	   # no-op
    }
 }
+####################################################################################
+BEGIN{
+package TableInfo;
+
+my %collection = (); # Collection of Tableinfo objects, key is namespace:table_name:uuid  
+my %field      = (   # Key=Database field name
+	TABLE_UUID		=>{TYPE=>'TEXT', SOURCE=>'table_uuid', SEQ=>3},
+	NAMESPACE		=>{TYPE=>'TEXT', SOURCE=>'namespace' , SEQ=>1},
+	TABLENAME		=>{TYPE=>'TEXT', SOURCE=>'tablename',  SEQ=>2},
+	TOT_TABLET_COUNT=>   {TYPE=>'INTEGER',VALUE=>0, SEQ=>4},
+	UNIQ_TABLET_COUNT=>  {TYPE=>'INTEGER',VALUE=>0,  INSERT=>sub{return "(SELECT unique_tablet_count from temp_table_detail WHERE table_name='" 
+	                                                             . $_[0]->{TABLENAME} . "' and namespace='"
+																 . $_[0]->{NAMESPACE} . "')"}
+						, SEQ=>5} ,
+	## KEYRANGELIST	=>  {TYPE=>'INTEGER',VALUE=>[], INSERT=>sub{return scalar(@{ $_[0]->{KEYRANGELIST} })}, SEQ=>6} ,
+	UNIQ_TABLETS_ESTIMATE => {TYPE=>'INTEGER',VALUE=>0,   SEQ=>7},
+	LEADER_TABLETS   => {TYPE=>'INTEGER',VALUE=>0,   SEQ=>8},
+	NODE_TABLET_MIN  => {TYPE=>'INTEGER',VALUE=>{}, INSERT=>sub{my $n=9e99; $_ < $n? $n=$_:0 for values %{$_[0]->{NODE_TABLET_COUNT}}; $n}, SEQ=>9} ,
+	NODE_TABLET_MAX  => {TYPE=>'INTEGER',VALUE=>{}, INSERT=>sub{my $n=0; $_ > $n? $n=$_:0 for values %{$_[0]->{NODE_TABLET_COUNT}}; $n}, SEQ=>10} ,
+    KEYS_PER_TABLET	 => {TYPE=>'INTEGER',VALUE=>0, SEQ=>11 },
+	KEY_RANGE_OVERLAP=> {TYPE=>'INTEGER',VALUE=>0, SEQ=>12 },
+    UNMATCHED_KEY_SIZE=>{TYPE=>'INTEGER',VALUE=>0, SEQ=>13 },	
+	COMMENT           =>{TYPE=>'TEXT'   ,VALUE=>'', SEQ=>14 },	
+
+);
+
+sub find_or_new{
+   my ($t)  = @_; # Parsed tablet hashref 
+   my $name = $t->{table_uuid} ||  $t->{namespace} . ":" . $t->{tablename};
+   $collection{$name} and return $collection{$name};
+   
+   $collection{$name} = bless { 
+                               map {my $s = $field{$_}{SOURCE} ;
+							        $s ? ($_ => $t->{$s}) : () }
+									keys %field
+							   }
+                      , __PACKAGE__;
+   return $collection{$name};
+}
+
+sub collect{
+    my ($self, $tablet, $node_uuid) = @_; # Hash ref of tablet field info
+	$self->{TOT_TABLET_COUNT}++;
+	$self->{NODE_TABLET_COUNT}{$node_uuid}++;
+	my $start_key = hex($tablet->{start_key} || '0x0000'); # Convert to a binary number 
+	my $end_key   = hex($tablet->{end_key}   || '0xffff');
+	
+	if (0 == ($self->{UNIQ_TABLETS_ESTIMATE}||=0)){
+	   # Need to calcuate this 	
+	   $self->{KEYS_PER_TABLET}        = $end_key - $start_key; # keys < $end key, so don't add 1. 
+	   $self->{UNIQ_TABLETS_ESTIMATE} = int( (0xffff) / $self->{KEYS_PER_TABLET} ); # Truncate decimals 
+	}
+	$tablet->{lease_status} eq 'HAS_LEASE' and $self->{LEADER_TABLETS}++;
+	if ($end_key == 0xffff){
+		# The tablet containing the LAST key can have different numbers of keys - so ignore this 
+	}elsif (($end_key - $start_key) ==  $self->{KEYS_PER_TABLET}){
+		# Matches previous tablets .. all is well
+	}else{
+		#print ".print ERROR:Line $.: Tablet $tablet->{tablet_uuid} offsets $end_key - $start_key dont match diff=$self->{KEYS_PER_TABLET}\n";
+		$self->{UNMATCHED_KEY_SIZE}++;
+	}
+	$start_key % $self->{KEYS_PER_TABLET} != 0 and $self->{KEY_RANGE_OVERLAP}++; 
+	$self->{KEYRANGELIST}[int($start_key / $self->{KEYS_PER_TABLET}) ] ++;
+}
+
+sub Table_Report{ # CLass method
+	print  "CREATE TABLE tableinfo(" 
+	      , join(", ",  map {"$_ ". $field{$_}{TYPE} } sort {$field{$a}{SEQ} <=> $field{$b}{SEQ}} keys %field)
+		  , ");\n";
+	# Create temp table from a view, to make extraction faster ...
+	print "CREATE TEMP TABLE temp_table_detail  AS SELECT * from table_detail;\n";
+	
+	for my $tkey (sort keys %collection){
+	   my $t = $collection{$tkey};	
+	   my $tablets_per_node = undef;
+	   my $unbalanced="";
+	   for (values %{$t->{NODE_TABLET_COUNT}}){
+		      $tablets_per_node ||= $_;
+			  if (abs($tablets_per_node - $_) > 1){
+				  $unbalanced="(Unbalanced)";
+			  }
+	   }
+       $t->{COMMENT}.=$unbalanced;
+	   #UNIQ_tablet_count is not available YET. $t->{UNIQ_TABLET_COUNT} > $t->{UNIQ_TABLETS_ESTIMATE} and $t->{COMMENT}.="[Excess tablets]";
+       
+	   my $not_found_count = 0;
+       for my $i (0..$t->{UNIQ_TABLETS_ESTIMATE} - 1){
+		   #$i%10 == 0 and $t->{COMMENT} .= "[$i]";
+		   $t->{KEYRANGELIST}[$i] and next;
+		   $not_found_count++;
+		   $not_found_count==1 and $t->{COMMENT}.="[".sprintf('0x%x',$i*$t->{KEYS_PER_TABLET})." \@$i not found]";
+		   #$t->{COMMENT}.= ($t->{KEYRANGELIST}[$i]||0) .",";
+	   }
+	   $not_found_count>1 and $t->{COMMENT}.="[$not_found_count key ranges not found]";
+	   
+	   print "INSERT INTO tableinfo (",
+	      , join(",",keys %field)
+		  , ") values(\n   ",
+		  , join (",", map({ my $x=$field{$_}{INSERT}; $x ? $x->($t) :  
+		                     $field{$_}{TYPE} eq "TEXT" ? "'" . $t->{$_} . "'" : $t->{$_}||0       
+		                  } keys %field))
+		  ,");\n";
+	}
+	
+	print "DROP TABLE temp_table_detail;\n"; # No longer needed 
+	print "UPDATE  tableinfo SET COMMENT=COMMENT || '[Excess tablets]'  WHERE UNIQ_TABLET_COUNT > UNIQ_TABLETS_ESTIMATE;\n";
+};
+1;	
+} # End of TableInfo
+####################################################################################
+#--------------------------------------------------------------------------------
+#NOTE:  The JSON output from the "-o json" option of yugatool is NOT WELL FORMED.
+#       This package compensates for that - it parses pices collected by a higher level.
+BEGIN{
+package JSON_Analyzer;
+# Package globals ---
+my %dispatch_by_type = (
+	cluster 		=> \&Parse_Cluster_line,
+	Masters 		=> sub{Parse_Master_line($_[0],$_)  for @{$_[0]->{content}}},
+	"Tablet Servers"=> sub{Parse_Tserver_line($_[0],$_) for @{$_[0]->{content}}},
+	"Tablet Report" => sub{Parse_Tablet_line($_[0],$_)  for @{$_[0]->{content}}},
+);
+
+my $packed_zero = pack 'H4',0;      # Default value for start_key
+my $packed_ffff = pack 'H4','ffff'; # ... and ed_key
+my $json = JSON->new;
+   
+sub Process_line{
+   my ($j) = @_;
+
+   #print "GOT ",length($j)," bytes at rec#$.\n";
+   	my $data = $json->decode($j);
+    my $msg = $data->{msg} || "cluster"; # Initial JSON for cluster does not have "msg"
+	$msg=~s/[^\w\s].*//; # Zap everything after text (Tablet report contains other stuff....
+    ## print "-----", join(",",keys %$data),
+    ##       " msg=",($msg),
+    ##       " content=",scalar(@{$data->{content} || []}), "\n";
+    ## 
+	my $dispatch = $dispatch_by_type{$msg} or die "ERROR: No handler for $msg at $.";
+	$dispatch->($data);
+}
+
+sub Parse_Cluster_line{
+	my ($uuid,$zone) = @{$_[0]}{qw|clusterUuid zone|}; # No zone?
+	$zone ||= "Version:" . $_[0]->{version};
+	print "INSERT INTO cluster(type,uuid,zone) VALUES('CLUSTER',",
+	       "'$uuid','$zone');\n";
+    if ($. > 5){
+	   die "ERROR: This does not appear to be a TABLET REPORT json (too many 'CLUSTER' lines)";	
+	}
+}
+
+sub Parse_Master_line{
+	my ($d,$m)=@_;
+	my ($uuid, $host, $port, $region,$zone,$role) =
+	    (MIME::Base64::decode_base64($m->{instanceId}{permanentUuid}),
+		 $m->{registration}{privateRpcAddresses}[0]{host},
+		 $m->{registration}{privateRpcAddresses}[0]{port},
+		 $m->{registration}{cloudInfo}{placementRegion},
+		 $m->{registration}{cloudInfo}{placementZone},
+		 $m->{role}
+		);
+	print "INSERT INTO cluster(type, uuid , ip, port, region, zone ,role)\n",
+	      "  VALUES('MASTER','",
+          join("','", $uuid,$host,$port,$region,$zone,$role),
+		  "');\n";
+}
+
+sub Parse_Tserver_line{
+	my ($d, $t) = @_;
+
+	my ($uuid,$host,$port,$region,$zone,$alive,$reads,$writes,$heartbeat,$uptime,
+        $sst_size,$sst_uncompressed,$sst_files,$memory) = (
+		MIME::Base64::decode_base64($t->{instance_id}{permanentUuid}),
+		$t->{registration}{common}{privateRpcAddresses}[0]{host},
+		$t->{registration}{common}{privateRpcAddresses}[0]{port},
+		$t->{registration}{common}{cloudInfo}{placementRegion},
+		$t->{registration}{common}{cloudInfo}{placementZone},
+        $t->{alive},
+         undef, # reads
+		 undef, # writes
+		  undef, # heartbeat
+		$t->{metrics}{uptimeSeconds},
+		);
+		;
+	print "INSERT INTO cluster(type, uuid , ip, port, region, zone ,uptime)\n",
+	      "  VALUES('TSERVER','",
+          join("','", $uuid,$host,$port,$region,$zone,$uptime),
+		  "');\n";
+}
+
+sub Parse_Tablet_line{
+	my ($d,$t) = @_;
+	my ($host_name, $host_port,$host_uuid) 
+	   = $d->{msg} =~m/\[host:"([^"]+)"\s+port:(\d+)\] \((\w+)/;
+
+	my %values;
+	@values{ qw|tablet_uuid tablename table_uuid namespace  state status  
+	           start_key end_key         sst_size  wal_size 
+				cterm cidx leader lease_status| }
+			= (
+			$t->{tablet}{tablet_status}{tabletId},
+			$t->{tablet}{tablet_status}{tableName},
+			$t->{tablet}{tablet_status}{tableId},
+			$t->{tablet}{tablet_status}{namespaceName},
+			$t->{tablet}{tablet_status}{state},
+			$t->{tablet}{tablet_status}{tabletDataState},
+			# start_key & end_key are base-64 encoded binary values 
+			# They need to be decoded, then converted into ("0xABCD") "hex encoded binary"
+			"0x". unpack('H4', MIME::Base64::decode_base64(
+			   $t->{tablet}{tablet_status}{partition}{partitionKeyStart}) || $packed_zero),
+			"0x". unpack('H4', MIME::Base64::decode_base64(
+			   $t->{tablet}{tablet_status}{partition}{partitionKeyEnd})   || $packed_ffff),
+	        $t->{tablet}{tablet_status}{sstFilesDiskSize},
+			$t->{tablet}{tablet_status}{walFilesDiskSize},
+			$t->{consensus_state}{cstate}{currentTerm},
+			$t->{consensus_state}{cstate}{config}{opidIndex},
+			$t->{consensus_state}{cstate}{leaderUuid},
+			$t->{consensus_state}{leaderLeaseStatus},
+	);
+
+    print "INSERT INTO tablet (node_uuid,tablet_uuid , table_name,table_uuid,namespace,state,status,",
+                  "start_key, end_key, sst_size, wal_size, cterm, cidx, leader, lease_status)\n  VALUES('",
+				  $host_uuid,"'", 
+	              map({ ",'" . ($values{$_}||'') . "'" } 
+        		  qw|tablet_uuid tablename table_uuid namespace  state status  start_key end_key sst_size  wal_size 
+             		  cterm cidx leader lease_status|  
+		  ),");\n";
+}
+
+} # ----- ENd of JSON_Analyzer ---------------------------------------
