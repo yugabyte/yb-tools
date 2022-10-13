@@ -61,16 +61,16 @@ func NewCreateSupportBundleParamsWithHTTPClient(client *http.Client) *CreateSupp
 */
 type CreateSupportBundleParams struct {
 
-	/* Dummy.
-
-	   Dummy value to work around platform bug PLAT-2076
-	*/
-	Dummy *models.DummyBody
-
 	// CUUID.
 	//
 	// Format: uuid
 	CUUID strfmt.UUID
+
+	/* SupportBundle.
+
+	   post support bundle info
+	*/
+	SupportBundle *models.SupportBundleFormData
 
 	// UniUUID.
 	//
@@ -130,17 +130,6 @@ func (o *CreateSupportBundleParams) SetHTTPClient(client *http.Client) {
 	o.HTTPClient = client
 }
 
-// WithDummy adds the dummy to the create support bundle params
-func (o *CreateSupportBundleParams) WithDummy(dummy *models.DummyBody) *CreateSupportBundleParams {
-	o.SetDummy(dummy)
-	return o
-}
-
-// SetDummy adds the dummy to the create support bundle params
-func (o *CreateSupportBundleParams) SetDummy(dummy *models.DummyBody) {
-	o.Dummy = dummy
-}
-
 // WithCUUID adds the cUUID to the create support bundle params
 func (o *CreateSupportBundleParams) WithCUUID(cUUID strfmt.UUID) *CreateSupportBundleParams {
 	o.SetCUUID(cUUID)
@@ -150,6 +139,17 @@ func (o *CreateSupportBundleParams) WithCUUID(cUUID strfmt.UUID) *CreateSupportB
 // SetCUUID adds the cUuid to the create support bundle params
 func (o *CreateSupportBundleParams) SetCUUID(cUUID strfmt.UUID) {
 	o.CUUID = cUUID
+}
+
+// WithSupportBundle adds the supportBundle to the create support bundle params
+func (o *CreateSupportBundleParams) WithSupportBundle(supportBundle *models.SupportBundleFormData) *CreateSupportBundleParams {
+	o.SetSupportBundle(supportBundle)
+	return o
+}
+
+// SetSupportBundle adds the supportBundle to the create support bundle params
+func (o *CreateSupportBundleParams) SetSupportBundle(supportBundle *models.SupportBundleFormData) {
+	o.SupportBundle = supportBundle
 }
 
 // WithUniUUID adds the uniUUID to the create support bundle params
@@ -170,15 +170,15 @@ func (o *CreateSupportBundleParams) WriteToRequest(r runtime.ClientRequest, reg 
 		return err
 	}
 	var res []error
-	if o.Dummy != nil {
-		if err := r.SetBodyParam(o.Dummy); err != nil {
-			return err
-		}
-	}
 
 	// path param cUUID
 	if err := r.SetPathParam("cUUID", o.CUUID.String()); err != nil {
 		return err
+	}
+	if o.SupportBundle != nil {
+		if err := r.SetBodyParam(o.SupportBundle); err != nil {
+			return err
+		}
 	}
 
 	// path param uniUUID
