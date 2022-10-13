@@ -11,8 +11,6 @@ import (
 
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/strfmt"
-
-	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
 // DownloadSupportBundleReader is a Reader for the DownloadSupportBundle structure.
@@ -44,22 +42,20 @@ func NewDownloadSupportBundleOK() *DownloadSupportBundleOK {
 successful operation
 */
 type DownloadSupportBundleOK struct {
-	Payload *models.SupportBundle
+	Payload string
 }
 
 func (o *DownloadSupportBundleOK) Error() string {
 	return fmt.Sprintf("[GET /api/v1/customers/{cUUID}/universes/{uniUUID}/support_bundle/{sbUUID}/download][%d] downloadSupportBundleOK  %+v", 200, o.Payload)
 }
-func (o *DownloadSupportBundleOK) GetPayload() *models.SupportBundle {
+func (o *DownloadSupportBundleOK) GetPayload() string {
 	return o.Payload
 }
 
 func (o *DownloadSupportBundleOK) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
 
-	o.Payload = new(models.SupportBundle)
-
 	// response payload
-	if err := consumer.Consume(response.Body(), o.Payload); err != nil && err != io.EOF {
+	if err := consumer.Consume(response.Body(), &o.Payload); err != nil && err != io.EOF {
 		return err
 	}
 

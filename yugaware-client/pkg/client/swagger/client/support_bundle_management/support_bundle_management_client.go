@@ -40,6 +40,8 @@ type ClientService interface {
 
 	ListSupportBundle(params *ListSupportBundleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListSupportBundleOK, error)
 
+	ListSupportBundleComponents(params *ListSupportBundleComponentsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListSupportBundleComponentsOK, error)
+
 	SetTransport(transport runtime.ClientTransport)
 }
 
@@ -235,6 +237,45 @@ func (a *Client) ListSupportBundle(params *ListSupportBundleParams, authInfo run
 	// unexpected success response
 	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
 	msg := fmt.Sprintf("unexpected success response for listSupportBundle: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  ListSupportBundleComponents lists all components available in support bundle
+*/
+func (a *Client) ListSupportBundleComponents(params *ListSupportBundleComponentsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListSupportBundleComponentsOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewListSupportBundleComponentsParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "listSupportBundleComponents",
+		Method:             "GET",
+		PathPattern:        "/api/v1/customers/{cUUID}/support_bundle/components",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &ListSupportBundleComponentsReader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*ListSupportBundleComponentsOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for listSupportBundleComponents: API contract not enforced by server. Client expected to get an error, but got: %T", result)
 	panic(msg)
 }
 

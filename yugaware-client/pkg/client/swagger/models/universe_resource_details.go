@@ -44,6 +44,9 @@ type UniverseResourceDetails struct {
 	// Price per hour
 	PricePerHour float64 `json:"pricePerHour,omitempty"`
 
+	// Known pricing info
+	PricingKnown bool `json:"pricingKnown,omitempty"`
+
 	// Volume count
 	VolumeCount int32 `json:"volumeCount,omitempty"`
 

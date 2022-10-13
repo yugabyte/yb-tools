@@ -26,6 +26,10 @@ type Audit struct {
 	// Enum: [Set Create Edit Update Delete Register Refresh Upload Upgrade Import Pause Resume Restart Abort Retry Restore Alter Drop Stop Validate Acknowledge SyncXClusterConfig Login Promote Bootstrap Configure RefreshPricing UpgradeSoftware UpgradeGFlags UpgradeCerts UpgradeTLS UpgradeVmImage UpgradeSystemd ResizeNode AddMetrics CreateKubernetes SetupDocker RetrieveKmsKey RemoveKmsKeyReferenceHistory UpsertCustomerFeatures CreateSelfSignedCert UpdateEmptyCustomerCertificate GetRootCertificate AddClientCertificate SetDBCredentials CreateUserInDB SetHelm3Compatible SetBackupFlag SetUniverseKey ResetUniverseVersion ConfigUniverseAlert ToggleTls TlsConfigUpdate UpdateDiskSize CreateCluster DeleteCluster CreateAllClusters UpdatePrimaryCluster UpdateReadOnlyCluster CreateReadOnlyCluster DeleteReadOnlyCluster RunYsqlQuery BulkImport CreateBackup RestoreBackup CreateSingleTableBackup CreateMultiTableBackup CreateBackupSchedule EditBackupSchedule StartPeriodicBackup StopPeriodicBackup DetachedNodeInstanceAction NodeInstanceAction DeleteBackupSchedule ChangeUserRole ChangeUserPassword SetSecurity GenerateApiToken ResetSlowQueries ExternalScriptSchedule StopScheduledScript UpdateScheduledScript CreateInstanceType DeleteInstanceType GetUniverseResources ThirdpartySoftwareUpgrade CreateTableSpaces]
 	Action string `json:"action,omitempty"`
 
+	// Additional Details
+	// Read Only: true
+	AdditionalDetails interface{} `json:"additionalDetails,omitempty"`
+
 	// API call
 	// Example: /api/v1/customers/\u003c496fdea8-df25-11eb-ba80-0242ac130004\u003e/providers
 	// Read Only: true

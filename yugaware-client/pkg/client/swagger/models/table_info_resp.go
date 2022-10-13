@@ -30,8 +30,12 @@ type TableInfoResp struct {
 	// Format: uuid
 	ParentTableUUID strfmt.UUID `json:"parentTableUUID,omitempty"`
 
+	// Postgres schema name of the table
+	// Example: public
+	PgSchemaName string `json:"pgSchemaName,omitempty"`
+
 	// Relation type
-	// Enum: [SYSTEM_TABLE_RELATION USER_TABLE_RELATION INDEX_TABLE_RELATION]
+	// Enum: [SYSTEM_TABLE_RELATION USER_TABLE_RELATION INDEX_TABLE_RELATION MATVIEW_TABLE_RELATION]
 	RelationType string `json:"relationType,omitempty"`
 
 	// Size in bytes
@@ -96,7 +100,7 @@ var tableInfoRespTypeRelationTypePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["SYSTEM_TABLE_RELATION","USER_TABLE_RELATION","INDEX_TABLE_RELATION"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["SYSTEM_TABLE_RELATION","USER_TABLE_RELATION","INDEX_TABLE_RELATION","MATVIEW_TABLE_RELATION"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -114,6 +118,9 @@ const (
 
 	// TableInfoRespRelationTypeINDEXTABLERELATION captures enum value "INDEX_TABLE_RELATION"
 	TableInfoRespRelationTypeINDEXTABLERELATION string = "INDEX_TABLE_RELATION"
+
+	// TableInfoRespRelationTypeMATVIEWTABLERELATION captures enum value "MATVIEW_TABLE_RELATION"
+	TableInfoRespRelationTypeMATVIEWTABLERELATION string = "MATVIEW_TABLE_RELATION"
 )
 
 // prop value enum
