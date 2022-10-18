@@ -176,7 +176,7 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 			})
 			It("Returns valid logs", func() {
 				Expect(logLines).To(HaveLen(10))
-				Expect(logLines).To(ContainElement(MatchRegexp(`^\d{4,4}-\d{2,2}-\d{2,2} \d{2,2}:\d{2,2}:\d{2,2},\d{3,3}`)))
+				Expect(logLines).To(ContainElement(MatchRegexp(`^(YW )?\d{4,4}-\d{2,2}-\d{2,2}(T| )\d{2,2}:\d{2,2}:\d{2,2}(,|.)\d{3,3}`)))
 			})
 		})
 
