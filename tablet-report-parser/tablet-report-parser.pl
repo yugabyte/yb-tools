@@ -4,8 +4,9 @@
 
 # Run instructions:
 
-# 1: obtain a tablet report. To get that, run:
-
+# 1: obtain a tablet report. To get that, run Yugatool;:
+# (See https://support.yugabyte.com/hc/en-us/articles/6111093115405-How-to-use-the-Yugatool-utility)
+#
 #		export MASTERS=10.183.11.69:7100,10.184.7.181:7100,10.185.8.17:7100
 #		export TLS_CONFIG="--cacert /opt/yugabyte/certs/SchwabCA.crt"
 #		export TLS_CONFIG="$TLS_CONFIG --skiphostverification"
@@ -42,7 +43,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.12";
+our $VERSION = "0.15";
 use strict;
 use warnings;
 use JSON qw( );
@@ -122,7 +123,7 @@ my %entity = (
 				HANDLER=>\&Parse_Tablet_line,
 				LINE_REGEX =>
                  	qr| ^\s(?<tablet_uuid>(\w{32}))\s{3}
-					(?<tablename>(\w+))\s+
+					(?<tablename>([\w\-]+))\s+
 					(?<table_uuid>(\w{32})?)\s* # This exists only if --show_table_uuid is set
 					(?<namespace>(\w+))\s+
 					(?<state>(\w+))\s+
@@ -146,7 +147,9 @@ while ($line=<>){
 		$json_line .= $line;
 	    if ($line =~m/^\s?}[\s,]*$/){
 		   # Process previous JSON segment
+		   Set_Transaction(1);
 		   JSON_Analyzer::Process_line($json_line);
+		   Set_Transaction(0);
 		   #$tot_bytes += length($json_line);
 		   $json_line = ""; # Zap it   
 	    }
@@ -391,6 +394,11 @@ sub collect{
     my ($self, $tablet, $node_uuid) = @_; # Hash ref of tablet field info
 	$self->{TOT_TABLET_COUNT}++;
 	$self->{NODE_TABLET_COUNT}{$node_uuid}++;
+	for ($tablet->{start_key}, $tablet->{end_key}){ # Sanity check hex values 
+	    next if not defined $_; # Empty is ok 
+	    next if length($_) <=6; # Reasonable hex values
+        $_ = '0x' . substr($_,-4);	# Use last 4 char 	
+	}
 	my $start_key = hex($tablet->{start_key} || '0x0000'); # Convert to a binary number 
 	my $end_key   = hex($tablet->{end_key}   || '0xffff');
 	
