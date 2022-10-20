@@ -43,7 +43,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.15";
+our $VERSION = "0.16";
 use strict;
 use warnings;
 use JSON qw( );
@@ -77,18 +77,24 @@ CREATE VIEW tablets_per_node AS
 	GROUP BY node_uuid
 	ORDER BY tablet_count;
 CREATE VIEW tablet_replica_detail AS
-	SELECT namespace,table_name,table_uuid,tablet_uuid,count(*) as replicas  
-	from tablet 
-	GROUP BY namespace,table_name,table_uuid,tablet_uuid;
+	SELECT t.namespace,t.table_name,t.table_uuid,t.tablet_uuid,
+    sum(CASE WHEN t.status = 'TABLET_DATA_TOMBSTONED' THEN 0 ELSE 1 END) as replicas  ,
+    sum(CASE WHEN t.status = 'TABLET_DATA_TOMBSTONED' THEN 1 ELSE 0 END) as tombstoned,
+	sum(CASE when t.node_uuid = leader AND lease_status='HAS_LEASE'
+	    then 1 else 0 END ) as leader_count
+	from tablet t
+	GROUP BY t.namespace,t.table_name,t.table_uuid,t.tablet_uuid;
 CREATE VIEW tablet_replica_summary AS
 	SELECT replicas,count(*) as tablet_count FROM  tablet_replica_detail GROUP BY replicas;
 CREATE VIEW leaderless AS 
-     SELECT t.tablet_uuid, replicas,t.table_name,node_uuid,status,ip 
+     SELECT t.tablet_uuid, replicas,t.namespace,t.table_name,node_uuid,status,ip ,leader_count
 	 from tablet t,cluster ,tablet_replica_detail trd
-	 WHERE length(leader) < 3 AND cluster.type='TSERVER' AND cluster.uuid=node_uuid
-	       AND  t.tablet_uuid=trd.tablet_uuid;
+	 WHERE  cluster.type='TSERVER' AND cluster.uuid=node_uuid
+	       AND  t.tablet_uuid=trd.tablet_uuid  AND t.status != 'TABLET_DATA_TOMBSTONED'
+		   AND trd.leader_count !=1;
+
 CREATE VIEW delete_leaderless_be_careful AS 
-     SELECT '\$HOME/tserver/bin/yb-ts-cli delete_tablet '|| tablet_uuid ||' -certs_dir_name \$TLSDIR -server_address '||ip ||':9100  Your_REASON_tktnbr'
+     SELECT '\$HOME/tserver/bin/yb-ts-cli delete_tablet '|| tablet_uuid ||' -certs_dir_name \$TLSDIR -server_address '||ip ||':9100  \$REASON_tktnbr'
 	   AS generated_delete_command
      FROM leaderless;
 -- table to handle hex values from 0x0000 to 0xffff (Not requird) 
@@ -132,10 +138,10 @@ my %entity = (
 					(?<end_key>(0x\w+)?)\s*   # This could also be EMPTY, but start exists in that case
 					(?<sst_size>(\d+\s\w+))\s+
 					(?<wal_size>(\d+\s\w+))\s+
-					(?<cterm>(\d+))\s*
-					(?<cidx>(-?\d+))\s+       #  Can have a leading minus 
+					(?<cterm>([\[\]\d]+))\s*
+					(?<cidx>(-?[\[\]\d]+))\s+       #  Can have a leading minus 
 					(?<leader>([\[\]\w]+))\s+
-					(?<lease_status>(\w+)?)|x,
+					(?<lease_status>([\[\]\w]+)?)|x,
 									 
 	},
 );
@@ -269,7 +275,7 @@ sub Parse_Tablet_line{
         die "ERROR: Line $. failed to match tablet regex";		
 	}
 	my %save_val=%+; # Save collected regex named capture hash (before it gets clobbered by next regex)
-    if ($save_val{namespace} eq "RUNNING"){
+    if ($save_val{namespace} eq "RUNNING"  or  $save_val{namespace} eq "NOT_STARTED"){
 	   # We have mis-interpreted this line because NAMESPACE wa missing - re-interpret without namespace
        $line =~m/^\s(?<tablet_uuid>(\w{32}))\s{3}
 					(?<tablename>(\w+))\s+
@@ -281,14 +287,18 @@ sub Parse_Tablet_line{
 					(?<end_key>(0x\w+)?)\s*  
 					(?<sst_size>(\d+\s\w+))\s+
 					(?<wal_size>(\d+\s\w+))\s+
-					(?<cterm>(\d+))\s*
-					(?<cidx>(\d+))\s+
+					(?<cterm>([\[\]\d]+))\s*    # This could be "[]" or a number.. 
+					(?<cidx>([\[\]\d]+))\s+
 					(?<leader>([\[\]\w]+))\s+
-					(?<lease_status>(\w+)?) 
+					(?<lease_status>([\[\]\w]+)?) 
                   /x or die "ERROR parsing tablet line#$.";					
 	    print "-- line#$. : No NAMESPACE found for table '$+{tablename}' tablet $+{tablet_uuid}\n";
 	    %save_val=%+; # clobber it with new info
 		$save_val{namespace} = '';
+	}
+	for (qw|cterm cidx leader lease_status|){
+		next unless $save_val{$_} eq "[]";
+		$save_val{$_}= ''; # Zap it 
 	}
 	print "INSERT INTO tablet (node_uuid,tablet_uuid , table_name,table_uuid,namespace,state,status,",
                   "start_key, end_key, sst_size, wal_size, cterm, cidx, leader, lease_status) VALUES('",
