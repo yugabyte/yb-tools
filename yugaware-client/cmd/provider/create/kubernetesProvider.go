@@ -52,6 +52,7 @@ regions:
       - name: us-east1-b
         config:
           storage_class: yugaware
+          kubernetes_namespace: example_namespace
           overrides: |
             nodeSelector:
               cloud.google.com/gke-nodepool: yugabyte-us-east1-b
@@ -248,12 +249,20 @@ func getKubernetesZone(log logr.Logger, info cli.ZoneInfo, kubeconfig []byte) (*
 		Code: info.Name,
 		Name: NewString(info.Name),
 		Config: map[string]string{
-			"STORAGE_CLASS":      info.Config.StorageClass,
 			"OVERRIDES":          info.Config.Overrides,
 			"KUBECONFIG_NAME":    info.Name + "-kubeconfig",
 			"KUBECONFIG_CONTENT": string(kubeconfig),
 		},
 	}
+
+	if info.Config.StorageClass != "" {
+		zone.Config["STORAGE_CLASS"] = info.Config.StorageClass
+	}
+
+	if info.Config.KubernetesNamespace != "" {
+		zone.Config["KUBENAMESPACE"] = info.Config.KubernetesNamespace
+	}
+
 	log.V(1).Info("generated zone", "zone", &zone)
 	return zone, nil
 }

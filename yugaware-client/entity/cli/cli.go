@@ -53,9 +53,10 @@ func (r *YugawareRegistration) MarshalLogObject(enc zapcore.ObjectEncoder) error
 }
 
 type Config struct {
-	StorageClass   string `json:"storage_class,omitempty"`
-	Overrides      string `json:"overrides,omitempty"`
-	KubeconfigPath string `json:"kubeconfig_path,omitempty"`
+	KubernetesNamespace string `json:"kubernetes_namespace,omitempty"`
+	StorageClass        string `json:"storage_class,omitempty"`
+	Overrides           string `json:"overrides,omitempty"`
+	KubeconfigPath      string `json:"kubeconfig_path,omitempty"`
 }
 
 type ZoneInfo struct {
