@@ -43,7 +43,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.16";
+our $VERSION = "0.17";
 use strict;
 use warnings;
 use JSON qw( );
@@ -131,8 +131,8 @@ my %entity = (
                  	qr| ^\s(?<tablet_uuid>(\w{32}))\s{3}
 					(?<tablename>([\w\-]+))\s+
 					(?<table_uuid>(\w{32})?)\s* # This exists only if --show_table_uuid is set
-					(?<namespace>(\w+))\s+
-					(?<state>(\w+))\s+
+					(?<namespace>([\w\-]+))\s+
+					(?<state>(\w+))\s*
 					(?<status>(\w+))\s+
 					(?<start_key>(0x\w+)?)\s* # This could be EMPTY. If so, start_key value will contain END!
 					(?<end_key>(0x\w+)?)\s*   # This could also be EMPTY, but start exists in that case
