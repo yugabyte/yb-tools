@@ -130,6 +130,7 @@ func RootInit() *cobra.Command {
 			Description: "Interact with Yugaware storage",
 			Commands: []*cobra.Command{
 				storage.CreateCmd(ctx),
+				storage.ListCmd(ctx),
 			},
 		},
 		{
