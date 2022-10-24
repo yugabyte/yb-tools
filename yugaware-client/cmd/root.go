@@ -109,6 +109,7 @@ func RootInit() *cobra.Command {
 			Commands: []*cobra.Command{
 				backup.CreateCmd(ctx),
 				backup.ListCmd(ctx),
+				backup.RestoreCmd(ctx),
 			},
 		},
 		{
