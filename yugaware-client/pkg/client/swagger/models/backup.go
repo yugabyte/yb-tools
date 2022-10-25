@@ -32,11 +32,10 @@ type Backup struct {
 	// Enum: [YB_BACKUP_SCRIPT YB_CONTROLLER]
 	Category string `json:"category,omitempty"`
 
-	// Backup completion time
-	// Format: date-time
-	CompletionTime strfmt.DateTime `json:"completionTime,omitempty"`
+	// Backup completion time. Changes from upstream: Format of a date-time field needs to match https://www.rfc-editor.org/rfc/rfc3339#section-5.6, so unix timestamps don't conform
+	CompletionTime int64 `json:"completionTime,omitempty"`
 
-	// create time
+	// Changes from upstream: Format of a date-time field needs to match https://www.rfc-editor.org/rfc/rfc3339#section-5.6, so unix timestamps don't conform
 	// Required: true
 	CreateTime *int64 `json:"createTime"`
 
@@ -44,7 +43,7 @@ type Backup struct {
 	// Format: uuid
 	CustomerUUID strfmt.UUID `json:"customerUUID,omitempty"`
 
-	// Expiry time (unix timestamp) of the backup
+	// Expiry time (unix timestamp) of the backup. Changes from upstream: Format of a date-time field needs to match https://www.rfc-editor.org/rfc/rfc3339#section-5.6, so unix timestamps don't conform
 	Expiry int64 `json:"expiry,omitempty"`
 
 	// Time unit for backup expiry time
@@ -77,10 +76,9 @@ type Backup struct {
 	// Format: uuid
 	UniverseUUID strfmt.UUID `json:"universeUUID,omitempty"`
 
-	// update time
+	// Changes from upstream: Format of a date-time field needs to match https://www.rfc-editor.org/rfc/rfc3339#section-5.6, so unix timestamps don't conform
 	// Required: true
-	// Format: date-time
-	UpdateTime *strfmt.DateTime `json:"updateTime"`
+	UpdateTime *int64 `json:"updateTime"`
 
 	// Version of the backup in a category
 	// Enum: [V1 V2]
@@ -100,10 +98,6 @@ func (m *Backup) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateCategory(formats); err != nil {
-		res = append(res, err)
-	}
-
-	if err := m.validateCompletionTime(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -220,18 +214,6 @@ func (m *Backup) validateCategory(formats strfmt.Registry) error {
 
 	// value enum
 	if err := m.validateCategoryEnum("category", "body", m.Category); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (m *Backup) validateCompletionTime(formats strfmt.Registry) error {
-	if swag.IsZero(m.CompletionTime) { // not required
-		return nil
-	}
-
-	if err := validate.FormatOf("completionTime", "body", "date-time", m.CompletionTime.String(), formats); err != nil {
 		return err
 	}
 
@@ -436,10 +418,6 @@ func (m *Backup) validateUniverseUUID(formats strfmt.Registry) error {
 func (m *Backup) validateUpdateTime(formats strfmt.Registry) error {
 
 	if err := validate.Required("updateTime", "body", m.UpdateTime); err != nil {
-		return err
-	}
-
-	if err := validate.FormatOf("updateTime", "body", "date-time", m.UpdateTime.String(), formats); err != nil {
 		return err
 	}
 

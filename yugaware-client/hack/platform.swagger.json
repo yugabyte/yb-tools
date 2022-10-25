@@ -1133,12 +1133,13 @@
           "type" : "string"
         },
         "completionTime" : {
-          "description" : "Backup completion time",
-          "format" : "date-time",
-          "type" : "string"
+          "description" : "Backup completion time. Changes from upstream: Format of a date-time field needs to match https://www.rfc-editor.org/rfc/rfc3339#section-5.6, so unix timestamps don't conform",
+          "format" : "int64",
+          "type" : "integer"
         },
         "createTime" : {
-          "format" : "date-time",
+          "description": "Changes from upstream: Format of a date-time field needs to match https://www.rfc-editor.org/rfc/rfc3339#section-5.6, so unix timestamps don't conform",
+          "format" : "int64",
           "type" : "integer"
         },
         "customerUUID" : {
@@ -1147,8 +1148,8 @@
           "type" : "string"
         },
         "expiry" : {
-          "description" : "Expiry time (unix timestamp) of the backup",
-          "format" : "date-time",
+          "description" : "Expiry time (unix timestamp) of the backup. Changes from upstream: Format of a date-time field needs to match https://www.rfc-editor.org/rfc/rfc3339#section-5.6, so unix timestamps don't conform",
+          "format" : "int64",
           "type" : "integer"
         },
         "expiryTimeUnit" : {
@@ -1189,8 +1190,9 @@
           "type" : "string"
         },
         "updateTime" : {
-          "format" : "date-time",
-          "type" : "string"
+          "description": "Changes from upstream: Format of a date-time field needs to match https://www.rfc-editor.org/rfc/rfc3339#section-5.6, so unix timestamps don't conform",
+          "format" : "int64",
+          "type" : "integer"
         },
         "version" : {
           "description" : "Version of the backup in a category",
@@ -12911,9 +12913,15 @@
         } ],
         "responses" : {
           "200" : {
-            "description" : "If requested schedule backup.",
+            "description" : "If requested schedule backup. Changes from upstream: This API call actually returns a task, not a Schedule",
             "schema" : {
-              "$ref" : "#/definitions/Schedule"
+              "$ref" : "#/definitions/YBPTask"
+            }
+          },
+          "400" : {
+            "description" : "When request fails validations. Changes from upstream: Return code 400 is not in swagger spec",
+            "schema" : {
+              "$ref" : "#/definitions/YBPError"
             }
           }
         },

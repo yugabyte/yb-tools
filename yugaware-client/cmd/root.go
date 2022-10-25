@@ -102,6 +102,13 @@ func RootInit() *cobra.Command {
 
 	categories := []CommandCategory{
 		{
+			Name:        "backup",
+			Description: "Interact with Yugabyte backups",
+			Commands: []*cobra.Command{
+				backup.CreateCmd(ctx),
+			},
+		},
+		{
 			Name:        "certificate",
 			Description: "Interact with Yugabyte certificates",
 			Commands: []*cobra.Command{
