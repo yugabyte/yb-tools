@@ -26,6 +26,7 @@ import (
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd/certificate"
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd/provider"
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd/session"
+	"github.com/yugabyte/yb-tools/yugaware-client/cmd/storage"
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd/universe"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/cmdutil"
 )
@@ -122,6 +123,13 @@ func RootInit() *cobra.Command {
 			Description: "Session management utilities",
 			Commands: []*cobra.Command{
 				session.ServerLogCmd(ctx),
+			},
+		},
+		{
+			Name:        "storage",
+			Description: "Interact with Yugaware storage",
+			Commands: []*cobra.Command{
+				storage.CreateCmd(ctx),
 			},
 		},
 		{
