@@ -43,7 +43,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.17";
+our $VERSION = "0.18";
 use strict;
 use warnings;
 use JSON qw( );
@@ -97,6 +97,18 @@ CREATE VIEW delete_leaderless_be_careful AS
      SELECT '\$HOME/tserver/bin/yb-ts-cli delete_tablet '|| tablet_uuid ||' -certs_dir_name \$TLSDIR -server_address '||ip ||':9100  \$REASON_tktnbr'
 	   AS generated_delete_command
      FROM leaderless;
+	 
+CREATE VIEW large_wal AS 
+  SELECT table_name, count(*) as tablets,  
+        sum(CASE WHEN 0+rtrim(wal_size,' MB') >=128 then 1 else 0 END) as "GE128MB",
+        sum(CASE WHEN 0+rtrim(wal_size,' MB') >=96  AND  0+rtrim(wal_size,' MB') < 128 then 1 else 0 END) as "GE96MB",
+        sum(CASE WHEN 0+rtrim(wal_size,' MB') >=65  AND  0+rtrim(wal_size,' MB') < 96 then 1 else 0 END) as "GE65MB",
+        sum(CASE WHEN 0+rtrim(wal_size,' MB') < 65                                  then 1 else 0 END) as "LT65MB"
+  FROM tablet 
+  WHERE wal_size like '%MB' 
+  GROUP by table_name 
+  ORDER by GE128MB desc, GE96MB desc;
+
 -- table to handle hex values from 0x0000 to 0xffff (Not requird) 
 --CREATE table hexval(h text primary key,i integer, covered integer);
 --WITH RECURSIVE
@@ -104,12 +116,15 @@ CREATE VIEW delete_leaderless_be_careful AS
 --    INSERT INTO hexval  SELECT printf('0x%0.4x',x) ,x, NULL  FROM cnt;
 --- Summary report ----
 CREATE VIEW summary_report AS
-	SELECT (SELECT count(*) from cluster where type="TSERVER") || ' TSERVERs, '
-			|| (SELECT count(DISTINCT table_name) FROM tablet) || " Tables, " 
-			|| (SELECT count(*) from tablet) || ' Tablets loaded.' 
+	SELECT (SELECT count(*) from cluster where type='TSERVER') || ' TSERVERs, ' 
+	     || (SELECT count(DISTINCT table_name) FROM tablet) || ' Tables, ' 
+		 || (SELECT count(*) from tablet) || ' Tablets loaded.'
 		AS Summary_Report
 	UNION 
-	 SELECT count(*) || ' leaderless tablets found.(See "leaderless")' from leaderless
+	 SELECT count(*) || ' leaderless tablets found.(See "leaderless")' FROM leaderless
+	UNION
+	  SELECT sum(GE128MB) || ' wal files in ' ||sum(CASE WHEN GE128MB>0 then 1 else 0 END) 
+	        || ' tables are > 128MB' FROM large_wal
 	UNION
 	 SELECT (SELECT sum(tablet_count) FROM tablet_replica_summary WHERE replicas < 3) 
 			 || ' tablets have RF < 3. (See "tablet_replica_summary/detail")'
@@ -136,8 +151,8 @@ my %entity = (
 					(?<status>(\w+))\s+
 					(?<start_key>(0x\w+)?)\s* # This could be EMPTY. If so, start_key value will contain END!
 					(?<end_key>(0x\w+)?)\s*   # This could also be EMPTY, but start exists in that case
-					(?<sst_size>(\d+\s\w+))\s+
-					(?<wal_size>(\d+\s\w+))\s+
+					(?<sst_size>(\-?\d+\s\w+))\s+
+					(?<wal_size>(\-?\d+\s\w+))\s+
 					(?<cterm>([\[\]\d]+))\s*
 					(?<cidx>(-?[\[\]\d]+))\s+       #  Can have a leading minus 
 					(?<leader>([\[\]\w]+))\s+
@@ -228,7 +243,14 @@ exit 0;
 
 #-------------------------------------------------------------------------------------
 sub Parse_Cluster_line{
-	my ($uuid,$zone) = $line=~m/^\s*([\w\-]+).+(\[.*\])/;
+	my ($uuid,$zone) = $line=~m/^\s*([\w\-]+).+(\[.*\])/; 
+	if (! $zone){ # Zone may not have been enclosed in []
+	   my @piece = split /\s+/,	$line;
+	   $piece[0] eq '' and shift @piece; # First piece is empty because of leading blanks in $line 
+	   $uuid = $piece[0];
+	   my ($zone_idx) = grep { $entity{$current_entity}{HEADERS}[$_]->{NAME} eq "ZONES" } 0..$#{ $entity{$current_entity}{HEADERS} };
+	   $zone = $piece[$zone_idx];
+	}
 	print "INSERT INTO cluster(type,uuid,zone) VALUES('CLUSTER',",
 	       "'$uuid','$zone');\n";
     if ($. > 3){
