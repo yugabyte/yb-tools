@@ -98,6 +98,10 @@ func init() {
 			var str string
 			if len(decoded) > 0 {
 				str = fmt.Sprintf("0x%s", hex.EncodeToString(decoded))
+			} else if "partitionKeyStart" == node.Key() {
+				str = "0x0000"
+			} else if "partitionKeyEnd" == node.Key() {
+				str = "0xffff"
 			}
 			return ajson.StringNode("", str), nil
 		}
