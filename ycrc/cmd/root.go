@@ -22,7 +22,7 @@ const (
 	// Timeout is the default timeout, in ms. Higher than gocql default, because scan queries generally take longer
 	Timeout = 1500
 
-	// ErrCountMax is the maximum number of errors we report on a single table scan
+	// ErrCountMax is the default number of errors we report on a single table scan
 	ErrCountMax = 5
 )
 
@@ -46,6 +46,9 @@ var (
 
 	// the time in miliseconds a query must succeed in
 	timeout int
+
+	// max printed errors
+	errmax int
 
 	certPath, keyPath, caPath string
 	enableHostVerification    bool
@@ -80,6 +83,7 @@ func init() {
 	rootCmd.Flags().IntVarP(&scaleFactor, "scale", "s", ScaleFactor, "Scaling factor of tasks per table, an int between 1 and 10")
 	rootCmd.Flags().IntVarP(&parallelTasks, "parallel", "p", ParallelTasks, "Number of concurrent tasks")
 	rootCmd.Flags().IntVarP(&timeout, "timeout", "t", Timeout, "Timeout of a single query, in ms")
+	rootCmd.Flags().IntVar(&errmax, "maxerrprinted", ErrCountMax, "Max errors to print - 0 to unset")
 
 	// SSL certs
 	rootCmd.Flags().StringVar(&certPath, "sslcert", "", "SSL cert path")
@@ -93,7 +97,7 @@ func init() {
 
 }
 
-//Execute runs the program
+// Execute runs the program
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -124,7 +128,13 @@ func checkPartitionRowCount(pMap partitionMap, session *gocql.Session) (int, err
 	err := session.Query(statement, pMap.lbound, pMap.ubound).Scan(&rows)
 
 	if err != nil {
-		if errCount < ErrCountMax {
+		// always print error to debug log
+		if debug {
+			fmt.Printf("DEBUG: Unable to get row count from: %s.%s partition hash: %s between %d and %d\n", cluster.Keyspace, pMap.table, pMap.pColumns, pMap.lbound, pMap.ubound)
+			fmt.Println(err)
+		}
+
+		if errmax == 0 || errCount < errmax {
 			fmt.Fprintf(os.Stderr, "Unable to get row count from: %s.%s partition hash: %s between %d and %d\n", cluster.Keyspace, pMap.table, pMap.pColumns, pMap.lbound, pMap.ubound)
 			fmt.Fprintln(os.Stderr, err)
 			fmt.Fprintf(os.Stderr, "--------\nWARNING: Program will continue but rowcount is inaccurate for this table\n--------\n")
@@ -316,6 +326,10 @@ func rowCount(keyspace string) {
 	if timeout < 100 {
 		fmt.Fprintf(os.Stderr, "Timeout must be greater than 100ms, setting to default\n")
 		timeout = Timeout
+	}
+	if errmax < 0 {
+		fmt.Fprintf(os.Stderr, "maxerrprinted must be 0 (no trim) or positive, setting to default\n")
+		errmax = ErrCountMax
 	}
 
 	// 128, 256, 512, 1025, 2048, 4096, 8192, 16384, 32768, 65536
