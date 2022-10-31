@@ -154,7 +154,7 @@ var _ = Describe("Yugatool Integration Tests", func() {
 
 				// TODO: This should be extracted into utility function to RemoveReplica()
 				When("showing tombstoned tablets", func() {
-					var universe *util.YugatoolContext
+					var universe *util.YugatoolTestContext
 					BeforeEach(func() {
 						command = append(command, "--show-tombstoned")
 

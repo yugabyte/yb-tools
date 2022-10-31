@@ -224,7 +224,7 @@ func (o *CreateOptions) validateUniverseName(ctx *cmdutil.YWClientContext) error
 	}
 
 	if o.UniverseName == "" {
-		return validateUniverseNameError(fmt.Errorf(`required flag "universe-name" is not set`))
+		return validateUniverseNameError(fmt.Errorf(`required argument "UNIVERSE_NAME" is not set`))
 	}
 
 	ctx.Log.V(1).Info("fetching universes")

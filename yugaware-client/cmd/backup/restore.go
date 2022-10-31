@@ -22,6 +22,8 @@ import (
 	"github.com/go-openapi/strfmt"
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/pkg/format"
+	"github.com/yugabyte/yb-tools/pkg/ybversion"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/session_management"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/table_management"
 
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/backups"
@@ -89,8 +91,13 @@ func (o *RestoreOptions) AddFlags(cmd *cobra.Command) {
 }
 
 func (o *RestoreOptions) Validate(ctx *cmdutil.YWClientContext) error {
+	err := o.validateVersion(ctx)
+	if err != nil {
+		return err
+	}
+
 	// Step 1: Check to see if the backup exists
-	err := o.validateBackup(ctx)
+	err = o.validateBackup(ctx)
 	if err != nil {
 		return err
 	}
@@ -106,15 +113,37 @@ func (o *RestoreOptions) Validate(ctx *cmdutil.YWClientContext) error {
 
 	// TODO: validate KMS configs
 }
+
+func (o *RestoreOptions) validateVersion(ctx *cmdutil.YWClientContext) error {
+	params := session_management.NewAppVersionParams().WithDefaults()
+	response, err := ctx.Client.PlatformAPIs.SessionManagement.AppVersion(params)
+	if err != nil {
+		return err
+	}
+	if v, ok := response.GetPayload()["version"]; ok {
+		version, err := ybversion.New(v)
+		if err != nil {
+			return err
+		}
+		// Backup V2 interfaces were first added in v2.13.0
+		if version.Lt(ybversion.YBVersion{Major: 2, Minor: 13}) {
+			return fmt.Errorf(`server version "%s": restore is only supported in version 2.13.0 and above`, v)
+		}
+		return nil
+	}
+	return fmt.Errorf("app version response did not contain version string")
+}
 func (o *RestoreOptions) validateBackup(ctx *cmdutil.YWClientContext) error {
 	params := backups.NewGetBackupV2Params().
 		WithCUUID(ctx.Client.CustomerUUID()).
 		WithBackupUUID(strfmt.UUID(o.BackupUUID))
 
 	backupResponse, err := ctx.Client.PlatformAPIs.Backups.GetBackupV2(params, ctx.Client.SwaggerAuth)
+	if err != nil {
+		return err
+	}
 	o.backup = backupResponse.GetPayload()
-
-	return err
+	return nil
 }
 
 func (o *RestoreOptions) validateUniverse(ctx *cmdutil.YWClientContext) error {

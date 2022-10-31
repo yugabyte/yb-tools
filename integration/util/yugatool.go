@@ -19,7 +19,7 @@ import (
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
-type YugatoolContext struct {
+type YugatoolTestContext struct {
 	*client.YBClient
 
 	Output               string
@@ -35,7 +35,7 @@ type YugatoolContext struct {
 	Fs vfs.Filesystem
 }
 
-func NewYugatoolContext(logger logr.Logger, universe *models.UniverseResp, masters []*common.HostPortPB, dialTimeout int64, cacert, clientCert, clientKey []byte, skipHostVerification bool) *YugatoolContext {
+func NewYugatoolTestContext(logger logr.Logger, universe *models.UniverseResp, masters []*common.HostPortPB, dialTimeout int64, cacert, clientCert, clientKey []byte, skipHostVerification bool) *YugatoolTestContext {
 	var caCertPath, clientCertPath, clientKeyPath string
 	fs := memfs.Create()
 
@@ -76,7 +76,7 @@ func NewYugatoolContext(logger logr.Logger, universe *models.UniverseResp, maste
 
 	Expect(err).NotTo(HaveOccurred())
 
-	return &YugatoolContext{
+	return &YugatoolTestContext{
 		YBClient: c,
 
 		DialTimeout:          dialTimeout,
@@ -92,7 +92,7 @@ func NewYugatoolContext(logger logr.Logger, universe *models.UniverseResp, maste
 	}
 }
 
-func (c *YugatoolContext) mastersString() string {
+func (c *YugatoolTestContext) mastersString() string {
 	masters := strings.Builder{}
 
 	for i, m := range c.MasterAddresses {
@@ -106,7 +106,7 @@ func (c *YugatoolContext) mastersString() string {
 	return masters.String()
 }
 
-func (c *YugatoolContext) RunYugatoolCommand(args ...string) (*bytes.Buffer, error) {
+func (c *YugatoolTestContext) RunYugatoolCommand(args ...string) (*bytes.Buffer, error) {
 	ytCommand := cmd.RootInit(c.Fs)
 
 	args = append(args, "-m", c.mastersString(), "--dial-timeout", strconv.Itoa(int(c.DialTimeout)))
@@ -138,7 +138,7 @@ func (c *YugatoolContext) RunYugatoolCommand(args ...string) (*bytes.Buffer, err
 	return buf, err
 }
 
-func (c *YugatoolContext) YSQLConnection() *sql.DB {
+func (c *YugatoolTestContext) YSQLConnection() *sql.DB {
 	var psqlInfo string
 	for _, server := range c.UniverseInfo.UniverseDetails.NodeDetailsSet {
 		if server.IsTserver {

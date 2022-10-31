@@ -26,7 +26,6 @@ import (
 	"github.com/yugabyte/yb-tools/pkg/flag"
 	"github.com/yugabyte/yb-tools/pkg/format"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/backups"
-	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/customer_configuration"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/cmdutil"
 )
@@ -170,31 +169,12 @@ func (o *CreateOptions) validateCreateOptionsCQL() error {
 
 func (o *CreateOptions) validateStorageOptions(ctx *cmdutil.YWClientContext) error {
 	var err error
-	o.storage, err = getStorageConfig(ctx, o.StorageConfig)
+	o.storage, err = ctx.Client.GetStorageConfigByIdentifier(o.StorageConfig)
 
+	if o.storage == nil {
+		return fmt.Errorf(`storage config "%s" does not exist`, o.StorageConfig)
+	}
 	return err
-}
-
-func getStorageConfig(ctx *cmdutil.YWClientContext, storageType string) (*models.CustomerConfigUI, error) {
-	configParams := customer_configuration.NewGetListOfCustomerConfigParams().
-		WithCUUID(ctx.Client.CustomerUUID())
-
-	ctx.Log.V(1).Info("getting customer config", "params", configParams)
-	configs, err := ctx.Client.PlatformAPIs.CustomerConfiguration.GetListOfCustomerConfig(configParams, ctx.Client.SwaggerAuth)
-	if err != nil {
-		return nil, err
-	}
-	ctx.Log.V(1).Info("got customer configs", "configs", configs.GetPayload())
-
-	for _, config := range configs.GetPayload() {
-		if *config.Type == models.CustomerConfigTypeSTORAGE {
-			if *config.ConfigName == storageType {
-				return config, nil
-			}
-		}
-	}
-
-	return nil, fmt.Errorf(`unable to get storage config "%s"`, storageType)
 }
 
 func (o *CreateOptions) getCreateMultiTableBackupParams(ctx *cmdutil.YWClientContext) *backups.CreateMultiTableBackupParams {
