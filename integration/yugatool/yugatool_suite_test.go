@@ -28,7 +28,7 @@ type YugatoolTestOptions struct {
 	ClientKey            string `mapstructure:"client_key"`
 	APIToken             string `mapstructure:"api_token"`
 
-	Provider         string   `mapstructure:"provider,omitempty"`
+	ProviderName     string   `mapstructure:"provider_name,omitempty"`
 	Regions          []string `mapstructure:"regions,omitempty"`
 	InstanceType     string   `mapstructure:"instance_type,omitempty"`
 	TestUniverseName string   `mapstructure:"test_universe_name"`
@@ -39,7 +39,7 @@ type YugatoolTestOptions struct {
 var (
 	options YugatoolTestOptions
 
-	ywContext *util.YWContext
+	ywContext *util.YWTestContext
 
 	logger logr.Logger
 	logs   *observer.ObservedLogs
@@ -61,7 +61,7 @@ func init() {
 	flags.StringVar(&options.ClientKey, "client-key", "", "the path to the client key file")
 	flags.StringVar(&options.APIToken, "api-token", "", "api token for yugaware session")
 
-	flags.StringVar(&options.Provider, "provider", "", "provider to use for tests")
+	flags.StringVar(&options.ProviderName, "provider-name", "", "provider to use for tests")
 	flags.StringVar(&options.InstanceType, "instance-type", "", "instance type to use for tests")
 	flags.StringArrayVar(&options.Regions, "regions", nil, "regions to use for tests")
 	flags.StringVar(&options.TestUniverseName, "test-universe-name", "ybtools-itest", "name of universe to create for tests")
@@ -69,7 +69,7 @@ func init() {
 	flags.BoolVar(&options.SkipCleanup, "skip-cleanup", false, "skip test cleanup")
 
 	ywflags.BindFlags(flags)
-	ywflags.MarkFlagsRequired([]string{"api-token", "provider", "regions", "instance-type"}, flags)
+	ywflags.MarkFlagsRequired([]string{"api-token", "provider-name", "regions", "instance-type"}, flags)
 }
 
 var _ = BeforeSuite(func() {
@@ -79,7 +79,7 @@ var _ = BeforeSuite(func() {
 	logger, logs = NewLogObserver()
 
 	// Use the same environment variables as the yugaware-client cli utility
-	viper.SetEnvPrefix("YW")
+	viper.SetEnvPrefix("YW_TEST")
 	viper.AutomaticEnv() // read in environment variables that match
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
@@ -90,7 +90,7 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	By(fmt.Sprintf("connecting to host %s", options.Hostname))
-	ywContext = util.NewYugawareContext(ctx, logger, options.Hostname, options.DialTimeout, options.SkipHostVerification, options.CACert, options.ClientCert, options.ClientKey, options.APIToken)
+	ywContext = util.NewYugawareTestContext(ctx, logger, options.Hostname, options.DialTimeout, options.SkipHostVerification, options.CACert, options.ClientCert, options.ClientKey, options.APIToken)
 })
 
 var _ = AfterEach(func() {
@@ -130,15 +130,15 @@ func NewLogObserver() (logr.Logger, *observer.ObservedLogs) {
 	return logger, logs
 }
 
-func CreateTestUniverseIfNotExists() *util.YugatoolContext {
+func CreateTestUniverseIfNotExists() *util.YugatoolTestContext {
 	return createTestUniverse(options.TestUniverseName, false)
 }
 
-func CreateTLSTestUniverseIfNotExists() *util.YugatoolContext {
+func CreateTLSTestUniverseIfNotExists() *util.YugatoolTestContext {
 	return createTestUniverse(options.TestUniverseName+"-tls", true)
 }
-func createTestUniverse(universeName string, withTLS bool) *util.YugatoolContext {
-	universe := ywContext.CreateUniverseIfNotExists(universeName, options.Provider, options.InstanceType, withTLS, options.Regions...)
+func createTestUniverse(universeName string, withTLS bool) *util.YugatoolTestContext {
+	universe := ywContext.CreateUniverseIfNotExists(universeName, options.ProviderName, options.InstanceType, withTLS, options.Regions...)
 
 	Expect(universe.UniverseDetails.Clusters[0].UserIntent.EnableNodeToNodeEncrypt).To(Equal(withTLS))
 	Expect(universe.UniverseDetails.Clusters[0].UserIntent.EnableClientToNodeEncrypt).To(Equal(withTLS))

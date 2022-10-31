@@ -19,8 +19,8 @@ package create
 import (
 	"fmt"
 	"net/url"
-	"os"
 
+	"github.com/blang/vfs"
 	. "github.com/icza/gox/gox"
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/pkg/flag"
@@ -77,12 +77,12 @@ func (o *GCSOptions) AddFlags(cmd *cobra.Command) {
 	flag.MarkFlagsRequired([]string{"bucket", "credentials-file"}, flags)
 }
 
-func (o *GCSOptions) Validate(_ *cmdutil.YWClientContext) error {
+func (o *GCSOptions) Validate(ctx *cmdutil.YWClientContext) error {
 	err := o.validateBucket()
 	if err != nil {
 		return err
 	}
-	return o.validateCredentialsFile()
+	return o.validateCredentialsFile(ctx)
 }
 
 func (o *GCSOptions) validateBucket() error {
@@ -104,16 +104,16 @@ func (o *GCSOptions) validateBucket() error {
 	return nil
 }
 
-func (o *GCSOptions) validateCredentialsFile() error {
+func (o *GCSOptions) validateCredentialsFile(ctx *cmdutil.YWClientContext) error {
 	credentialsFileError := func(err error) error {
 		return fmt.Errorf(`failed to validate credentials file "%s": %w`, o.CredentialsFile, err)
 	}
-	_, err := os.Stat(o.CredentialsFile)
+	_, err := ctx.Fs.Stat(o.CredentialsFile)
 	if err != nil {
 		return credentialsFileError(err)
 	}
 
-	o.credentials, err = os.ReadFile(o.CredentialsFile)
+	o.credentials, err = vfs.ReadFile(ctx.Fs, o.CredentialsFile)
 	if err != nil {
 		return credentialsFileError(err)
 	}
@@ -142,6 +142,7 @@ func (o *GCSOptions) getGCSStorageConfigParams(ctx *cmdutil.YWClientContext) *cu
 }
 
 func makeGCS(ctx *cmdutil.YWClientContext, options *GCSOptions) error {
+
 	params := options.getGCSStorageConfigParams(ctx)
 
 	config, err := ctx.Client.PlatformAPIs.CustomerConfiguration.CreateCustomerConfig(params, ctx.Client.SwaggerAuth)

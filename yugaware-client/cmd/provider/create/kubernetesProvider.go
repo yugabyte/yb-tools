@@ -19,8 +19,8 @@ package create
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 
+	"github.com/blang/vfs"
 	"github.com/ghodss/yaml"
 	"github.com/go-logr/logr"
 	"github.com/go-openapi/runtime"
@@ -85,7 +85,7 @@ func KubernetesProviderCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 				return err
 			}
 
-			providerConfig, err := readKubernetesConfiguration(ctx.Log, configPath)
+			providerConfig, err := readKubernetesConfiguration(ctx.Fs, ctx.Log, configPath)
 			if err != nil {
 				return err
 			}
@@ -103,9 +103,9 @@ func KubernetesProviderCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 	return cmd
 }
 
-func readKubernetesConfiguration(log logr.Logger, config string) (*cli.KubernetesProvider, error) {
+func readKubernetesConfiguration(fs vfs.Filesystem, log logr.Logger, config string) (*cli.KubernetesProvider, error) {
 	log.V(1).Info("reading kubernetes provider configuration", "path", config)
-	configBytesYAML, err := os.ReadFile(config)
+	configBytesYAML, err := vfs.ReadFile(fs, config)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +154,7 @@ func registerKubernetesProvider(ctx *cmdutil.YWClientContext, provider *cli.Kube
 	ywc := ctx.Client
 
 	log = log.WithValues("name", provider.Name, "provider", "kubernetes")
-	request, err := makeKubernetesProviderRequest(log, ywc, provider)
+	request, err := makeKubernetesProviderRequest(ctx.Fs, log, ywc, provider)
 	if err != nil {
 		return err
 	}
@@ -180,20 +180,20 @@ func kubernetesProviderAlreadyConfigured(providers []*models.Provider, name, cod
 	return false
 }
 
-func makeKubernetesProviderRequest(log logr.Logger, ywclient *client.YugawareClient, provider *cli.KubernetesProvider) (*cloud_providers.CreateProvidersParams, error) {
+func makeKubernetesProviderRequest(fs vfs.Filesystem, log logr.Logger, ywclient *client.YugawareClient, provider *cli.KubernetesProvider) (*cloud_providers.CreateProvidersParams, error) {
 	if provider.ImageRegistry == "" {
 		provider.ImageRegistry = "quay.io/yugabyte/yugabyte"
 	}
 
 	log.Info("reading kubeconfig", "path", provider.KubeconfigPath)
-	kubeconfig, err := os.ReadFile(provider.KubeconfigPath)
+	kubeconfig, err := vfs.ReadFile(fs, provider.KubeconfigPath)
 	if err != nil {
 		log.Error(err, "unable to read kubeconfig")
 		return nil, err
 	}
 
 	// Open the pull secret if available
-	pullSecret, pullSecretName, pullSecretFilename := getPullSecret(log, provider.ImagePullSecretPath)
+	pullSecret, pullSecretName, pullSecretFilename := getPullSecret(fs, log, provider.ImagePullSecretPath)
 
 	var regions []*models.Region
 	for _, region := range provider.Regions {
@@ -203,7 +203,7 @@ func makeKubernetesProviderRequest(log logr.Logger, ywclient *client.YugawareCli
 		}
 
 		for _, zone := range region.ZoneInfo {
-			kubeZone, err := getKubernetesZone(log, zone, kubeconfig)
+			kubeZone, err := getKubernetesZone(fs, log, zone, kubeconfig)
 			if err != nil {
 				return nil, err
 			}
@@ -233,11 +233,11 @@ func makeKubernetesProviderRequest(log logr.Logger, ywclient *client.YugawareCli
 	return request, nil
 }
 
-func getKubernetesZone(log logr.Logger, info cli.ZoneInfo, kubeconfig []byte) (*models.AvailabilityZone, error) {
+func getKubernetesZone(fs vfs.Filesystem, log logr.Logger, info cli.ZoneInfo, kubeconfig []byte) (*models.AvailabilityZone, error) {
 	log = log.WithValues("zone", info.Name)
 	if info.Config.KubeconfigPath != "" {
 		log.Info("reading overridden kubeconfig", "path", info.Config.KubeconfigPath)
-		kubeconfigOverride, err := os.ReadFile(info.Config.KubeconfigPath)
+		kubeconfigOverride, err := vfs.ReadFile(fs, info.Config.KubeconfigPath)
 		if err != nil {
 			log.Error(err, "unable to read kubeconfig", "path", info.Config.KubeconfigPath)
 			return &models.AvailabilityZone{}, err
@@ -294,14 +294,14 @@ func lookupGkeRegion(regionCode string) (*models.Region, error) {
 	return RegionData[regionCode], nil
 }
 
-func getPullSecret(log logr.Logger, secretPath string) ([]byte, string, string) {
+func getPullSecret(fs vfs.Filesystem, log logr.Logger, secretPath string) ([]byte, string, string) {
 	if secretPath == "" {
 		log.V(1).Info("no secret provided")
 		return []byte{}, "", ""
 	}
 
 	log.Info("reading pull secret", "path", secretPath)
-	pullSecret, err := os.ReadFile(secretPath)
+	pullSecret, err := vfs.ReadFile(fs, secretPath)
 	if err != nil {
 		log.Error(err, "unable to read image pull secret")
 		return []byte{}, "", ""
