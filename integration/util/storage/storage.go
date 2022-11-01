@@ -22,6 +22,7 @@ func GetStorageProvider(logger logr.Logger, flags *pflag.FlagSet, providerType s
 
 	storageProviders = append(storageProviders, &PreconfiguredStorage{})
 	storageProviders = append(storageProviders, &GCSStorage{})
+	storageProviders = append(storageProviders, &S3Storage{})
 
 	for _, storageProvider := range storageProviders {
 		storageProvider.RegisterFlags(flags)
