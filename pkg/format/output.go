@@ -88,7 +88,7 @@ func init() {
 
 	})
 
-	ajson.AddFunction("base64_to_hex", func(node *ajson.Node) (result *ajson.Node, err error) {
+	ajson.AddFunction("partition_key_to_hex", func(node *ajson.Node) (result *ajson.Node, err error) {
 		if node.IsString() {
 			decoded, err := base64.StdEncoding.DecodeString(node.MustString())
 			if err != nil {
