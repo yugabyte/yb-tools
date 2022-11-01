@@ -31,6 +31,7 @@ func CreateCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 
 	subcommands := []*cobra.Command{
 		create.GCSCmd(ctx),
+		create.S3Cmd(ctx),
 	}
 
 	for _, subcommand := range subcommands {
