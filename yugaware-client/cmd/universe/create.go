@@ -123,8 +123,7 @@ type CreateOptions struct {
 	preferredRegion strfmt.UUID
 	regions         []*models.Region
 	instanceType    *models.InstanceType
-	storageType     string
-	storageClass    string
+	deviceInfo      *models.DeviceInfo
 	accessKey       string
 }
 
@@ -157,16 +156,11 @@ func (o *CreateOptions) GetUniverseConfigParams(ctx *cmdutil.YWClientContext) *u
 	cluster := &models.Cluster{
 		ClusterType: gox.NewString(models.ClusterClusterTypePRIMARY),
 		UserIntent: &models.UserIntent{
-			AccessKeyCode:        o.accessKey,
-			AssignPublicIP:       o.AssignPublicIP,
-			AssignStaticPublicIP: o.StaticPublicIP,
-			AwsArnString:         "",
-			DeviceInfo: &models.DeviceInfo{
-				NumVolumes:   1,
-				StorageClass: o.storageClass,
-				StorageType:  o.storageType,
-				VolumeSize:   o.VolumeSize,
-			},
+			AccessKeyCode:             o.accessKey,
+			AssignPublicIP:            o.AssignPublicIP,
+			AssignStaticPublicIP:      o.StaticPublicIP,
+			AwsArnString:              "",
+			DeviceInfo:                o.deviceInfo,
 			EnableClientToNodeEncrypt: o.EnableEncryption,
 			EnableExposingService:     models.UserIntentEnableExposingServiceUNEXPOSED, // TODO: Should this be a flag?
 			EnableIPV6:                false,
@@ -281,12 +275,7 @@ func (o *CreateOptions) validateProvider(ctx *cmdutil.YWClientContext) error {
 				return err
 			}
 
-			err = o.validateStorageClass(ctx)
-			if err != nil {
-				return err
-			}
-
-			err = o.validateVolumeSize(ctx)
+			err = o.validateStorage(ctx)
 			if err != nil {
 				return err
 			}
@@ -404,16 +393,32 @@ func (o *CreateOptions) validateInstanceType(ctx *cmdutil.YWClientContext) error
 	return validateInstanceTypeError(instanceTypes, fmt.Errorf("could not find instance type"))
 }
 
-func (o *CreateOptions) validateStorageClass(_ *cmdutil.YWClientContext) error {
-	// TODO: Should this be a flag?
+func (o *CreateOptions) validateStorage(ctx *cmdutil.YWClientContext) error {
+	err := o.validateVolumeSize(ctx)
+	if err != nil {
+		return err
+	}
+
+	o.deviceInfo = &models.DeviceInfo{
+		NumVolumes: 1, // TODO: this should be a flag
+		VolumeSize: o.VolumeSize,
+	}
+
+	var cloud string
 	if o.instanceType != nil {
-		cloud := o.instanceType.Provider.Code
-		if cloud == "gcp" {
-			o.storageType = "Persistent"
-		} else if cloud == "kubernetes" {
-			o.storageClass = "standard"
+		if o.instanceType.ProviderCode != nil {
+			cloud = *o.instanceType.ProviderCode
+		} else if o.instanceType.Provider != nil {
+			cloud = o.instanceType.Provider.Code
 		}
 	}
+
+	if cloud == "gcp" {
+		o.deviceInfo.StorageType = "Persistent"
+	} else if cloud == "kubernetes" {
+		o.deviceInfo.StorageClass = "standard"
+	}
+
 	return nil
 }
 
