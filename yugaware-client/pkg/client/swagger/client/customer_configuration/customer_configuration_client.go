@@ -34,9 +34,13 @@ type ClientService interface {
 
 	DeleteCustomerConfig(params *DeleteCustomerConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteCustomerConfigOK, error)
 
-	GenerateAPIToken(params *GenerateAPITokenParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GenerateAPITokenOK, error)
+	DeleteCustomerConfigV2(params *DeleteCustomerConfigV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteCustomerConfigV2OK, error)
 
-	GetCustomerConfig(params *GetCustomerConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetCustomerConfigOK, error)
+	EditCustomerConfig(params *EditCustomerConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*EditCustomerConfigOK, error)
+
+	EditCustomerConfigV2(params *EditCustomerConfigV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*EditCustomerConfigV2OK, error)
+
+	GenerateAPIToken(params *GenerateAPITokenParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GenerateAPITokenOK, error)
 
 	GetListOfCustomerConfig(params *GetListOfCustomerConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetListOfCustomerConfigOK, error)
 
@@ -122,6 +126,125 @@ func (a *Client) DeleteCustomerConfig(params *DeleteCustomerConfigParams, authIn
 }
 
 /*
+  DeleteCustomerConfigV2 deletes a customer configuration v2
+*/
+func (a *Client) DeleteCustomerConfigV2(params *DeleteCustomerConfigV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteCustomerConfigV2OK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewDeleteCustomerConfigV2Params()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "deleteCustomerConfigV2",
+		Method:             "DELETE",
+		PathPattern:        "/api/v1/customers/{cUUID}/configs/{configUUID}/delete",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &DeleteCustomerConfigV2Reader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*DeleteCustomerConfigV2OK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for deleteCustomerConfigV2: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  EditCustomerConfig updates a customer configuration
+*/
+func (a *Client) EditCustomerConfig(params *EditCustomerConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*EditCustomerConfigOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewEditCustomerConfigParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "editCustomerConfig",
+		Method:             "PUT",
+		PathPattern:        "/api/v1/customers/{cUUID}/configs/{configUUID}",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &EditCustomerConfigReader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*EditCustomerConfigOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for editCustomerConfig: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  EditCustomerConfigV2 updates a customer configuration v2
+
+  Changes from upstream: This method is called 'editCustomerConfig' in the upstream swagger.json
+*/
+func (a *Client) EditCustomerConfigV2(params *EditCustomerConfigV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*EditCustomerConfigV2OK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewEditCustomerConfigV2Params()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "editCustomerConfigV2",
+		Method:             "PUT",
+		PathPattern:        "/api/v1/customers/{cUUID}/configs/{configUUID}/edit",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &EditCustomerConfigV2Reader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*EditCustomerConfigV2OK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for editCustomerConfigV2: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
   GenerateAPIToken generates an API token for the current user
 
   UNOFFICIAL API ADDITION - Requires a DUMMY body to work around issue https://yugabyte.atlassian.net/browse/PLAT-2076
@@ -159,45 +282,6 @@ func (a *Client) GenerateAPIToken(params *GenerateAPITokenParams, authInfo runti
 	// unexpected success response
 	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
 	msg := fmt.Sprintf("unexpected success response for generateAPIToken: API contract not enforced by server. Client expected to get an error, but got: %T", result)
-	panic(msg)
-}
-
-/*
-  GetCustomerConfig updates a customer configuration
-*/
-func (a *Client) GetCustomerConfig(params *GetCustomerConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetCustomerConfigOK, error) {
-	// TODO: Validate the params before sending
-	if params == nil {
-		params = NewGetCustomerConfigParams()
-	}
-	op := &runtime.ClientOperation{
-		ID:                 "getCustomerConfig",
-		Method:             "PUT",
-		PathPattern:        "/api/v1/customers/{cUUID}/configs/{configUUID}",
-		ProducesMediaTypes: []string{"application/json"},
-		ConsumesMediaTypes: []string{"application/json"},
-		Schemes:            []string{"http", "https"},
-		Params:             params,
-		Reader:             &GetCustomerConfigReader{formats: a.formats},
-		AuthInfo:           authInfo,
-		Context:            params.Context,
-		Client:             params.HTTPClient,
-	}
-	for _, opt := range opts {
-		opt(op)
-	}
-
-	result, err := a.transport.Submit(op)
-	if err != nil {
-		return nil, err
-	}
-	success, ok := result.(*GetCustomerConfigOK)
-	if ok {
-		return success, nil
-	}
-	// unexpected success response
-	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
-	msg := fmt.Sprintf("unexpected success response for getCustomerConfig: API contract not enforced by server. Client expected to get an error, but got: %T", result)
 	panic(msg)
 }
 

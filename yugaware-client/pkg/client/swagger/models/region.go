@@ -7,6 +7,7 @@ package models
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 
 	"github.com/go-openapi/errors"
@@ -24,9 +25,12 @@ type Region struct {
 	// Read Only: true
 	Active *bool `json:"active,omitempty"`
 
+	// architecture
+	// Enum: [x86_64 arm64]
+	Architecture string `json:"architecture,omitempty"`
+
 	// Cloud provider region code
 	// Example: us-west-2
-	// Read Only: true
 	Code string `json:"code,omitempty"`
 
 	// config
@@ -44,6 +48,7 @@ type Region struct {
 
 	// Cloud provider region name
 	// Example: US West (Oregon)
+	// Read Only: true
 	Name string `json:"name,omitempty"`
 
 	// security group Id
@@ -70,6 +75,10 @@ type Region struct {
 func (m *Region) Validate(formats strfmt.Registry) error {
 	var res []error
 
+	if err := m.validateArchitecture(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validateUUID(formats); err != nil {
 		res = append(res, err)
 	}
@@ -81,6 +90,48 @@ func (m *Region) Validate(formats strfmt.Registry) error {
 	if len(res) > 0 {
 		return errors.CompositeValidationError(res...)
 	}
+	return nil
+}
+
+var regionTypeArchitecturePropEnum []interface{}
+
+func init() {
+	var res []string
+	if err := json.Unmarshal([]byte(`["x86_64","arm64"]`), &res); err != nil {
+		panic(err)
+	}
+	for _, v := range res {
+		regionTypeArchitecturePropEnum = append(regionTypeArchitecturePropEnum, v)
+	}
+}
+
+const (
+
+	// RegionArchitectureX8664 captures enum value "x86_64"
+	RegionArchitectureX8664 string = "x86_64"
+
+	// RegionArchitectureArm64 captures enum value "arm64"
+	RegionArchitectureArm64 string = "arm64"
+)
+
+// prop value enum
+func (m *Region) validateArchitectureEnum(path, location string, value string) error {
+	if err := validate.EnumCase(path, location, value, regionTypeArchitecturePropEnum, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *Region) validateArchitecture(formats strfmt.Registry) error {
+	if swag.IsZero(m.Architecture) { // not required
+		return nil
+	}
+
+	// value enum
+	if err := m.validateArchitectureEnum("architecture", "body", m.Architecture); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -131,15 +182,15 @@ func (m *Region) ContextValidate(ctx context.Context, formats strfmt.Registry) e
 		res = append(res, err)
 	}
 
-	if err := m.contextValidateCode(ctx, formats); err != nil {
-		res = append(res, err)
-	}
-
 	if err := m.contextValidateLatitude(ctx, formats); err != nil {
 		res = append(res, err)
 	}
 
 	if err := m.contextValidateLongitude(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateName(ctx, formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -166,15 +217,6 @@ func (m *Region) contextValidateActive(ctx context.Context, formats strfmt.Regis
 	return nil
 }
 
-func (m *Region) contextValidateCode(ctx context.Context, formats strfmt.Registry) error {
-
-	if err := validate.ReadOnly(ctx, "code", "body", string(m.Code)); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (m *Region) contextValidateLatitude(ctx context.Context, formats strfmt.Registry) error {
 
 	if err := validate.ReadOnly(ctx, "latitude", "body", float64(m.Latitude)); err != nil {
@@ -187,6 +229,15 @@ func (m *Region) contextValidateLatitude(ctx context.Context, formats strfmt.Reg
 func (m *Region) contextValidateLongitude(ctx context.Context, formats strfmt.Registry) error {
 
 	if err := validate.ReadOnly(ctx, "longitude", "body", float64(m.Longitude)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *Region) contextValidateName(ctx context.Context, formats strfmt.Registry) error {
+
+	if err := validate.ReadOnly(ctx, "name", "body", string(m.Name)); err != nil {
 		return err
 	}
 

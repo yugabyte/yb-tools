@@ -20,12 +20,15 @@ import (
 	"os"
 	"strings"
 
-	homedir "github.com/mitchellh/go-homedir"
+	"github.com/blang/vfs"
+	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/yugabyte/yb-tools/yugaware-client/cmd/backup"
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd/certificate"
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd/provider"
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd/session"
+	"github.com/yugabyte/yb-tools/yugaware-client/cmd/storage"
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd/universe"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/cmdutil"
 )
@@ -37,7 +40,7 @@ var (
 )
 
 // rootCmd represents the base command when called without any subcommands
-var rootCmd = RootInit()
+var rootCmd = RootInit(vfs.OS())
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
@@ -74,7 +77,7 @@ func initConfig() {
 	_ = viper.ReadInConfig()
 }
 
-func RootInit() *cobra.Command {
+func RootInit(fs vfs.Filesystem) *cobra.Command {
 	globalOptions := &cmdutil.YWGlobalOptions{}
 
 	cmd := &cobra.Command{
@@ -87,6 +90,7 @@ func RootInit() *cobra.Command {
 	globalOptions.AddFlags(cmd)
 
 	ctx := cmdutil.NewCommandContext().
+		WithVFS(fs).
 		WithGlobalOptions(globalOptions)
 
 	// Top level commands
@@ -101,6 +105,15 @@ func RootInit() *cobra.Command {
 	}
 
 	categories := []CommandCategory{
+		{
+			Name:        "backup",
+			Description: "Interact with Yugabyte backups",
+			Commands: []*cobra.Command{
+				backup.CreateCmd(ctx),
+				backup.ListCmd(ctx),
+				backup.RestoreCmd(ctx),
+			},
+		},
 		{
 			Name:        "certificate",
 			Description: "Interact with Yugabyte certificates",
@@ -122,6 +135,14 @@ func RootInit() *cobra.Command {
 			Description: "Session management utilities",
 			Commands: []*cobra.Command{
 				session.ServerLogCmd(ctx),
+			},
+		},
+		{
+			Name:        "storage",
+			Description: "Interact with Yugaware storage",
+			Commands: []*cobra.Command{
+				storage.CreateCmd(ctx),
+				storage.ListCmd(ctx),
 			},
 		},
 		{

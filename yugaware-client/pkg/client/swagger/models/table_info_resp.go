@@ -23,8 +23,19 @@ type TableInfoResp struct {
 	// Keyspace
 	KeySpace string `json:"keySpace,omitempty"`
 
+	// Namespace or Schema
+	NameSpace string `json:"nameSpace,omitempty"`
+
+	// Parent Table UUID
+	// Format: uuid
+	ParentTableUUID strfmt.UUID `json:"parentTableUUID,omitempty"`
+
+	// Postgres schema name of the table
+	// Example: public
+	PgSchemaName string `json:"pgSchemaName,omitempty"`
+
 	// Relation type
-	// Enum: [SYSTEM_TABLE_RELATION USER_TABLE_RELATION INDEX_TABLE_RELATION]
+	// Enum: [SYSTEM_TABLE_RELATION USER_TABLE_RELATION INDEX_TABLE_RELATION MATVIEW_TABLE_RELATION]
 	RelationType string `json:"relationType,omitempty"`
 
 	// Size in bytes
@@ -33,6 +44,9 @@ type TableInfoResp struct {
 
 	// Table name
 	TableName string `json:"tableName,omitempty"`
+
+	// Table space
+	TableSpace string `json:"tableSpace,omitempty"`
 
 	// Table type
 	// Enum: [YQL_TABLE_TYPE REDIS_TABLE_TYPE PGSQL_TABLE_TYPE TRANSACTION_STATUS_TABLE_TYPE]
@@ -47,6 +61,10 @@ type TableInfoResp struct {
 // Validate validates this table info resp
 func (m *TableInfoResp) Validate(formats strfmt.Registry) error {
 	var res []error
+
+	if err := m.validateParentTableUUID(formats); err != nil {
+		res = append(res, err)
+	}
 
 	if err := m.validateRelationType(formats); err != nil {
 		res = append(res, err)
@@ -66,11 +84,23 @@ func (m *TableInfoResp) Validate(formats strfmt.Registry) error {
 	return nil
 }
 
+func (m *TableInfoResp) validateParentTableUUID(formats strfmt.Registry) error {
+	if swag.IsZero(m.ParentTableUUID) { // not required
+		return nil
+	}
+
+	if err := validate.FormatOf("parentTableUUID", "body", "uuid", m.ParentTableUUID.String(), formats); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 var tableInfoRespTypeRelationTypePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["SYSTEM_TABLE_RELATION","USER_TABLE_RELATION","INDEX_TABLE_RELATION"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["SYSTEM_TABLE_RELATION","USER_TABLE_RELATION","INDEX_TABLE_RELATION","MATVIEW_TABLE_RELATION"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -88,6 +118,9 @@ const (
 
 	// TableInfoRespRelationTypeINDEXTABLERELATION captures enum value "INDEX_TABLE_RELATION"
 	TableInfoRespRelationTypeINDEXTABLERELATION string = "INDEX_TABLE_RELATION"
+
+	// TableInfoRespRelationTypeMATVIEWTABLERELATION captures enum value "MATVIEW_TABLE_RELATION"
+	TableInfoRespRelationTypeMATVIEWTABLERELATION string = "MATVIEW_TABLE_RELATION"
 )
 
 // prop value enum

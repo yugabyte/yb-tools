@@ -64,6 +64,16 @@ type GetListOfProvidersParams struct {
 	// Format: uuid
 	CUUID strfmt.UUID
 
+	// Name.
+	//
+	// Default: "null"
+	Name *string
+
+	// ProviderCode.
+	//
+	// Default: "null"
+	ProviderCode *string
+
 	timeout    time.Duration
 	Context    context.Context
 	HTTPClient *http.Client
@@ -81,7 +91,21 @@ func (o *GetListOfProvidersParams) WithDefaults() *GetListOfProvidersParams {
 //
 // All values with no default are reset to their zero value.
 func (o *GetListOfProvidersParams) SetDefaults() {
-	// no default values defined for this parameter
+	var (
+		nameDefault = string("null")
+
+		providerCodeDefault = string("null")
+	)
+
+	val := GetListOfProvidersParams{
+		Name:         &nameDefault,
+		ProviderCode: &providerCodeDefault,
+	}
+
+	val.timeout = o.timeout
+	val.Context = o.Context
+	val.HTTPClient = o.HTTPClient
+	*o = val
 }
 
 // WithTimeout adds the timeout to the get list of providers params
@@ -128,6 +152,28 @@ func (o *GetListOfProvidersParams) SetCUUID(cUUID strfmt.UUID) {
 	o.CUUID = cUUID
 }
 
+// WithName adds the name to the get list of providers params
+func (o *GetListOfProvidersParams) WithName(name *string) *GetListOfProvidersParams {
+	o.SetName(name)
+	return o
+}
+
+// SetName adds the name to the get list of providers params
+func (o *GetListOfProvidersParams) SetName(name *string) {
+	o.Name = name
+}
+
+// WithProviderCode adds the providerCode to the get list of providers params
+func (o *GetListOfProvidersParams) WithProviderCode(providerCode *string) *GetListOfProvidersParams {
+	o.SetProviderCode(providerCode)
+	return o
+}
+
+// SetProviderCode adds the providerCode to the get list of providers params
+func (o *GetListOfProvidersParams) SetProviderCode(providerCode *string) {
+	o.ProviderCode = providerCode
+}
+
 // WriteToRequest writes these params to a swagger request
 func (o *GetListOfProvidersParams) WriteToRequest(r runtime.ClientRequest, reg strfmt.Registry) error {
 
@@ -139,6 +185,40 @@ func (o *GetListOfProvidersParams) WriteToRequest(r runtime.ClientRequest, reg s
 	// path param cUUID
 	if err := r.SetPathParam("cUUID", o.CUUID.String()); err != nil {
 		return err
+	}
+
+	if o.Name != nil {
+
+		// query param name
+		var qrName string
+
+		if o.Name != nil {
+			qrName = *o.Name
+		}
+		qName := qrName
+		if qName != "" {
+
+			if err := r.SetQueryParam("name", qName); err != nil {
+				return err
+			}
+		}
+	}
+
+	if o.ProviderCode != nil {
+
+		// query param providerCode
+		var qrProviderCode string
+
+		if o.ProviderCode != nil {
+			qrProviderCode = *o.ProviderCode
+		}
+		qProviderCode := qrProviderCode
+		if qProviderCode != "" {
+
+			if err := r.SetQueryParam("providerCode", qProviderCode); err != nil {
+				return err
+			}
+		}
 	}
 
 	if len(res) > 0 {

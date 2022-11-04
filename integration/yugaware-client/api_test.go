@@ -21,6 +21,10 @@ import (
 )
 
 var _ = Describe("Yugaware API Compatibility Tests", func() {
+	BeforeEach(func() {
+		err := Provider.ConfigureIfNotExists(ywContext, Options.ProviderName)
+		Expect(err).NotTo(HaveOccurred())
+	})
 	Context("AccessKeys API", func() {
 		// TODO: This will only return access keys when a non-kubernetes provider is used
 		PWhen("Listing access keys", func() {
@@ -46,14 +50,17 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 	})
 
 	Context("CertificateInfo", func() {
-		When("Listing Certificates", func() {
+		// TODO: Disabled because these tests don't work without modifying the swagger.json to allow certs to be
+		//       created.
+		XWhen("Listing Certificates", func() {
 			var (
 				certificates []*models.CertificateInfo
 				certificate  *models.CertificateRoot
 			)
 
 			BeforeEach(func() {
-				_ = CreateTestUniverseIfNotExists()
+				err := createTestCertificateIfNotExists("testcert")
+				Expect(err).NotTo(HaveOccurred())
 
 				params := certificate_info.NewGetListOfCertificateParams().WithCUUID(ywContext.CustomerUUID())
 
@@ -63,6 +70,7 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 			})
 			It("Returns a list of cloud certificates", func() {
 				Expect(len(certificates)).NotTo(BeZero())
+				Expect(certificates).To(ContainElement(gstruct.MatchKeys(gstruct.IgnoreExtras, gstruct.Keys{"label": Equal("testcert")})))
 			})
 
 			When("Getting a root certificate", func() {
@@ -149,7 +157,7 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 				params := (session_management.NewGetFilteredLogsParams().
 					WithMaxLines(NewInt32(5))).
 					WithUniverseName(NewString(universe.Name)).
-					WithTimeout(time.Duration(options.DialTimeout) * time.Second)
+					WithTimeout(time.Duration(Options.DialTimeout) * time.Second)
 
 				response, err := ywContext.PlatformAPIs.SessionManagement.GetFilteredLogs(params, ywContext.SwaggerAuth)
 				Expect(err).NotTo(HaveOccurred())
@@ -176,26 +184,7 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 			})
 			It("Returns valid logs", func() {
 				Expect(logLines).To(HaveLen(10))
-				Expect(logLines).To(ContainElement(MatchRegexp(`^\d{4,4}-\d{2,2}-\d{2,2} \d{2,2}:\d{2,2}:\d{2,2},\d{3,3}`)))
-			})
-		})
-
-		// TODO: This returns a value similar to:
-		//          {"minLength":8,"minUppercase":1,"minLowercase":1,"minDigits":1,"minSpecialCharacters":1}
-		//       The default swagger.json does not mark these values as required
-		XWhen("Requesting the password policy", func() {
-			var (
-				err error
-			)
-			BeforeEach(func() {
-				params := session_management.NewGetPasswordPolicyParams().
-					WithCUUID(ywContext.CustomerUUID())
-
-				err = ywContext.PlatformAPIs.SessionManagement.GetPasswordPolicy(params)
-
-			})
-			It("Returns a valid password policy", func() {
-				Expect(err).NotTo(HaveOccurred())
+				Expect(logLines).To(ContainElement(MatchRegexp(`^(YW )?\d{4,4}-\d{2,2}-\d{2,2}(T| )\d{2,2}:\d{2,2}:\d{2,2}(,|.)\d{3,3}`)))
 			})
 		})
 
@@ -285,3 +274,24 @@ var _ = Describe("Yugaware API Compatibility Tests", func() {
 
 	})
 })
+
+func createTestCertificateIfNotExists(certname string) error {
+	params := certificate_info.NewGetListOfCertificateParams().WithCUUID(ywContext.CustomerUUID())
+
+	certificatesResponse, err := ywContext.PlatformAPIs.CertificateInfo.GetListOfCertificate(params, ywContext.SwaggerAuth)
+	Expect(err).NotTo(HaveOccurred())
+
+	certs := certificatesResponse.GetPayload()
+	for _, cert := range certs {
+		if cert.Label == certname {
+			return nil
+		}
+	}
+
+	createParams := certificate_info.NewCreateSelfSignedCertParams().
+		WithCUUID(ywContext.CustomerUUID()).
+		WithLabel(certname)
+	_, err = ywContext.PlatformAPIs.CertificateInfo.CreateSelfSignedCert(createParams, ywContext.SwaggerAuth)
+
+	return err
+}

@@ -38,11 +38,13 @@ type ClientService interface {
 
 	CreateTable(params *CreateTableParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateTableOK, error)
 
-	Createbackup(params *CreatebackupParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreatebackupOK, error)
+	CreateTableSpaces(params *CreateTableSpacesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateTableSpacesOK, error)
 
 	DescribeTable(params *DescribeTableParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DescribeTableOK, error)
 
 	DropTable(params *DropTableParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DropTableOK, error)
+
+	GetAllTableSpaces(params *GetAllTableSpacesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetAllTableSpacesOK, error)
 
 	GetAllTables(params *GetAllTablesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetAllTablesOK, error)
 
@@ -210,22 +212,22 @@ func (a *Client) CreateTable(params *CreateTableParams, authInfo runtime.ClientA
 }
 
 /*
-  Createbackup creates a backup
+  CreateTableSpaces creates table spaces
 */
-func (a *Client) Createbackup(params *CreatebackupParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreatebackupOK, error) {
+func (a *Client) CreateTableSpaces(params *CreateTableSpacesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateTableSpacesOK, error) {
 	// TODO: Validate the params before sending
 	if params == nil {
-		params = NewCreatebackupParams()
+		params = NewCreateTableSpacesParams()
 	}
 	op := &runtime.ClientOperation{
-		ID:                 "createbackup",
+		ID:                 "createTableSpaces",
 		Method:             "POST",
-		PathPattern:        "/api/v1/customers/{cUUID}/backups",
+		PathPattern:        "/api/v1/customers/{cUUID}/universes/{uniUUID}/tablespaces",
 		ProducesMediaTypes: []string{"application/json"},
 		ConsumesMediaTypes: []string{"application/json"},
 		Schemes:            []string{"http", "https"},
 		Params:             params,
-		Reader:             &CreatebackupReader{formats: a.formats},
+		Reader:             &CreateTableSpacesReader{formats: a.formats},
 		AuthInfo:           authInfo,
 		Context:            params.Context,
 		Client:             params.HTTPClient,
@@ -238,13 +240,13 @@ func (a *Client) Createbackup(params *CreatebackupParams, authInfo runtime.Clien
 	if err != nil {
 		return nil, err
 	}
-	success, ok := result.(*CreatebackupOK)
+	success, ok := result.(*CreateTableSpacesOK)
 	if ok {
 		return success, nil
 	}
 	// unexpected success response
 	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
-	msg := fmt.Sprintf("unexpected success response for createbackup: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	msg := fmt.Sprintf("unexpected success response for createTableSpaces: API contract not enforced by server. Client expected to get an error, but got: %T", result)
 	panic(msg)
 }
 
@@ -323,6 +325,47 @@ func (a *Client) DropTable(params *DropTableParams, authInfo runtime.ClientAuthI
 	// unexpected success response
 	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
 	msg := fmt.Sprintf("unexpected success response for dropTable: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  GetAllTableSpaces lists all tablespaces
+
+  Get a list of all tablespaces of a given universe
+*/
+func (a *Client) GetAllTableSpaces(params *GetAllTableSpacesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetAllTableSpacesOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewGetAllTableSpacesParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "getAllTableSpaces",
+		Method:             "GET",
+		PathPattern:        "/api/v1/customers/{cUUID}/universes/{uniUUID}/tablespaces",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &GetAllTableSpacesReader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*GetAllTableSpacesOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for getAllTableSpaces: API contract not enforced by server. Client expected to get an error, but got: %T", result)
 	panic(msg)
 }
 

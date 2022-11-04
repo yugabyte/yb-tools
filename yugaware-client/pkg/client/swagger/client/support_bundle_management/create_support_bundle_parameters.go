@@ -14,6 +14,8 @@ import (
 	"github.com/go-openapi/runtime"
 	cr "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
+
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
 // NewCreateSupportBundleParams creates a new CreateSupportBundleParams object,
@@ -63,6 +65,12 @@ type CreateSupportBundleParams struct {
 	//
 	// Format: uuid
 	CUUID strfmt.UUID
+
+	/* SupportBundle.
+
+	   post support bundle info
+	*/
+	SupportBundle *models.SupportBundleFormData
 
 	// UniUUID.
 	//
@@ -133,6 +141,17 @@ func (o *CreateSupportBundleParams) SetCUUID(cUUID strfmt.UUID) {
 	o.CUUID = cUUID
 }
 
+// WithSupportBundle adds the supportBundle to the create support bundle params
+func (o *CreateSupportBundleParams) WithSupportBundle(supportBundle *models.SupportBundleFormData) *CreateSupportBundleParams {
+	o.SetSupportBundle(supportBundle)
+	return o
+}
+
+// SetSupportBundle adds the supportBundle to the create support bundle params
+func (o *CreateSupportBundleParams) SetSupportBundle(supportBundle *models.SupportBundleFormData) {
+	o.SupportBundle = supportBundle
+}
+
 // WithUniUUID adds the uniUUID to the create support bundle params
 func (o *CreateSupportBundleParams) WithUniUUID(uniUUID strfmt.UUID) *CreateSupportBundleParams {
 	o.SetUniUUID(uniUUID)
@@ -155,6 +174,11 @@ func (o *CreateSupportBundleParams) WriteToRequest(r runtime.ClientRequest, reg 
 	// path param cUUID
 	if err := r.SetPathParam("cUUID", o.CUUID.String()); err != nil {
 		return err
+	}
+	if o.SupportBundle != nil {
+		if err := r.SetBodyParam(o.SupportBundle); err != nil {
+			return err
+		}
 	}
 
 	// path param uniUUID

@@ -61,11 +61,11 @@ func NewEditProviderParamsWithHTTPClient(client *http.Client) *EditProviderParam
 */
 type EditProviderParams struct {
 
-	/* EditProviderFormData.
+	/* EditProviderRequest.
 
 	   edit provider form data
 	*/
-	EditProviderFormData *models.EditProviderRequest
+	EditProviderRequest *models.Provider
 
 	// CUUID.
 	//
@@ -130,15 +130,15 @@ func (o *EditProviderParams) SetHTTPClient(client *http.Client) {
 	o.HTTPClient = client
 }
 
-// WithEditProviderFormData adds the editProviderFormData to the edit provider params
-func (o *EditProviderParams) WithEditProviderFormData(editProviderFormData *models.EditProviderRequest) *EditProviderParams {
-	o.SetEditProviderFormData(editProviderFormData)
+// WithEditProviderRequest adds the editProviderRequest to the edit provider params
+func (o *EditProviderParams) WithEditProviderRequest(editProviderRequest *models.Provider) *EditProviderParams {
+	o.SetEditProviderRequest(editProviderRequest)
 	return o
 }
 
-// SetEditProviderFormData adds the editProviderFormData to the edit provider params
-func (o *EditProviderParams) SetEditProviderFormData(editProviderFormData *models.EditProviderRequest) {
-	o.EditProviderFormData = editProviderFormData
+// SetEditProviderRequest adds the editProviderRequest to the edit provider params
+func (o *EditProviderParams) SetEditProviderRequest(editProviderRequest *models.Provider) {
+	o.EditProviderRequest = editProviderRequest
 }
 
 // WithCUUID adds the cUUID to the edit provider params
@@ -170,8 +170,8 @@ func (o *EditProviderParams) WriteToRequest(r runtime.ClientRequest, reg strfmt.
 		return err
 	}
 	var res []error
-	if o.EditProviderFormData != nil {
-		if err := r.SetBodyParam(o.EditProviderFormData); err != nil {
+	if o.EditProviderRequest != nil {
+		if err := r.SetBodyParam(o.EditProviderRequest); err != nil {
 			return err
 		}
 	}

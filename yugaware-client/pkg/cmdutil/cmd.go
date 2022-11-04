@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/blang/vfs"
 	"github.com/go-logr/logr"
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/pkg/flag"
@@ -70,6 +71,7 @@ type YWClientContext struct {
 	Cmd            *cobra.Command
 	GlobalOptions  *YWGlobalOptions
 	CommandOptions CommandOptions
+	Fs             vfs.Filesystem
 
 	Client *client.YugawareClient
 }
@@ -92,6 +94,11 @@ func (ctx *YWClientContext) WithCmd(cmd *cobra.Command) *YWClientContext {
 
 func (ctx *YWClientContext) WithOptions(options CommandOptions) *YWClientContext {
 	ctx.CommandOptions = options
+	return ctx
+}
+
+func (ctx *YWClientContext) WithVFS(fs vfs.Filesystem) *YWClientContext {
+	ctx.Fs = fs
 	return ctx
 }
 

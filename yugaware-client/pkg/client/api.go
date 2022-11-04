@@ -6,6 +6,8 @@ import (
 	"github.com/go-openapi/strfmt"
 	"github.com/yugabyte/yb-tools/yugaware-client/entity/yugaware"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/certificate_info"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/cloud_providers"
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/customer_configuration"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/client/universe_management"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
@@ -105,6 +107,49 @@ func (c *YugawareClient) GetCertByIdentifier(identifier string) (*models.Certifi
 
 		if cert.UUID == strfmt.UUID(strings.ToLower(identifier)) {
 			return cert, nil
+		}
+	}
+
+	return nil, nil
+}
+
+func (c *YugawareClient) GetStorageConfigByIdentifier(identifier string) (*models.CustomerConfigUI, error) {
+	configParams := customer_configuration.NewGetListOfCustomerConfigParams().
+		WithCUUID(c.CustomerUUID())
+
+	configs, err := c.PlatformAPIs.CustomerConfiguration.GetListOfCustomerConfig(configParams, c.SwaggerAuth)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, config := range configs.GetPayload() {
+		if *config.Type == models.CustomerConfigTypeSTORAGE {
+			if *config.ConfigName == identifier {
+				return config, nil
+			}
+			if config.ConfigUUID == strfmt.UUID(identifier) {
+				return config, nil
+			}
+		}
+	}
+
+	return nil, nil
+}
+
+func (c *YugawareClient) GetProviderByIdentifier(identifier string) (*models.Provider, error) {
+	params := cloud_providers.NewGetListOfProvidersParams().
+		WithCUUID(c.CustomerUUID())
+	providers, err := c.PlatformAPIs.CloudProviders.GetListOfProviders(params, c.SwaggerAuth)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, provider := range providers.GetPayload() {
+		if provider.Name == identifier {
+			return provider, nil
+		}
+		if provider.UUID == strfmt.UUID(identifier) {
+			return provider, nil
 		}
 	}
 

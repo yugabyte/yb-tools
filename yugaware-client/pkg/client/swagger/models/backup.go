@@ -28,7 +28,14 @@ type Backup struct {
 	// Format: uuid
 	BackupUUID strfmt.UUID `json:"backupUUID,omitempty"`
 
-	// create time
+	// Category of the backup
+	// Enum: [YB_BACKUP_SCRIPT YB_CONTROLLER]
+	Category string `json:"category,omitempty"`
+
+	// Backup completion time. Changes from upstream: Format of a date-time field needs to match https://www.rfc-editor.org/rfc/rfc3339#section-5.6, so unix timestamps don't conform
+	CompletionTime int64 `json:"completionTime,omitempty"`
+
+	// Changes from upstream: Format of a date-time field needs to match https://www.rfc-editor.org/rfc/rfc3339#section-5.6, so unix timestamps don't conform
 	// Required: true
 	CreateTime *int64 `json:"createTime"`
 
@@ -36,8 +43,12 @@ type Backup struct {
 	// Format: uuid
 	CustomerUUID strfmt.UUID `json:"customerUUID,omitempty"`
 
-	// Expiry time (unix timestamp) of the backup
+	// Expiry time (unix timestamp) of the backup. Changes from upstream: Format of a date-time field needs to match https://www.rfc-editor.org/rfc/rfc3339#section-5.6, so unix timestamps don't conform
 	Expiry int64 `json:"expiry,omitempty"`
+
+	// Time unit for backup expiry time
+	// Enum: [NANOSECONDS MICROSECONDS MILLISECONDS SECONDS MINUTES HOURS DAYS MONTHS YEARS]
+	ExpiryTimeUnit string `json:"expiryTimeUnit,omitempty"`
 
 	// Schedule UUID, if this backup is part of a schedule
 	// Format: uuid
@@ -46,17 +57,32 @@ type Backup struct {
 	// State of the backup
 	// Example: DELETED
 	// Read Only: true
-	// Enum: [InProgress Completed Failed Deleted Skipped FailedToDelete Stopped]
+	// Enum: [InProgress Completed Failed Deleted Skipped FailedToDelete Stopped DeleteInProgress QueuedForDeletion]
 	State string `json:"state,omitempty"`
+
+	// Storage Config UUID that created this backup
+	// Format: uuid
+	StorageConfigUUID strfmt.UUID `json:"storageConfigUUID,omitempty"`
 
 	// Backup UUID
 	// Read Only: true
 	// Format: uuid
 	TaskUUID strfmt.UUID `json:"taskUUID,omitempty"`
 
-	// update time
+	// Universe name that created this backup
+	UniverseName string `json:"universeName,omitempty"`
+
+	// Universe UUID that created this backup
+	// Format: uuid
+	UniverseUUID strfmt.UUID `json:"universeUUID,omitempty"`
+
+	// Changes from upstream: Format of a date-time field needs to match https://www.rfc-editor.org/rfc/rfc3339#section-5.6, so unix timestamps don't conform
 	// Required: true
 	UpdateTime *int64 `json:"updateTime"`
+
+	// Version of the backup in a category
+	// Enum: [V1 V2]
+	Version string `json:"version,omitempty"`
 }
 
 // Validate validates this backup
@@ -71,11 +97,19 @@ func (m *Backup) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
+	if err := m.validateCategory(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validateCreateTime(formats); err != nil {
 		res = append(res, err)
 	}
 
 	if err := m.validateCustomerUUID(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateExpiryTimeUnit(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -87,11 +121,23 @@ func (m *Backup) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
+	if err := m.validateStorageConfigUUID(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validateTaskUUID(formats); err != nil {
 		res = append(res, err)
 	}
 
+	if err := m.validateUniverseUUID(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validateUpdateTime(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateVersion(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -132,6 +178,48 @@ func (m *Backup) validateBackupUUID(formats strfmt.Registry) error {
 	return nil
 }
 
+var backupTypeCategoryPropEnum []interface{}
+
+func init() {
+	var res []string
+	if err := json.Unmarshal([]byte(`["YB_BACKUP_SCRIPT","YB_CONTROLLER"]`), &res); err != nil {
+		panic(err)
+	}
+	for _, v := range res {
+		backupTypeCategoryPropEnum = append(backupTypeCategoryPropEnum, v)
+	}
+}
+
+const (
+
+	// BackupCategoryYBBACKUPSCRIPT captures enum value "YB_BACKUP_SCRIPT"
+	BackupCategoryYBBACKUPSCRIPT string = "YB_BACKUP_SCRIPT"
+
+	// BackupCategoryYBCONTROLLER captures enum value "YB_CONTROLLER"
+	BackupCategoryYBCONTROLLER string = "YB_CONTROLLER"
+)
+
+// prop value enum
+func (m *Backup) validateCategoryEnum(path, location string, value string) error {
+	if err := validate.EnumCase(path, location, value, backupTypeCategoryPropEnum, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *Backup) validateCategory(formats strfmt.Registry) error {
+	if swag.IsZero(m.Category) { // not required
+		return nil
+	}
+
+	// value enum
+	if err := m.validateCategoryEnum("category", "body", m.Category); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (m *Backup) validateCreateTime(formats strfmt.Registry) error {
 
 	if err := validate.Required("createTime", "body", m.CreateTime); err != nil {
@@ -147,6 +235,69 @@ func (m *Backup) validateCustomerUUID(formats strfmt.Registry) error {
 	}
 
 	if err := validate.FormatOf("customerUUID", "body", "uuid", m.CustomerUUID.String(), formats); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+var backupTypeExpiryTimeUnitPropEnum []interface{}
+
+func init() {
+	var res []string
+	if err := json.Unmarshal([]byte(`["NANOSECONDS","MICROSECONDS","MILLISECONDS","SECONDS","MINUTES","HOURS","DAYS","MONTHS","YEARS"]`), &res); err != nil {
+		panic(err)
+	}
+	for _, v := range res {
+		backupTypeExpiryTimeUnitPropEnum = append(backupTypeExpiryTimeUnitPropEnum, v)
+	}
+}
+
+const (
+
+	// BackupExpiryTimeUnitNANOSECONDS captures enum value "NANOSECONDS"
+	BackupExpiryTimeUnitNANOSECONDS string = "NANOSECONDS"
+
+	// BackupExpiryTimeUnitMICROSECONDS captures enum value "MICROSECONDS"
+	BackupExpiryTimeUnitMICROSECONDS string = "MICROSECONDS"
+
+	// BackupExpiryTimeUnitMILLISECONDS captures enum value "MILLISECONDS"
+	BackupExpiryTimeUnitMILLISECONDS string = "MILLISECONDS"
+
+	// BackupExpiryTimeUnitSECONDS captures enum value "SECONDS"
+	BackupExpiryTimeUnitSECONDS string = "SECONDS"
+
+	// BackupExpiryTimeUnitMINUTES captures enum value "MINUTES"
+	BackupExpiryTimeUnitMINUTES string = "MINUTES"
+
+	// BackupExpiryTimeUnitHOURS captures enum value "HOURS"
+	BackupExpiryTimeUnitHOURS string = "HOURS"
+
+	// BackupExpiryTimeUnitDAYS captures enum value "DAYS"
+	BackupExpiryTimeUnitDAYS string = "DAYS"
+
+	// BackupExpiryTimeUnitMONTHS captures enum value "MONTHS"
+	BackupExpiryTimeUnitMONTHS string = "MONTHS"
+
+	// BackupExpiryTimeUnitYEARS captures enum value "YEARS"
+	BackupExpiryTimeUnitYEARS string = "YEARS"
+)
+
+// prop value enum
+func (m *Backup) validateExpiryTimeUnitEnum(path, location string, value string) error {
+	if err := validate.EnumCase(path, location, value, backupTypeExpiryTimeUnitPropEnum, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *Backup) validateExpiryTimeUnit(formats strfmt.Registry) error {
+	if swag.IsZero(m.ExpiryTimeUnit) { // not required
+		return nil
+	}
+
+	// value enum
+	if err := m.validateExpiryTimeUnitEnum("expiryTimeUnit", "body", m.ExpiryTimeUnit); err != nil {
 		return err
 	}
 
@@ -169,7 +320,7 @@ var backupTypeStatePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["InProgress","Completed","Failed","Deleted","Skipped","FailedToDelete","Stopped"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["InProgress","Completed","Failed","Deleted","Skipped","FailedToDelete","Stopped","DeleteInProgress","QueuedForDeletion"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -199,6 +350,12 @@ const (
 
 	// BackupStateStopped captures enum value "Stopped"
 	BackupStateStopped string = "Stopped"
+
+	// BackupStateDeleteInProgress captures enum value "DeleteInProgress"
+	BackupStateDeleteInProgress string = "DeleteInProgress"
+
+	// BackupStateQueuedForDeletion captures enum value "QueuedForDeletion"
+	BackupStateQueuedForDeletion string = "QueuedForDeletion"
 )
 
 // prop value enum
@@ -222,6 +379,18 @@ func (m *Backup) validateState(formats strfmt.Registry) error {
 	return nil
 }
 
+func (m *Backup) validateStorageConfigUUID(formats strfmt.Registry) error {
+	if swag.IsZero(m.StorageConfigUUID) { // not required
+		return nil
+	}
+
+	if err := validate.FormatOf("storageConfigUUID", "body", "uuid", m.StorageConfigUUID.String(), formats); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (m *Backup) validateTaskUUID(formats strfmt.Registry) error {
 	if swag.IsZero(m.TaskUUID) { // not required
 		return nil
@@ -234,9 +403,63 @@ func (m *Backup) validateTaskUUID(formats strfmt.Registry) error {
 	return nil
 }
 
+func (m *Backup) validateUniverseUUID(formats strfmt.Registry) error {
+	if swag.IsZero(m.UniverseUUID) { // not required
+		return nil
+	}
+
+	if err := validate.FormatOf("universeUUID", "body", "uuid", m.UniverseUUID.String(), formats); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (m *Backup) validateUpdateTime(formats strfmt.Registry) error {
 
 	if err := validate.Required("updateTime", "body", m.UpdateTime); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+var backupTypeVersionPropEnum []interface{}
+
+func init() {
+	var res []string
+	if err := json.Unmarshal([]byte(`["V1","V2"]`), &res); err != nil {
+		panic(err)
+	}
+	for _, v := range res {
+		backupTypeVersionPropEnum = append(backupTypeVersionPropEnum, v)
+	}
+}
+
+const (
+
+	// BackupVersionV1 captures enum value "V1"
+	BackupVersionV1 string = "V1"
+
+	// BackupVersionV2 captures enum value "V2"
+	BackupVersionV2 string = "V2"
+)
+
+// prop value enum
+func (m *Backup) validateVersionEnum(path, location string, value string) error {
+	if err := validate.EnumCase(path, location, value, backupTypeVersionPropEnum, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *Backup) validateVersion(formats strfmt.Registry) error {
+	if swag.IsZero(m.Version) { // not required
+		return nil
+	}
+
+	// value enum
+	if err := m.validateVersionEnum("version", "body", m.Version); err != nil {
 		return err
 	}
 

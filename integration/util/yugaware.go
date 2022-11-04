@@ -3,12 +3,17 @@ package util
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
 	"strconv"
+	"time"
 
+	"github.com/blang/vfs"
+	"github.com/blang/vfs/memfs"
 	"github.com/go-logr/logr"
 	. "github.com/icza/gox/gox"
 	. "github.com/onsi/gomega"
+	"github.com/yugabyte/gocql"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugaware-client/cmd"
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client"
@@ -16,7 +21,7 @@ import (
 	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
-type YWContext struct {
+type YWTestContext struct {
 	*client.YugawareClient
 
 	Hostname             string
@@ -26,9 +31,10 @@ type YWContext struct {
 	ClientCert           string
 	ClientKey            string
 	APIToken             string
+	Fs                   vfs.Filesystem
 }
 
-func NewYugawareContext(ctx context.Context, logger logr.Logger, hostname string, dialTimeout int, skipHostVerification bool, cacert, clientCert, clientKey, apiToken string) *YWContext {
+func NewYugawareTestContext(ctx context.Context, logger logr.Logger, hostname string, dialTimeout int, skipHostVerification bool, cacert, clientCert, clientKey, apiToken string) *YWTestContext {
 	ywclient, err := client.New(ctx, logger, hostname).
 		TLSOptions(&client.TLSOptions{
 			SkipHostVerification: skipHostVerification,
@@ -40,7 +46,7 @@ func NewYugawareContext(ctx context.Context, logger logr.Logger, hostname string
 		Connect()
 	Expect(err).NotTo(HaveOccurred())
 
-	return &YWContext{
+	return &YWTestContext{
 		YugawareClient:       ywclient,
 		Hostname:             hostname,
 		DialTimeout:          dialTimeout,
@@ -49,10 +55,11 @@ func NewYugawareContext(ctx context.Context, logger logr.Logger, hostname string
 		ClientCert:           clientCert,
 		ClientKey:            clientKey,
 		APIToken:             apiToken,
+		Fs:                   memfs.Create(),
 	}
 }
 
-func (c *YWContext) CreateUniverseIfNotExists(universeName, provider, instanceType string, withTLS bool, regions ...string) *models.UniverseResp {
+func (c *YWTestContext) CreateUniverseIfNotExists(universeName, provider, instanceType string, withTLS bool, regions ...string) *models.UniverseResp {
 	universe := c.GetUniverse(universeName)
 	if universe == nil {
 		opts := []string{"universe", "create", universeName, "--provider", provider, "--instance-type", instanceType, "--wait"}
@@ -73,7 +80,7 @@ func (c *YWContext) CreateUniverseIfNotExists(universeName, provider, instanceTy
 	return universe
 }
 
-func (c *YWContext) CleanupUniverse(universeName string) {
+func (c *YWTestContext) CleanupUniverse(universeName string) {
 	universe := c.GetUniverse(universeName)
 	if universe != nil {
 		_, err := c.RunYugawareCommand("universe", "delete", universeName, "--wait", "--approve", "--delete-backups", "--force")
@@ -82,14 +89,14 @@ func (c *YWContext) CleanupUniverse(universeName string) {
 	}
 }
 
-func (c *YWContext) GetUniverse(universeName string) *models.UniverseResp {
+func (c *YWTestContext) GetUniverse(universeName string) *models.UniverseResp {
 	universe, err := c.GetUniverseByIdentifier(universeName)
 	Expect(err).NotTo(HaveOccurred())
 	return universe
 }
 
-func (c *YWContext) RunYugawareCommand(args ...string) ([]byte, error) {
-	ywCommand := cmd.RootInit()
+func (c *YWTestContext) RunYugawareCommand(args ...string) ([]byte, error) {
+	ywCommand := cmd.RootInit(c.Fs)
 	args = append(args, "--hostname", c.Hostname, "--dialtimeout", strconv.Itoa(c.DialTimeout), "--api-token", c.APIToken)
 
 	if c.SkipHostVerification {
@@ -118,7 +125,7 @@ func (c *YWContext) RunYugawareCommand(args ...string) ([]byte, error) {
 	return buf.Bytes(), err
 }
 
-func (c *YWContext) GetMasterAddresses(universeName string) []*common.HostPortPB {
+func (c *YWTestContext) GetMasterAddresses(universeName string) []*common.HostPortPB {
 	universe := c.GetUniverse(universeName)
 
 	var masters []*common.HostPortPB
@@ -131,7 +138,7 @@ func (c *YWContext) GetMasterAddresses(universeName string) []*common.HostPortPB
 	return masters
 }
 
-func (c *YWContext) CreateYugatoolContext(universeName string) *YugatoolContext {
+func (c *YWTestContext) CreateYugatoolContext(universeName string) *YugatoolTestContext {
 	universe := c.GetUniverse(universeName)
 
 	Expect(len(universe.UniverseDetails.Clusters)).To(BeNumerically(">", 0))
@@ -155,10 +162,10 @@ func (c *YWContext) CreateYugatoolContext(universeName string) *YugatoolContext 
 	}
 
 	// TODO: Should test with the clientCert or clientKey
-	return NewYugatoolContext(c.Log, universe, c.GetMasterAddresses(universeName), int64(c.DialTimeout), cacert, nil, nil, skipHostVerification)
+	return NewYugatoolTestContext(c.Log, universe, c.GetMasterAddresses(universeName), int64(c.DialTimeout), cacert, nil, nil, skipHostVerification)
 }
 
-func (c *YWContext) DumpYugawareLogs() {
+func (c *YWTestContext) DumpYugawareLogs() {
 	params := session_management.NewGetLogsParams().
 		WithMaxLines(int32(400))
 
@@ -177,4 +184,81 @@ func (c *YWContext) DumpYugawareLogs() {
 
 		fmt.Println()
 	}
+}
+
+func (c *YWTestContext) YCQLConnection(universeName string) *gocql.Session {
+	universe := c.GetUniverse(universeName)
+	for _, server := range universe.UniverseDetails.NodeDetailsSet {
+		if server.IsTserver {
+			if server.IsYqlServer {
+				ycqlClient := gocql.NewCluster(server.CloudInfo.PrivateIP)
+
+				if universe.UniverseDetails.Clusters[0].UserIntent.EnableClientToNodeEncrypt {
+					ycqlClient.SslOpts = &gocql.SslOptions{
+						EnableHostVerification: false,
+					}
+				}
+
+				ycqlClient.Timeout = time.Minute
+				ycqlClient.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
+
+				session, err := ycqlClient.CreateSession()
+				if err != nil {
+					continue
+				}
+
+				return session
+			}
+			break
+		}
+	}
+
+	panic("Could not connect to any YCQL host")
+}
+
+func (c *YWTestContext) YSQLConnection(universeName string, database string) *sql.DB {
+	universe := c.GetUniverse(universeName)
+	var psqlInfo string
+	for _, server := range universe.UniverseDetails.NodeDetailsSet {
+		if server.IsTserver {
+			sslMode := "disable"
+			if universe.UniverseDetails.Clusters[0].UserIntent.EnableClientToNodeEncrypt {
+				sslMode = "require"
+			}
+
+			psqlInfo = fmt.Sprintf("host=%s port=%d user=%s dbname=%s sslmode=%s",
+				server.CloudInfo.PrivateIP, server.YsqlServerRPCPort, "yugabyte", database, sslMode)
+			break
+		}
+	}
+	db, err := sql.Open("postgres", psqlInfo)
+	Expect(err).NotTo(HaveOccurred())
+	return db
+}
+
+func (c *YWTestContext) CreateYSQLDatabase(universe string, database string) {
+	con := c.YSQLConnection(universe, "yugabyte")
+	defer con.Close()
+
+	r, err := con.Query("select true from pg_database where datname = $1", database)
+	Expect(err).NotTo(HaveOccurred())
+
+	var exists bool
+	for r.Next() {
+		err = r.Scan(&exists)
+		Expect(err).NotTo(HaveOccurred())
+	}
+
+	if !exists {
+		_, err := con.Exec(fmt.Sprintf("create database %s", database))
+		Expect(err).NotTo(HaveOccurred())
+	}
+}
+
+func (c *YWTestContext) DropYSQLDatabase(universe string, database string) {
+	con := c.YSQLConnection(universe, "yugabyte")
+	defer con.Close()
+
+	_, err := con.Exec(fmt.Sprintf("drop database %s", database))
+	Expect(err).NotTo(HaveOccurred())
 }

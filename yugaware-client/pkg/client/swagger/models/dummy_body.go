@@ -12,7 +12,7 @@ import (
 	"github.com/go-openapi/swag"
 )
 
-// DummyBody dummy body
+// DummyBody Dummy value to work around platform bug PLAT-2076
 //
 // swagger:model DummyBody
 type DummyBody struct {

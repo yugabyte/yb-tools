@@ -88,6 +88,9 @@ type UniverseDefinitionTaskParamsResp struct {
 	// node prefix
 	NodePrefix string `json:"nodePrefix,omitempty"`
 
+	// nodes resize available
+	NodesResizeAvailable bool `json:"nodesResizeAvailable,omitempty"`
+
 	// Previous task UUID only if this task is a retry
 	// Format: uuid
 	PreviousTaskUUID strfmt.UUID `json:"previousTaskUUID,omitempty"`
@@ -130,7 +133,7 @@ type UniverseDefinitionTaskParamsResp struct {
 	UpdateSucceeded bool `json:"updateSucceeded,omitempty"`
 
 	// updating task
-	// Enum: [CloudBootstrap CloudCleanup CreateCassandraTable CreateUniverse ReadOnlyClusterCreate ReadOnlyClusterDelete CreateKubernetesUniverse DestroyUniverse PauseUniverse ResumeUniverse DestroyKubernetesUniverse DeleteTable BackupUniverse MultiTableBackup CreateBackup EditUniverse EditKubernetesUniverse ExternalScript KubernetesProvision ImportIntoTable UpgradeUniverse RestartUniverse SoftwareUpgrade SoftwareKubernetesUpgrade GFlagsUpgrade GFlagsKubernetesUpgrade CertsRotate TlsToggle VMImageUpgrade SystemdUpgrade CreateRootVolumes ReplaceRootVolume ChangeInstanceType PersistResizeNode PersistSystemdUpgrade UpdateNodeDetails UpgradeKubernetesUniverse DeleteNodeFromUniverse StopNodeInUniverse StartNodeInUniverse AddNodeToUniverse RemoveNodeFromUniverse ReleaseInstanceFromUniverse SetUniverseKey SetKubernetesUniverseKey CreateKMSConfig EditKMSConfig DeleteKMSConfig UpdateDiskSize StartMasterOnNode CreateXClusterConfig EditXClusterConfig DeleteXClusterConfig SyncXClusterConfig CreateSupportBundle AnsibleClusterServerCtl AnsibleConfigureServers AnsibleDestroyServer PauseServer ResumeServer AnsibleSetupServer AnsibleCreateServer PrecheckNode PrecheckNodeDetached AnsibleUpdateNodeInfo BulkImport ChangeMasterConfig ChangeAdminPassword CreateTable DeleteNode DeleteBackup DeleteCustomerConfig UpdateNodeProcess DeleteTableFromUniverse LoadBalancerStateChange ModifyBlackList ManipulateDnsRecordTask RemoveUniverseEntry SetFlagInMemory SetNodeState SwamperTargetsFileUpdate UniverseUpdateSucceeded UpdateAndPersistGFlags UpdatePlacementInfo UpdateSoftwareVersion WaitForDataMove WaitForLeaderBlacklistCompletion WaitForFollowerLag WaitForLoadBalance WaitForMasterLeader WaitForServer WaitForTServerHeartBeats DeleteClusterFromUniverse InstanceActions WaitForServerReady RunExternalScript XClusterConfigSetup XClusterConfigSetStatus XClusterConfigModifyTables XClusterConfigRename XClusterConfigDelete XClusterConfigSync CloudAccessKeyCleanup CloudAccessKeySetup CloudInitializer CloudProviderCleanup CloudRegionCleanup CloudRegionSetup CloudSetup BackupTable BackupTableYb BackupUniverseKeys RestoreUniverseKeys WaitForLeadersOnPreferredOnly EnableEncryptionAtRest DisableEncryptionAtRest DestroyEncryptionAtRest KubernetesCommandExecutor KubernetesWaitForPod KubernetesCheckNumPod SetActiveUniverseKeys CopyEncryptionKeyFile WaitForEncryptionKeyInMemory UnivSetCertificate CreateAlertDefinitions UniverseSetTlsParams UniverseUpdateRootCert ResetUniverseVersion DeleteCertificate SetNodeStatus CheckMasterLeader CheckMasters CheckTServers WaitForTServerHBs CreatePrometheusSwamperConfig PreflightNodeCheck RunYsqlUpgrade]
+	// Enum: [CloudBootstrap CloudCleanup CreateCassandraTable CreateUniverse ReadOnlyClusterCreate ReadOnlyClusterDelete CreateKubernetesUniverse DestroyUniverse PauseUniverse ResumeUniverse DestroyKubernetesUniverse DeleteTable BackupUniverse RestoreBackup MultiTableBackup CreateBackup EditUniverse EditKubernetesUniverse ExternalScript KubernetesProvision ImportIntoTable UpgradeUniverse RestartUniverse SoftwareUpgrade SoftwareKubernetesUpgrade GFlagsUpgrade GFlagsKubernetesUpgrade CertsRotate CertsRotateKubernetesUpgrade TlsToggle VMImageUpgrade SystemdUpgrade CreateRootVolumes ReplaceRootVolume ChangeInstanceType PersistResizeNode PersistSystemdUpgrade UpdateNodeDetails UpgradeKubernetesUniverse DeleteNodeFromUniverse StopNodeInUniverse StartNodeInUniverse AddNodeToUniverse RemoveNodeFromUniverse ReleaseInstanceFromUniverse SetUniverseKey SetKubernetesUniverseKey CreateKMSConfig EditKMSConfig DeleteKMSConfig UpdateDiskSize StartMasterOnNode CreateXClusterConfig EditXClusterConfig DeleteXClusterConfig SyncXClusterConfig CreateSupportBundle AnsibleClusterServerCtl AnsibleConfigureServers AnsibleDestroyServer PauseServer ResumeServer AnsibleSetupServer AnsibleCreateServer PrecheckNode PrecheckNodeDetached AnsibleUpdateNodeInfo BulkImport ChangeMasterConfig ChangeAdminPassword CreateTable DeleteNode DeleteBackup DeleteBackupYb DeleteCustomerConfig DeleteCustomerStorageConfig UpdateNodeProcess DeleteTableFromUniverse LoadBalancerStateChange ModifyBlackList ManipulateDnsRecordTask RemoveUniverseEntry SetFlagInMemory SetNodeState SwamperTargetsFileUpdate UniverseUpdateSucceeded UpdateAndPersistGFlags UpdatePlacementInfo UpdateSoftwareVersion WaitForDataMove WaitForLeaderBlacklistCompletion WaitForFollowerLag WaitForLoadBalance WaitForMasterLeader WaitForServer WaitForTServerHeartBeats DeleteClusterFromUniverse InstanceActions WaitForServerReady RunExternalScript XClusterConfigSetup XClusterConfigSetStatus XClusterConfigModifyTables XClusterConfigRename XClusterConfigDelete XClusterConfigSync XClusterConfigUpdateMasterAddresses CloudAccessKeyCleanup CloudAccessKeySetup CloudInitializer CloudProviderCleanup CloudRegionCleanup CloudRegionSetup CloudSetup BackupTable BackupTableYb BackupUniverseKeys RestoreBackupYb RestoreUniverseKeys RestoreUniverseKeysYb WaitForLeadersOnPreferredOnly EnableEncryptionAtRest DisableEncryptionAtRest DestroyEncryptionAtRest KubernetesCommandExecutor KubernetesWaitForPod KubernetesCheckNumPod SetActiveUniverseKeys CopyEncryptionKeyFile WaitForEncryptionKeyInMemory UnivSetCertificate CreateAlertDefinitions ManageAlertDefinitions UniverseSetTlsParams UniverseUpdateRootCert ResetUniverseVersion DeleteCertificate SetNodeStatus CheckMasterLeader CheckMasters CheckTServers WaitForTServerHBs CreatePrometheusSwamperConfig PreflightNodeCheck RunYsqlUpgrade ResizeNode CheckMemory UpdateMountedDisks TransferXClusterCerts CreateTableSpacesInUniverse CreateTableSpaces ThirdpartySoftwareUpgrade MarkUniverseForHealthScriptReUpload UpdateUniverseTags]
 	UpdatingTask string `json:"updatingTask,omitempty"`
 
 	// updating task UUID
@@ -574,7 +577,7 @@ var universeDefinitionTaskParamsRespTypeUpdatingTaskPropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["CloudBootstrap","CloudCleanup","CreateCassandraTable","CreateUniverse","ReadOnlyClusterCreate","ReadOnlyClusterDelete","CreateKubernetesUniverse","DestroyUniverse","PauseUniverse","ResumeUniverse","DestroyKubernetesUniverse","DeleteTable","BackupUniverse","MultiTableBackup","CreateBackup","EditUniverse","EditKubernetesUniverse","ExternalScript","KubernetesProvision","ImportIntoTable","UpgradeUniverse","RestartUniverse","SoftwareUpgrade","SoftwareKubernetesUpgrade","GFlagsUpgrade","GFlagsKubernetesUpgrade","CertsRotate","TlsToggle","VMImageUpgrade","SystemdUpgrade","CreateRootVolumes","ReplaceRootVolume","ChangeInstanceType","PersistResizeNode","PersistSystemdUpgrade","UpdateNodeDetails","UpgradeKubernetesUniverse","DeleteNodeFromUniverse","StopNodeInUniverse","StartNodeInUniverse","AddNodeToUniverse","RemoveNodeFromUniverse","ReleaseInstanceFromUniverse","SetUniverseKey","SetKubernetesUniverseKey","CreateKMSConfig","EditKMSConfig","DeleteKMSConfig","UpdateDiskSize","StartMasterOnNode","CreateXClusterConfig","EditXClusterConfig","DeleteXClusterConfig","SyncXClusterConfig","CreateSupportBundle","AnsibleClusterServerCtl","AnsibleConfigureServers","AnsibleDestroyServer","PauseServer","ResumeServer","AnsibleSetupServer","AnsibleCreateServer","PrecheckNode","PrecheckNodeDetached","AnsibleUpdateNodeInfo","BulkImport","ChangeMasterConfig","ChangeAdminPassword","CreateTable","DeleteNode","DeleteBackup","DeleteCustomerConfig","UpdateNodeProcess","DeleteTableFromUniverse","LoadBalancerStateChange","ModifyBlackList","ManipulateDnsRecordTask","RemoveUniverseEntry","SetFlagInMemory","SetNodeState","SwamperTargetsFileUpdate","UniverseUpdateSucceeded","UpdateAndPersistGFlags","UpdatePlacementInfo","UpdateSoftwareVersion","WaitForDataMove","WaitForLeaderBlacklistCompletion","WaitForFollowerLag","WaitForLoadBalance","WaitForMasterLeader","WaitForServer","WaitForTServerHeartBeats","DeleteClusterFromUniverse","InstanceActions","WaitForServerReady","RunExternalScript","XClusterConfigSetup","XClusterConfigSetStatus","XClusterConfigModifyTables","XClusterConfigRename","XClusterConfigDelete","XClusterConfigSync","CloudAccessKeyCleanup","CloudAccessKeySetup","CloudInitializer","CloudProviderCleanup","CloudRegionCleanup","CloudRegionSetup","CloudSetup","BackupTable","BackupTableYb","BackupUniverseKeys","RestoreUniverseKeys","WaitForLeadersOnPreferredOnly","EnableEncryptionAtRest","DisableEncryptionAtRest","DestroyEncryptionAtRest","KubernetesCommandExecutor","KubernetesWaitForPod","KubernetesCheckNumPod","SetActiveUniverseKeys","CopyEncryptionKeyFile","WaitForEncryptionKeyInMemory","UnivSetCertificate","CreateAlertDefinitions","UniverseSetTlsParams","UniverseUpdateRootCert","ResetUniverseVersion","DeleteCertificate","SetNodeStatus","CheckMasterLeader","CheckMasters","CheckTServers","WaitForTServerHBs","CreatePrometheusSwamperConfig","PreflightNodeCheck","RunYsqlUpgrade"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["CloudBootstrap","CloudCleanup","CreateCassandraTable","CreateUniverse","ReadOnlyClusterCreate","ReadOnlyClusterDelete","CreateKubernetesUniverse","DestroyUniverse","PauseUniverse","ResumeUniverse","DestroyKubernetesUniverse","DeleteTable","BackupUniverse","RestoreBackup","MultiTableBackup","CreateBackup","EditUniverse","EditKubernetesUniverse","ExternalScript","KubernetesProvision","ImportIntoTable","UpgradeUniverse","RestartUniverse","SoftwareUpgrade","SoftwareKubernetesUpgrade","GFlagsUpgrade","GFlagsKubernetesUpgrade","CertsRotate","CertsRotateKubernetesUpgrade","TlsToggle","VMImageUpgrade","SystemdUpgrade","CreateRootVolumes","ReplaceRootVolume","ChangeInstanceType","PersistResizeNode","PersistSystemdUpgrade","UpdateNodeDetails","UpgradeKubernetesUniverse","DeleteNodeFromUniverse","StopNodeInUniverse","StartNodeInUniverse","AddNodeToUniverse","RemoveNodeFromUniverse","ReleaseInstanceFromUniverse","SetUniverseKey","SetKubernetesUniverseKey","CreateKMSConfig","EditKMSConfig","DeleteKMSConfig","UpdateDiskSize","StartMasterOnNode","CreateXClusterConfig","EditXClusterConfig","DeleteXClusterConfig","SyncXClusterConfig","CreateSupportBundle","AnsibleClusterServerCtl","AnsibleConfigureServers","AnsibleDestroyServer","PauseServer","ResumeServer","AnsibleSetupServer","AnsibleCreateServer","PrecheckNode","PrecheckNodeDetached","AnsibleUpdateNodeInfo","BulkImport","ChangeMasterConfig","ChangeAdminPassword","CreateTable","DeleteNode","DeleteBackup","DeleteBackupYb","DeleteCustomerConfig","DeleteCustomerStorageConfig","UpdateNodeProcess","DeleteTableFromUniverse","LoadBalancerStateChange","ModifyBlackList","ManipulateDnsRecordTask","RemoveUniverseEntry","SetFlagInMemory","SetNodeState","SwamperTargetsFileUpdate","UniverseUpdateSucceeded","UpdateAndPersistGFlags","UpdatePlacementInfo","UpdateSoftwareVersion","WaitForDataMove","WaitForLeaderBlacklistCompletion","WaitForFollowerLag","WaitForLoadBalance","WaitForMasterLeader","WaitForServer","WaitForTServerHeartBeats","DeleteClusterFromUniverse","InstanceActions","WaitForServerReady","RunExternalScript","XClusterConfigSetup","XClusterConfigSetStatus","XClusterConfigModifyTables","XClusterConfigRename","XClusterConfigDelete","XClusterConfigSync","XClusterConfigUpdateMasterAddresses","CloudAccessKeyCleanup","CloudAccessKeySetup","CloudInitializer","CloudProviderCleanup","CloudRegionCleanup","CloudRegionSetup","CloudSetup","BackupTable","BackupTableYb","BackupUniverseKeys","RestoreBackupYb","RestoreUniverseKeys","RestoreUniverseKeysYb","WaitForLeadersOnPreferredOnly","EnableEncryptionAtRest","DisableEncryptionAtRest","DestroyEncryptionAtRest","KubernetesCommandExecutor","KubernetesWaitForPod","KubernetesCheckNumPod","SetActiveUniverseKeys","CopyEncryptionKeyFile","WaitForEncryptionKeyInMemory","UnivSetCertificate","CreateAlertDefinitions","ManageAlertDefinitions","UniverseSetTlsParams","UniverseUpdateRootCert","ResetUniverseVersion","DeleteCertificate","SetNodeStatus","CheckMasterLeader","CheckMasters","CheckTServers","WaitForTServerHBs","CreatePrometheusSwamperConfig","PreflightNodeCheck","RunYsqlUpgrade","ResizeNode","CheckMemory","UpdateMountedDisks","TransferXClusterCerts","CreateTableSpacesInUniverse","CreateTableSpaces","ThirdpartySoftwareUpgrade","MarkUniverseForHealthScriptReUpload","UpdateUniverseTags"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -623,6 +626,9 @@ const (
 	// UniverseDefinitionTaskParamsRespUpdatingTaskBackupUniverse captures enum value "BackupUniverse"
 	UniverseDefinitionTaskParamsRespUpdatingTaskBackupUniverse string = "BackupUniverse"
 
+	// UniverseDefinitionTaskParamsRespUpdatingTaskRestoreBackup captures enum value "RestoreBackup"
+	UniverseDefinitionTaskParamsRespUpdatingTaskRestoreBackup string = "RestoreBackup"
+
 	// UniverseDefinitionTaskParamsRespUpdatingTaskMultiTableBackup captures enum value "MultiTableBackup"
 	UniverseDefinitionTaskParamsRespUpdatingTaskMultiTableBackup string = "MultiTableBackup"
 
@@ -664,6 +670,9 @@ const (
 
 	// UniverseDefinitionTaskParamsRespUpdatingTaskCertsRotate captures enum value "CertsRotate"
 	UniverseDefinitionTaskParamsRespUpdatingTaskCertsRotate string = "CertsRotate"
+
+	// UniverseDefinitionTaskParamsRespUpdatingTaskCertsRotateKubernetesUpgrade captures enum value "CertsRotateKubernetesUpgrade"
+	UniverseDefinitionTaskParamsRespUpdatingTaskCertsRotateKubernetesUpgrade string = "CertsRotateKubernetesUpgrade"
 
 	// UniverseDefinitionTaskParamsRespUpdatingTaskTLSToggle captures enum value "TlsToggle"
 	UniverseDefinitionTaskParamsRespUpdatingTaskTLSToggle string = "TlsToggle"
@@ -797,8 +806,14 @@ const (
 	// UniverseDefinitionTaskParamsRespUpdatingTaskDeleteBackup captures enum value "DeleteBackup"
 	UniverseDefinitionTaskParamsRespUpdatingTaskDeleteBackup string = "DeleteBackup"
 
+	// UniverseDefinitionTaskParamsRespUpdatingTaskDeleteBackupYb captures enum value "DeleteBackupYb"
+	UniverseDefinitionTaskParamsRespUpdatingTaskDeleteBackupYb string = "DeleteBackupYb"
+
 	// UniverseDefinitionTaskParamsRespUpdatingTaskDeleteCustomerConfig captures enum value "DeleteCustomerConfig"
 	UniverseDefinitionTaskParamsRespUpdatingTaskDeleteCustomerConfig string = "DeleteCustomerConfig"
+
+	// UniverseDefinitionTaskParamsRespUpdatingTaskDeleteCustomerStorageConfig captures enum value "DeleteCustomerStorageConfig"
+	UniverseDefinitionTaskParamsRespUpdatingTaskDeleteCustomerStorageConfig string = "DeleteCustomerStorageConfig"
 
 	// UniverseDefinitionTaskParamsRespUpdatingTaskUpdateNodeProcess captures enum value "UpdateNodeProcess"
 	UniverseDefinitionTaskParamsRespUpdatingTaskUpdateNodeProcess string = "UpdateNodeProcess"
@@ -890,6 +905,9 @@ const (
 	// UniverseDefinitionTaskParamsRespUpdatingTaskXClusterConfigSync captures enum value "XClusterConfigSync"
 	UniverseDefinitionTaskParamsRespUpdatingTaskXClusterConfigSync string = "XClusterConfigSync"
 
+	// UniverseDefinitionTaskParamsRespUpdatingTaskXClusterConfigUpdateMasterAddresses captures enum value "XClusterConfigUpdateMasterAddresses"
+	UniverseDefinitionTaskParamsRespUpdatingTaskXClusterConfigUpdateMasterAddresses string = "XClusterConfigUpdateMasterAddresses"
+
 	// UniverseDefinitionTaskParamsRespUpdatingTaskCloudAccessKeyCleanup captures enum value "CloudAccessKeyCleanup"
 	UniverseDefinitionTaskParamsRespUpdatingTaskCloudAccessKeyCleanup string = "CloudAccessKeyCleanup"
 
@@ -920,8 +938,14 @@ const (
 	// UniverseDefinitionTaskParamsRespUpdatingTaskBackupUniverseKeys captures enum value "BackupUniverseKeys"
 	UniverseDefinitionTaskParamsRespUpdatingTaskBackupUniverseKeys string = "BackupUniverseKeys"
 
+	// UniverseDefinitionTaskParamsRespUpdatingTaskRestoreBackupYb captures enum value "RestoreBackupYb"
+	UniverseDefinitionTaskParamsRespUpdatingTaskRestoreBackupYb string = "RestoreBackupYb"
+
 	// UniverseDefinitionTaskParamsRespUpdatingTaskRestoreUniverseKeys captures enum value "RestoreUniverseKeys"
 	UniverseDefinitionTaskParamsRespUpdatingTaskRestoreUniverseKeys string = "RestoreUniverseKeys"
+
+	// UniverseDefinitionTaskParamsRespUpdatingTaskRestoreUniverseKeysYb captures enum value "RestoreUniverseKeysYb"
+	UniverseDefinitionTaskParamsRespUpdatingTaskRestoreUniverseKeysYb string = "RestoreUniverseKeysYb"
 
 	// UniverseDefinitionTaskParamsRespUpdatingTaskWaitForLeadersOnPreferredOnly captures enum value "WaitForLeadersOnPreferredOnly"
 	UniverseDefinitionTaskParamsRespUpdatingTaskWaitForLeadersOnPreferredOnly string = "WaitForLeadersOnPreferredOnly"
@@ -959,6 +983,9 @@ const (
 	// UniverseDefinitionTaskParamsRespUpdatingTaskCreateAlertDefinitions captures enum value "CreateAlertDefinitions"
 	UniverseDefinitionTaskParamsRespUpdatingTaskCreateAlertDefinitions string = "CreateAlertDefinitions"
 
+	// UniverseDefinitionTaskParamsRespUpdatingTaskManageAlertDefinitions captures enum value "ManageAlertDefinitions"
+	UniverseDefinitionTaskParamsRespUpdatingTaskManageAlertDefinitions string = "ManageAlertDefinitions"
+
 	// UniverseDefinitionTaskParamsRespUpdatingTaskUniverseSetTLSParams captures enum value "UniverseSetTlsParams"
 	UniverseDefinitionTaskParamsRespUpdatingTaskUniverseSetTLSParams string = "UniverseSetTlsParams"
 
@@ -994,6 +1021,33 @@ const (
 
 	// UniverseDefinitionTaskParamsRespUpdatingTaskRunYsqlUpgrade captures enum value "RunYsqlUpgrade"
 	UniverseDefinitionTaskParamsRespUpdatingTaskRunYsqlUpgrade string = "RunYsqlUpgrade"
+
+	// UniverseDefinitionTaskParamsRespUpdatingTaskResizeNode captures enum value "ResizeNode"
+	UniverseDefinitionTaskParamsRespUpdatingTaskResizeNode string = "ResizeNode"
+
+	// UniverseDefinitionTaskParamsRespUpdatingTaskCheckMemory captures enum value "CheckMemory"
+	UniverseDefinitionTaskParamsRespUpdatingTaskCheckMemory string = "CheckMemory"
+
+	// UniverseDefinitionTaskParamsRespUpdatingTaskUpdateMountedDisks captures enum value "UpdateMountedDisks"
+	UniverseDefinitionTaskParamsRespUpdatingTaskUpdateMountedDisks string = "UpdateMountedDisks"
+
+	// UniverseDefinitionTaskParamsRespUpdatingTaskTransferXClusterCerts captures enum value "TransferXClusterCerts"
+	UniverseDefinitionTaskParamsRespUpdatingTaskTransferXClusterCerts string = "TransferXClusterCerts"
+
+	// UniverseDefinitionTaskParamsRespUpdatingTaskCreateTableSpacesInUniverse captures enum value "CreateTableSpacesInUniverse"
+	UniverseDefinitionTaskParamsRespUpdatingTaskCreateTableSpacesInUniverse string = "CreateTableSpacesInUniverse"
+
+	// UniverseDefinitionTaskParamsRespUpdatingTaskCreateTableSpaces captures enum value "CreateTableSpaces"
+	UniverseDefinitionTaskParamsRespUpdatingTaskCreateTableSpaces string = "CreateTableSpaces"
+
+	// UniverseDefinitionTaskParamsRespUpdatingTaskThirdpartySoftwareUpgrade captures enum value "ThirdpartySoftwareUpgrade"
+	UniverseDefinitionTaskParamsRespUpdatingTaskThirdpartySoftwareUpgrade string = "ThirdpartySoftwareUpgrade"
+
+	// UniverseDefinitionTaskParamsRespUpdatingTaskMarkUniverseForHealthScriptReUpload captures enum value "MarkUniverseForHealthScriptReUpload"
+	UniverseDefinitionTaskParamsRespUpdatingTaskMarkUniverseForHealthScriptReUpload string = "MarkUniverseForHealthScriptReUpload"
+
+	// UniverseDefinitionTaskParamsRespUpdatingTaskUpdateUniverseTags captures enum value "UpdateUniverseTags"
+	UniverseDefinitionTaskParamsRespUpdatingTaskUpdateUniverseTags string = "UpdateUniverseTags"
 )
 
 // prop value enum

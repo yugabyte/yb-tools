@@ -14,6 +14,7 @@ import (
 	"github.com/go-openapi/runtime"
 	cr "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
+	"github.com/go-openapi/swag"
 )
 
 // NewGetAllTablesParams creates a new GetAllTablesParams object,
@@ -64,6 +65,9 @@ type GetAllTablesParams struct {
 	// Format: uuid
 	CUUID strfmt.UUID
 
+	// IncludeParentTableInfo.
+	IncludeParentTableInfo *bool
+
 	// UniUUID.
 	//
 	// Format: uuid
@@ -86,7 +90,18 @@ func (o *GetAllTablesParams) WithDefaults() *GetAllTablesParams {
 //
 // All values with no default are reset to their zero value.
 func (o *GetAllTablesParams) SetDefaults() {
-	// no default values defined for this parameter
+	var (
+		includeParentTableInfoDefault = bool(false)
+	)
+
+	val := GetAllTablesParams{
+		IncludeParentTableInfo: &includeParentTableInfoDefault,
+	}
+
+	val.timeout = o.timeout
+	val.Context = o.Context
+	val.HTTPClient = o.HTTPClient
+	*o = val
 }
 
 // WithTimeout adds the timeout to the get all tables params
@@ -133,6 +148,17 @@ func (o *GetAllTablesParams) SetCUUID(cUUID strfmt.UUID) {
 	o.CUUID = cUUID
 }
 
+// WithIncludeParentTableInfo adds the includeParentTableInfo to the get all tables params
+func (o *GetAllTablesParams) WithIncludeParentTableInfo(includeParentTableInfo *bool) *GetAllTablesParams {
+	o.SetIncludeParentTableInfo(includeParentTableInfo)
+	return o
+}
+
+// SetIncludeParentTableInfo adds the includeParentTableInfo to the get all tables params
+func (o *GetAllTablesParams) SetIncludeParentTableInfo(includeParentTableInfo *bool) {
+	o.IncludeParentTableInfo = includeParentTableInfo
+}
+
 // WithUniUUID adds the uniUUID to the get all tables params
 func (o *GetAllTablesParams) WithUniUUID(uniUUID strfmt.UUID) *GetAllTablesParams {
 	o.SetUniUUID(uniUUID)
@@ -155,6 +181,23 @@ func (o *GetAllTablesParams) WriteToRequest(r runtime.ClientRequest, reg strfmt.
 	// path param cUUID
 	if err := r.SetPathParam("cUUID", o.CUUID.String()); err != nil {
 		return err
+	}
+
+	if o.IncludeParentTableInfo != nil {
+
+		// query param includeParentTableInfo
+		var qrIncludeParentTableInfo bool
+
+		if o.IncludeParentTableInfo != nil {
+			qrIncludeParentTableInfo = *o.IncludeParentTableInfo
+		}
+		qIncludeParentTableInfo := swag.FormatBool(qrIncludeParentTableInfo)
+		if qIncludeParentTableInfo != "" {
+
+			if err := r.SetQueryParam("includeParentTableInfo", qIncludeParentTableInfo); err != nil {
+				return err
+			}
+		}
 	}
 
 	// path param uniUUID

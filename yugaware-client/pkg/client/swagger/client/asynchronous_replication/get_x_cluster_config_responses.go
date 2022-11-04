@@ -44,19 +44,19 @@ func NewGetXClusterConfigOK() *GetXClusterConfigOK {
 successful operation
 */
 type GetXClusterConfigOK struct {
-	Payload *models.XClusterConfig
+	Payload *models.XClusterConfigGetResp
 }
 
 func (o *GetXClusterConfigOK) Error() string {
 	return fmt.Sprintf("[GET /api/v1/customers/{cUUID}/xcluster_configs/{xccUUID}][%d] getXClusterConfigOK  %+v", 200, o.Payload)
 }
-func (o *GetXClusterConfigOK) GetPayload() *models.XClusterConfig {
+func (o *GetXClusterConfigOK) GetPayload() *models.XClusterConfigGetResp {
 	return o.Payload
 }
 
 func (o *GetXClusterConfigOK) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
 
-	o.Payload = new(models.XClusterConfig)
+	o.Payload = new(models.XClusterConfigGetResp)
 
 	// response payload
 	if err := consumer.Consume(response.Body(), o.Payload); err != nil && err != io.EOF {

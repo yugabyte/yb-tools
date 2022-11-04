@@ -30,7 +30,7 @@ type ClientOption func(*runtime.ClientOperation)
 
 // ClientService is the interface for Client methods
 type ClientService interface {
-	DownloadNodeLogs(params *DownloadNodeLogsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) error
+	DownloadNodeLogs(params *DownloadNodeLogsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DownloadNodeLogsOK, error)
 
 	GetLiveQueries(params *GetLiveQueriesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetLiveQueriesOK, error)
 
@@ -46,6 +46,8 @@ type ClientService interface {
 
 	ResetSlowQueries(params *ResetSlowQueriesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ResetSlowQueriesOK, error)
 
+	TriggerHealthCheck(params *TriggerHealthCheckParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*TriggerHealthCheckOK, error)
+
 	UniverseStatus(params *UniverseStatusParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UniverseStatusOK, error)
 
 	SetTransport(transport runtime.ClientTransport)
@@ -56,7 +58,7 @@ type ClientService interface {
 
   Downloads the log files from a given node.
 */
-func (a *Client) DownloadNodeLogs(params *DownloadNodeLogsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) error {
+func (a *Client) DownloadNodeLogs(params *DownloadNodeLogsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DownloadNodeLogsOK, error) {
 	// TODO: Validate the params before sending
 	if params == nil {
 		params = NewDownloadNodeLogsParams()
@@ -78,11 +80,18 @@ func (a *Client) DownloadNodeLogs(params *DownloadNodeLogsParams, authInfo runti
 		opt(op)
 	}
 
-	_, err := a.transport.Submit(op)
+	result, err := a.transport.Submit(op)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	success, ok := result.(*DownloadNodeLogsOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for downloadNodeLogs: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
 }
 
 /*
@@ -357,6 +366,47 @@ func (a *Client) ResetSlowQueries(params *ResetSlowQueriesParams, authInfo runti
 	// unexpected success response
 	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
 	msg := fmt.Sprintf("unexpected success response for resetSlowQueries: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
+  TriggerHealthCheck triggers a universe health check
+
+  Trigger a universe health check and return the trigger time.
+*/
+func (a *Client) TriggerHealthCheck(params *TriggerHealthCheckParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*TriggerHealthCheckOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewTriggerHealthCheckParams()
+	}
+	op := &runtime.ClientOperation{
+		ID:                 "triggerHealthCheck",
+		Method:             "GET",
+		PathPattern:        "/api/v1/customers/{cUUID}/universes/{uniUUID}/trigger_health_check",
+		ProducesMediaTypes: []string{"application/json"},
+		ConsumesMediaTypes: []string{"application/json"},
+		Schemes:            []string{"http", "https"},
+		Params:             params,
+		Reader:             &TriggerHealthCheckReader{formats: a.formats},
+		AuthInfo:           authInfo,
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	}
+	for _, opt := range opts {
+		opt(op)
+	}
+
+	result, err := a.transport.Submit(op)
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*TriggerHealthCheckOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for triggerHealthCheck: API contract not enforced by server. Client expected to get an error, but got: %T", result)
 	panic(msg)
 }
 

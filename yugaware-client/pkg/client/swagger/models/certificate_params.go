@@ -34,7 +34,7 @@ type CertificateParams struct {
 
 	// cert type
 	// Required: true
-	// Enum: [SelfSigned CustomCertHostPath CustomServerCert]
+	// Enum: [SelfSigned CustomCertHostPath CustomServerCert HashicorpVault]
 	CertType *string `json:"certType"`
 
 	// custom cert info
@@ -44,6 +44,10 @@ type CertificateParams struct {
 	// custom server cert data
 	// Required: true
 	CustomServerCertData *CustomServerCertData `json:"customServerCertData"`
+
+	// hc vault cert params
+	// Required: true
+	HcVaultCertParams *HashicorpVaultConfigParams `json:"hcVaultCertParams"`
 
 	// key content
 	// Required: true
@@ -79,6 +83,10 @@ func (m *CertificateParams) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateCustomServerCertData(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateHcVaultCertParams(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -127,7 +135,7 @@ var certificateParamsTypeCertTypePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["SelfSigned","CustomCertHostPath","CustomServerCert"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["SelfSigned","CustomCertHostPath","CustomServerCert","HashicorpVault"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -145,6 +153,9 @@ const (
 
 	// CertificateParamsCertTypeCustomServerCert captures enum value "CustomServerCert"
 	CertificateParamsCertTypeCustomServerCert string = "CustomServerCert"
+
+	// CertificateParamsCertTypeHashicorpVault captures enum value "HashicorpVault"
+	CertificateParamsCertTypeHashicorpVault string = "HashicorpVault"
 )
 
 // prop value enum
@@ -209,6 +220,26 @@ func (m *CertificateParams) validateCustomServerCertData(formats strfmt.Registry
 	return nil
 }
 
+func (m *CertificateParams) validateHcVaultCertParams(formats strfmt.Registry) error {
+
+	if err := validate.Required("hcVaultCertParams", "body", m.HcVaultCertParams); err != nil {
+		return err
+	}
+
+	if m.HcVaultCertParams != nil {
+		if err := m.HcVaultCertParams.Validate(formats); err != nil {
+			if ve, ok := err.(*errors.Validation); ok {
+				return ve.ValidateName("hcVaultCertParams")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("hcVaultCertParams")
+			}
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (m *CertificateParams) validateKeyContent(formats strfmt.Registry) error {
 
 	if err := validate.Required("keyContent", "body", m.KeyContent); err != nil {
@@ -236,6 +267,10 @@ func (m *CertificateParams) ContextValidate(ctx context.Context, formats strfmt.
 	}
 
 	if err := m.contextValidateCustomServerCertData(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateHcVaultCertParams(ctx, formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -269,6 +304,22 @@ func (m *CertificateParams) contextValidateCustomServerCertData(ctx context.Cont
 				return ve.ValidateName("customServerCertData")
 			} else if ce, ok := err.(*errors.CompositeError); ok {
 				return ce.ValidateName("customServerCertData")
+			}
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (m *CertificateParams) contextValidateHcVaultCertParams(ctx context.Context, formats strfmt.Registry) error {
+
+	if m.HcVaultCertParams != nil {
+		if err := m.HcVaultCertParams.ContextValidate(ctx, formats); err != nil {
+			if ve, ok := err.(*errors.Validation); ok {
+				return ve.ValidateName("hcVaultCertParams")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("hcVaultCertParams")
 			}
 			return err
 		}

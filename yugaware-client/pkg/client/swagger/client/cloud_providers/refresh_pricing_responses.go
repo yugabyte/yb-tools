@@ -7,9 +7,12 @@ package cloud_providers
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/strfmt"
+
+	"github.com/yugabyte/yb-tools/yugaware-client/pkg/client/swagger/models"
 )
 
 // RefreshPricingReader is a Reader for the RefreshPricing structure.
@@ -19,41 +22,46 @@ type RefreshPricingReader struct {
 
 // ReadResponse reads a server response into the received o.
 func (o *RefreshPricingReader) ReadResponse(response runtime.ClientResponse, consumer runtime.Consumer) (interface{}, error) {
-	result := NewRefreshPricingDefault(response.Code())
-	if err := result.readResponse(response, consumer, o.formats); err != nil {
-		return nil, err
-	}
-	if response.Code()/100 == 2 {
+	switch response.Code() {
+	case 200:
+		result := NewRefreshPricingOK()
+		if err := result.readResponse(response, consumer, o.formats); err != nil {
+			return nil, err
+		}
 		return result, nil
-	}
-	return nil, result
-}
-
-// NewRefreshPricingDefault creates a RefreshPricingDefault with default headers values
-func NewRefreshPricingDefault(code int) *RefreshPricingDefault {
-	return &RefreshPricingDefault{
-		_statusCode: code,
+	default:
+		return nil, runtime.NewAPIError("response status code does not match any response statuses defined for this endpoint in the swagger spec", response, response.Code())
 	}
 }
 
-/* RefreshPricingDefault describes a response with status code -1, with default header values.
+// NewRefreshPricingOK creates a RefreshPricingOK with default headers values
+func NewRefreshPricingOK() *RefreshPricingOK {
+	return &RefreshPricingOK{}
+}
+
+/* RefreshPricingOK describes a response with status code 200, with default header values.
 
 successful operation
 */
-type RefreshPricingDefault struct {
-	_statusCode int
+type RefreshPricingOK struct {
+	Payload *models.YBPSuccess
 }
 
-// Code gets the status code for the refresh pricing default response
-func (o *RefreshPricingDefault) Code() int {
-	return o._statusCode
+func (o *RefreshPricingOK) Error() string {
+	return fmt.Sprintf("[PUT /api/v1/customers/{cUUID}/providers/{pUUID}/refresh_pricing][%d] refreshPricingOK  %+v", 200, o.Payload)
+}
+func (o *RefreshPricingOK) GetPayload() *models.YBPSuccess {
+	return o.Payload
 }
 
-func (o *RefreshPricingDefault) Error() string {
-	return fmt.Sprintf("[PUT /api/v1/customers/{cUUID}/providers/{pUUID}/refresh_pricing][%d] refreshPricing default ", o._statusCode)
-}
+func (o *RefreshPricingOK) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
 
-func (o *RefreshPricingDefault) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
+	o.Payload = new(models.YBPSuccess)
+
+	// response payload
+	if err := consumer.Consume(response.Body(), o.Payload); err != nil && err != io.EOF {
+		return err
+	}
 
 	return nil
 }

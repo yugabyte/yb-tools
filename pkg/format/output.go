@@ -45,6 +45,8 @@ func init() {
 			if err != nil {
 				return node, err
 			}
+		} else if node.IsNumeric() {
+			size = int(node.MustNumeric())
 		} else {
 			return node, fmt.Errorf("size_pretty: unknown data type %d", node.Type())
 		}
@@ -109,6 +111,15 @@ func init() {
 
 	})
 
+	ajson.AddFunction("localtime", func(node *ajson.Node) (result *ajson.Node, err error) {
+		if node.IsNumeric() {
+			unixTime := int64(node.MustNumeric())
+			ts := time.Unix(unixTime, 0)
+			return ajson.StringNode("", ts.Format("2006-01-02 15:04:05 MST")), nil
+		}
+		return node, fmt.Errorf("localtime: unknown data type %d", node.Type())
+
+	})
 }
 
 type Output struct {
