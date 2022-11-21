@@ -43,10 +43,10 @@
 
 
 ##########################################################################
-our $VERSION = "0.18";
+our $VERSION = "0.19";
 use strict;
 use warnings;
-use JSON qw( );
+#use JSON qw( );
 use MIME::Base64;
 
 BEGIN{ # Namespace forward declarations
@@ -63,7 +63,7 @@ print << "__SQL__";
 .print $0 Version $VERSION generating SQL on $opt{STARTTIME} 
 CREATE TABLE cluster(type, uuid TEXT PRIMARY KEY, ip, port, region, zone ,role, uptime);
 CREATE TABLE tablet (node_uuid,tablet_uuid TEXT , table_name,table_uuid, namespace,state,status,
-                  start_key, end_key, sst_size, wal_size, cterm, cidx, leader, lease_status);
+                  start_key, end_key, sst_size INTEGER, wal_size INTEGER, cterm, cidx, leader, lease_status);
 CREATE UNIQUE INDEX tablet_idx ON tablet (node_uuid,tablet_uuid);
 
 CREATE VIEW table_detail AS
@@ -100,10 +100,10 @@ CREATE VIEW delete_leaderless_be_careful AS
 	 
 CREATE VIEW large_wal AS 
   SELECT table_name, count(*) as tablets,  
-        sum(CASE WHEN 0+rtrim(wal_size,' MB') >=128 then 1 else 0 END) as "GE128MB",
-        sum(CASE WHEN 0+rtrim(wal_size,' MB') >=96  AND  0+rtrim(wal_size,' MB') < 128 then 1 else 0 END) as "GE96MB",
-        sum(CASE WHEN 0+rtrim(wal_size,' MB') >=65  AND  0+rtrim(wal_size,' MB') < 96 then 1 else 0 END) as "GE65MB",
-        sum(CASE WHEN 0+rtrim(wal_size,' MB') < 65                                  then 1 else 0 END) as "LT65MB"
+        sum(CASE WHEN wal_size >=128000000 then 1 else 0 END) as "GE128MB",
+        sum(CASE WHEN wal_size >=96000000  AND  0+rtrim(wal_size,' MB') < 128000000 then 1 else 0 END) as "GE96MB",
+        sum(CASE WHEN wal_size >=65000000  AND  0+rtrim(wal_size,' MB') < 96000000 then 1 else 0 END) as "GE65MB",
+        sum(CASE WHEN wal_size < 65000000                                  then 1 else 0 END) as "LT65MB"
   FROM tablet 
   WHERE wal_size like '%MB' 
   GROUP by table_name 
@@ -151,14 +151,20 @@ my %entity = (
 					(?<status>(\w+))\s+
 					(?<start_key>(0x\w+)?)\s* # This could be EMPTY. If so, start_key value will contain END!
 					(?<end_key>(0x\w+)?)\s*   # This could also be EMPTY, but start exists in that case
-					(?<sst_size>(\-?\d+\s\w+))\s+
-					(?<wal_size>(\-?\d+\s\w+))\s+
+					(?<sst_size>(\-?\d+))  \s  (?<sst_unit>(\w+)) \s+  # "0 bytes"/"485 kB"/"12 MB"
+					(?<wal_size>(\-?\d+))  \s  (?<wal_unit>(\w+)) \s+
 					(?<cterm>([\[\]\d]+))\s*
 					(?<cidx>(-?[\[\]\d]+))\s+       #  Can have a leading minus 
 					(?<leader>([\[\]\w]+))\s+
 					(?<lease_status>([\[\]\w]+)?)|x,
 									 
 	},
+);
+my %kilo_multiplier=(
+    BYTES	=> 1,
+	KB		=> 1024,
+	MB		=> 1024*1024,
+	GB		=> 1024*1024*1024,
 );
 my $entity_regex = join "|", map {$entity{$_}{REGEX}} keys %entity;
 $current_entity = "CLUSTER"; # This line should have been in the report, but first item is the cluster 
@@ -307,8 +313,8 @@ sub Parse_Tablet_line{
 					(?<status>(\w+))\s+
 					(?<start_key>(0x\w+)?)\s* 
 					(?<end_key>(0x\w+)?)\s*  
-					(?<sst_size>(\d+\s\w+))\s+
-					(?<wal_size>(\d+\s\w+))\s+
+					(?<sst_size>(\-?\d+))  \s  (?<sst_unit>(\w+)) \s+  # "0 bytes"|"485 kB"|"12 MB"
+					(?<wal_size>(\-?\d+))  \s  (?<wal_unit>(\w+)) \s+
 					(?<cterm>([\[\]\d]+))\s*    # This could be "[]" or a number.. 
 					(?<cidx>([\[\]\d]+))\s+
 					(?<leader>([\[\]\w]+))\s+
@@ -322,6 +328,8 @@ sub Parse_Tablet_line{
 		next unless $save_val{$_} eq "[]";
 		$save_val{$_}= ''; # Zap it 
 	}
+	$save_val{sst_size} *= ($kilo_multiplier{ uc $save_val{sst_unit} } || 1);
+	$save_val{wal_size} *= ($kilo_multiplier{ uc $save_val{wal_unit} } || 1);
 	print "INSERT INTO tablet (node_uuid,tablet_uuid , table_name,table_uuid,namespace,state,status,",
                   "start_key, end_key, sst_size, wal_size, cterm, cidx, leader, lease_status) VALUES('",
 				  $entity{TABLET}{NODE_UUID},"'", 
@@ -392,7 +400,8 @@ my %field      = (   # Key=Database field name
 	NAMESPACE		=>{TYPE=>'TEXT', SOURCE=>'namespace' , SEQ=>1},
 	TABLENAME		=>{TYPE=>'TEXT', SOURCE=>'tablename',  SEQ=>2},
 	TOT_TABLET_COUNT=>   {TYPE=>'INTEGER',VALUE=>0, SEQ=>4},
-	UNIQ_TABLET_COUNT=>  {TYPE=>'INTEGER',VALUE=>0,  INSERT=>sub{return "(SELECT unique_tablet_count from temp_table_detail WHERE table_name='" 
+	UNIQ_TABLET_COUNT=>  {TYPE=>'INTEGER',VALUE=>0,  INSERT=>sub{return 
+	                                    "(SELECT unique_tablet_count from temp_table_detail WHERE table_name='" 
 	                                                             . $_[0]->{TABLENAME} . "' and namespace='"
 																 . $_[0]->{NAMESPACE} . "')"}
 						, SEQ=>5} ,
@@ -404,8 +413,9 @@ my %field      = (   # Key=Database field name
     KEYS_PER_TABLET	 => {TYPE=>'INTEGER',VALUE=>0, SEQ=>11 },
 	KEY_RANGE_OVERLAP=> {TYPE=>'INTEGER',VALUE=>0, SEQ=>12 },
     UNMATCHED_KEY_SIZE=>{TYPE=>'INTEGER',VALUE=>0, SEQ=>13 },	
-	COMMENT           =>{TYPE=>'TEXT'   ,VALUE=>'', SEQ=>14 },	
-
+	COMMENT           =>{TYPE=>'TEXT'   ,VALUE=>'',SEQ=>14 },
+	SST_TOT_BYTES     =>{TYPE=>'INTEGER',VALUE=>0, SEQ=>15 },
+	WAL_TOT_BYTES     =>{TYPE=>'INTEGER',VALUE=>0, SEQ=>16 },
 );
 
 sub find_or_new{
@@ -426,6 +436,8 @@ sub collect{
     my ($self, $tablet, $node_uuid) = @_; # Hash ref of tablet field info
 	$self->{TOT_TABLET_COUNT}++;
 	$self->{NODE_TABLET_COUNT}{$node_uuid}++;
+	$self->{SST_TOT_BYTES} += $tablet->{sst_size};
+	$self->{WAL_TOT_BYTES} += $tablet->{wal_size};
 	for ($tablet->{start_key}, $tablet->{end_key}){ # Sanity check hex values 
 	    next if not defined $_; # Empty is ok 
 	    next if length($_) <=6; # Reasonable hex values
@@ -493,6 +505,24 @@ sub Table_Report{ # CLass method
 	
 	print "DROP TABLE temp_table_detail;\n"; # No longer needed 
 	print "UPDATE  tableinfo SET COMMENT=COMMENT || '[Excess tablets]'  WHERE UNIQ_TABLET_COUNT > UNIQ_TABLETS_ESTIMATE;\n";
+	# Estimate the number of tablets per table that would result in <= 1GB tablets (for different n-node clusters)
+	print << "__tablet_estimate__";
+   CREATE VIEW tablet_estimate AS 
+   WITH tablet_mb AS
+   (SELECT namespace,tablename,uniq_tablet_count,
+      (sst_tot_bytes)*uniq_tablet_count/tot_tablet_count/1024.0/1024.0 as sst_table_mb,
+      (wal_tot_bytes)*uniq_tablet_count/tot_tablet_count/1024.0/1024.0 as wal_table_mb
+        FROM tableinfo
+        WHERE sst_table_mb > 5000
+        ORDER by sst_table_mb desc
+        )
+SELECT namespace,tablename, sst_table_mb,
+      CASE WHEN sst_table_mb/08/1000 > 1 THEN sst_table_mb/08/1000 ELSE 1 END  as tabs_8node ,
+          CASE WHEN sst_table_mb/12/1000 > 1 THEN sst_table_mb/12/1000 ELSE 1 END  as tabs_12node ,
+          CASE WHEN sst_table_mb/16/1000 > 1 THEN sst_table_mb/16/1000 ELSE 1 END  as tabs_16node ,
+          CASE WHEN sst_table_mb/24/1000 > 1 THEN sst_table_mb/24/1000 ELSE 1 END  as tabs_24node
+from tablet_mb;
+__tablet_estimate__
 };
 1;	
 } # End of TableInfo
@@ -512,7 +542,7 @@ my %dispatch_by_type = (
 
 my $packed_zero = pack 'H4',0;      # Default value for start_key
 my $packed_ffff = pack 'H4','ffff'; # ... and ed_key
-my $json = JSON->new;
+my $json ; ## temp block = JSON->new;
    
 sub Process_line{
    my ($j) = @_;
