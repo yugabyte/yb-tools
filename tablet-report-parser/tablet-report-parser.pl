@@ -43,10 +43,10 @@
 
 
 ##########################################################################
-our $VERSION = "0.19";
+our $VERSION = "0.20";
 use strict;
 use warnings;
-#use JSON qw( );
+#use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
 use MIME::Base64;
 
 BEGIN{ # Namespace forward declarations
@@ -59,8 +59,9 @@ my %opt=(
 	HOSTNAME    => $ENV{HOST} || $ENV{HOSTNAME} || $ENV{NAME} || qx|hostname|,
 	JSON        => 0, # Auto set to 1 when  "JSON" discovered. default is Reading "table" style.
 );
+# Sqlite 3.7 does not support ".print", so we use wierd SELECT statements to print messages.
 print << "__SQL__";
-.print $0 Version $VERSION generating SQL on $opt{STARTTIME} 
+SELECT '$0 Version $VERSION generating SQL on $opt{STARTTIME}';
 CREATE TABLE cluster(type, uuid TEXT PRIMARY KEY, ip, port, region, zone ,role, uptime);
 CREATE TABLE tablet (node_uuid,tablet_uuid TEXT , table_name,table_uuid, namespace,state,status,
                   start_key, end_key, sst_size INTEGER, wal_size INTEGER, cterm, cidx, leader, lease_status);
@@ -185,17 +186,17 @@ while ($line=<>){
 	if (length($line) < 5){ # Blank line ?
 	   if ($. < 2  and  $line=~/^\s*{\s*$/ ){
 		   $opt{JSON}=1;
-		   print ".print JSON input detected.\n";
+		   print "SELECT '.print JSON input detected.';\n";
 		   $json_line .= $line;
 	   }
 	   next;
 	}
 
 	if ($line =~m/$entity_regex/){
-		print ".print  ... $entity{$current_entity}{COUNT} $current_entity items processed.\n"; # For previous enity 
+		print "SELECT '... $entity{$current_entity}{COUNT} $current_entity items processed.';\n"; # For previous enity 
 	    ($current_entity) = grep {$line =~m/$entity{$_}{REGEX}/ } keys %entity;
 		chomp $line;
-		print ".print Processing $current_entity from $line (Line#$.)\n";
+		print "SELECT 'Processing $current_entity from $line (Line#$.)';\n";
 		$entity{$current_entity}{COUNT} = 0;
 		Set_Transaction(1,"Starting $current_entity");
 		next unless my $extract_sub = $entity{$current_entity}{HDR_EXTRACT};
@@ -220,8 +221,8 @@ if ($opt{JSON}){
 	# no table report
 }else{
 	print << "__MAIN_COMPLETE__";
-.print  ... $entity{$current_entity}{COUNT} $current_entity items processed.
-.print Main SQL loading Completed. Generating table stats...
+SELECT '  ... $entity{$current_entity}{COUNT} $current_entity items processed.';
+SELECT 'Main SQL loading Completed. Generating table stats...';
 __MAIN_COMPLETE__
 	Set_Transaction(1);
 	TableInfo::Table_Report();
@@ -230,21 +231,43 @@ __MAIN_COMPLETE__
 my $tmpfile = "/tmp/tablet-report-analysis-settings$$";
 
 print << "__ENDING_STUFF__";
-.print --- Completed. Available REPORT-NAMEs ---
+SELECT '--- Completed. Available REPORT-NAMEs ---';
 .tables
-.print --- Summary Report ---
-SELECT '     ',* FROM summary_report;
-
--- .print DEBUG output file is $tmpfile. Much work, just to get sqlite file name.
 .output $tmpfile
-.show
-.output
-.print --- To get a report, run: ---
--- Note: strange escaping below for the benefit of perl, sqlite, and the shell. Wierdness just to get sqlite file name.
-.shell perl -nE 'm/filename: (\\S+)/ and say qq^\\\tsqlite3 -header -column \\\$1 \\"SELECT \\* from REPORT-NAME\\"^'  $tmpfile
-.shell rm $tmpfile
+.databases
+.output stdout
+SELECT '','--- Summary Report ---'
+UNION 
+SELECT '     ',* FROM summary_report;
+.quit
 __ENDING_STUFF__
+close STDOUT; # Done talking to sqlite3
+open  STDOUT, ">", "/dev/null"; # To avoid Warning about "Filehandle STDOUT reopened as xxx"
+my $retry = 30; # Could take 30 sec to generate summary report...
+while ($retry-- > 0 and ! -e $tmpfile){
+  sleep 1; # Wait for sqlite to close up 
+}
+#-- OLD CODE SQL commented below
+#-- .show
+#-- .output stdout
+#-- .print --- To get a report, run: ---
+#-- -- Note: strange escaping below for the benefit of perl, sqlite, and the shell. Wierdness just to get sqlite file name.
+#-- .shell perl -nE 'm/filename: (\\S+)/ and say qq^\\\tsqlite3 -header -column \\\$1 \\"SELECT \\* from REPORT-NAME\\"^'  $tmpfile
+#-- .shell rm $tmpfile
 
+# Get filename output by ".databases" above..
+open my $tmp, "<", $tmpfile or exit 0; # Ignore if missing 
+my $sql_db_file;
+while (<$tmp>){
+	m/main:?\s+(\S+)/ or next;
+	$sql_db_file = $1;
+	last;
+}
+close $tmp;
+$sql_db_file or exit 1; # Did not find the name
+warn " --- To get a report, run: ---\n",
+     qq|  sqlite3 -header -column $sql_db_file "SELECT * from <REPORT-NAME>"\n|;
+unlink $tmpfile;
 exit 0;
 
 #-------------------------------------------------------------------------------------
@@ -260,7 +283,7 @@ sub Parse_Cluster_line{
 	print "INSERT INTO cluster(type,uuid,zone) VALUES('CLUSTER',",
 	       "'$uuid','$zone');\n";
     if ($. > 3){
-	   print ".print ERROR: This does not appear to be a TABLET REPORT (too many 'CLUSTER' lines)\n";	
+	   print "SELECT 'ERROR: This does not appear to be a TABLET REPORT (too many CLUSTER lines)';\n";	
 	   die "ERROR: This does not appear to be a TABLET REPORT (too many 'CLUSTER' lines)";	
 	}
 }
@@ -275,7 +298,7 @@ sub Parse_Master_line{
 sub Parse_Tserver_line{
 	if (substr($line,0,1) eq "{"){ # Some sort of error message - ignore
 	    chomp $line;
-		print ".print ERROR in input line# $. : ",substr($line,0,40)," ... ignored.\n";
+		print "SELECT 'ERROR in input line# $. : ",substr($line,0,40)," ... ignored.';\n";
 		return;
 	}
 	my ($uuid,$host,$port,$region,$zone,$alive,$reads,$writes,$heartbeat,$uptime,
@@ -299,7 +322,7 @@ sub Parse_Tablet_line{
 		# Fall through and process it
 	}else{
 	    #Regex failed to match 
-		print ".print ERROR: Line $. failed to match tablet regex\n"; # so sqlite can show the error also 
+		print "SELECT 'ERROR: Line $. failed to match tablet regex';\n"; # so sqlite can show the error also 
         die "ERROR: Line $. failed to match tablet regex";		
 	}
 	my %save_val=%+; # Save collected regex named capture hash (before it gets clobbered by next regex)
@@ -507,21 +530,19 @@ sub Table_Report{ # CLass method
 	print "UPDATE  tableinfo SET COMMENT=COMMENT || '[Excess tablets]'  WHERE UNIQ_TABLET_COUNT > UNIQ_TABLETS_ESTIMATE;\n";
 	# Estimate the number of tablets per table that would result in <= 1GB tablets (for different n-node clusters)
 	print << "__tablet_estimate__";
-   CREATE VIEW tablet_estimate AS 
-   WITH tablet_mb AS
-   (SELECT namespace,tablename,uniq_tablet_count,
-      (sst_tot_bytes)*uniq_tablet_count/tot_tablet_count/1024.0/1024.0 as sst_table_mb,
-      (wal_tot_bytes)*uniq_tablet_count/tot_tablet_count/1024.0/1024.0 as wal_table_mb
+   CREATE VIEW large_tables AS 
+   SELECT namespace,tablename,uniq_tablet_count as uniq_tablets,
+      (sst_tot_bytes)*uniq_tablet_count/tot_tablet_count/1024/1024 as sst_table_mb,
+	  (sst_tot_bytes /tot_tablet_count/1024/1024) as tablet_size_mb,
+	  round((sst_tot_bytes /1024.0/1024.0/8.0  + 5000) / 10000,1) as rec_8node_tablets,
+	  round((sst_tot_bytes /1024.0/1024.0/12.0 + 5000) / 10000,1) as rec_12node_tablets,
+	  round((sst_tot_bytes /1024.0/1024.0/24.0 + 5000) / 10000,1) as rec_24node_tablets,
+	   tot_tablet_count / uniq_tablet_count as repl_factor,
+      (wal_tot_bytes)*uniq_tablet_count/tot_tablet_count/1024/1024 as wal_table_mb
         FROM tableinfo
         WHERE sst_table_mb > 5000
-        ORDER by sst_table_mb desc
-        )
-SELECT namespace,tablename, sst_table_mb,
-      CASE WHEN sst_table_mb/08/1000 > 1 THEN sst_table_mb/08/1000 ELSE 1 END  as tabs_8node ,
-          CASE WHEN sst_table_mb/12/1000 > 1 THEN sst_table_mb/12/1000 ELSE 1 END  as tabs_12node ,
-          CASE WHEN sst_table_mb/16/1000 > 1 THEN sst_table_mb/16/1000 ELSE 1 END  as tabs_16node ,
-          CASE WHEN sst_table_mb/24/1000 > 1 THEN sst_table_mb/24/1000 ELSE 1 END  as tabs_24node
-from tablet_mb;
+        ORDER by sst_table_mb desc;
+
 __tablet_estimate__
 };
 1;	
@@ -543,11 +564,30 @@ my %dispatch_by_type = (
 my $packed_zero = pack 'H4',0;      # Default value for start_key
 my $packed_ffff = pack 'H4','ffff'; # ... and ed_key
 my $json ; ## temp block = JSON->new;
-   
+
 sub Process_line{
    my ($j) = @_;
 
    #print "GOT ",length($j)," bytes at rec#$.\n";
+   if ($json){
+	   # All is well
+   }else{
+	    my $json_module_exists =
+     	  eval{
+		    require JSON;
+		    JSON->import();
+		    1;
+		  };
+
+	    if($json_module_exists){
+	        $json = JSON->new();
+			# all well from this point on
+	    }else{
+	        die "ERROR: JSON (perl) module is not installed. Unable to process."
+	    }
+   }
+
+
    	my $data = $json->decode($j);
     my $msg = $data->{msg} || "cluster"; # Initial JSON for cluster does not have "msg"
 	$msg=~s/[^\w\s].*//; # Zap everything after text (Tablet report contains other stuff....
