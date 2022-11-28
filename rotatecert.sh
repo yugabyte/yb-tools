@@ -1,12 +1,14 @@
 #!/bin/bash
 
-VERSION=0.1.0
+VERSION=0.1.1
 
 # TODO: Do a bunch of `set` things for error handling
 
 AWK=/usr/bin/awk
+BASENAME=/usr/bin/basename
 CAT=/bin/cat
 DATE=/bin/date
+ECHO=/bin/echo
 GREP=/bin/grep
 MV=/bin/mv
 OPENSSL=/usr/bin/openssl
@@ -19,12 +21,12 @@ TAR=/bin/tar
 # This must be a space-separated list of IP addresses or hostnames. This node list will be used for making SSH connections,
 # setting certificate CNs and SANs, and various other important bits of the script, so make sure you have it right!
 # TODO: Dynamically get list of node IPs / hostnames
-NODELIST='10.230.0.3 10.231.0.46 10.232.0.3'
+NODELIST="${NODELIST:=10.230.0.3 10.231.0.46 10.232.0.3}"
 
 # TODO: Dynamically retrieve the path to the SSH key and other SSH parameters (e.g. port number)
-SSH_KEY=/opt/yugabyte/yugaware/data/keys/3664ae19-059c-487d-aaab-93ea0e90ca58/yb-dev-ianderson-gcp_3664ae19-059c-487d-aaab-93ea0e90ca58-key.pem
-SSH_PORT=22
-SSH_USER=yugabyte
+SSH_KEY="${SSH_KEY:=/opt/yugabyte/yugaware/data/keys/3664ae19-059c-487d-aaab-93ea0e90ca58/yb-dev-ianderson-gcp_3664ae19-059c-487d-aaab-93ea0e90ca58-key.pem}"
+SSH_PORT="${SSH_PORT:=22}"
+SSH_USER="${SSH_USER:=yugabyte}"
 
 # TODO: Dynamically get platform root cert path
 ROOT_CERT_DIR=/opt/yugabyte/yugaware/data/certs/b024bd98-bbba-42ea-97a7-fa4d7bb3116d/973a6b3b-013e-40d3-8270-ef3ab4c0a534
@@ -47,6 +49,7 @@ RESTART_WAIT_SECONDS=5
 
 CLEANUP=true
 DEBUG=true
+# TODO: Add support for an expiry threshold flag, so certs are regenerated if the will expire with the next n days
 FORCE=false
 
 TS=$($DATE +%s)
@@ -60,6 +63,30 @@ NODE_CRT_CONF_FILE=$WORKDIR/openssl-node-crt.cnf
 PLATFORM_CERT_BACKUP_FILE=$WORKDIR/tls-cert-backup-$TS.tgz
 REMOTE_CERT_BACKUP_FILE=tls-cert-backup-$TS.tgz
 
+debug () {
+  if [[ "$DEBUG" = true ]]; then
+    $ECHO "DEBUG: $1" 1>&2
+  fi
+}
+
+info () {
+  $ECHO "INFO: $1"
+}
+
+warn () {
+  $ECHO "WARN: $1"
+}
+
+error () {
+  $ECHO "ERROR: $1"
+}
+
+fatal () {
+  code=$1
+  $ECHO "FATAL: $2"
+  exit $code
+}
+
 check_cert_expiry () {
   cert_file=$1
   debug "Checking expiry status of certificate $cert_file"
@@ -69,8 +96,7 @@ check_cert_expiry () {
   expiry_date=$($OPENSSL x509 -in $cert_file -noout -enddate | $AWK -F '=' '{ print $2 }' )
   # Bail out if the openssl command failed or we didn't get back a valid expiry date
   if [[ $? -ne 0 || -z $expiry_date ]]; then
-    echo "FATAL: Failed to read expiry date of certificate '$cert_file'."
-    exit -2
+    fatal 2 "Failed to read expiry date of certificate '$cert_file'."
   fi
   debug "Found certificate expiry date '$expiry_date'"
   expiry_epoch=$($DATE -d "$expiry_date" +%s)
@@ -85,15 +111,6 @@ check_cert_expiry () {
     debug "Certificate has not expired."
     return 0
   fi
-}
-
-debug () {
-  if [[ "$DEBUG" = true ]]; then echo $1; fi
-}
-
-info () {
-  # This looks daft but we might decide we want timestamps or something later
-  echo $1
 }
 
 do_ssh () {
@@ -146,23 +163,23 @@ install_cert_files () {
   debug "Installing certificate files on node $node"
   # TODO: DRY this out?
   debug "Installing root certificate for node-to-node TLS"
-  do_ssh $node "$MV $REMOTE_NODE_TLS_DIR/ca.crt $REMOTE_NODE_TLS_DIR/ca_crt_$TS.old" && scp_put $node $ROOT_CERT "$REMOTE_NODE_TLS_DIR/ca.crt"
-  if [[ $? -ne 0 ]]; then return $?; fi
+  do_ssh $node "$MV $REMOTE_NODE_TLS_DIR/ca.crt $REMOTE_NODE_TLS_DIR/ca_crt_$TS.old" && scp_put $node $ROOT_CERT "$REMOTE_NODE_TLS_DIR/ca.crt" || return $?
+  #if [[ $? -ne 0 ]]; then return $?; fi
   debug "Installing root certificate for client-to-node TLS"
-  do_ssh $node "$MV $REMOTE_CLIENT_TLS_DIR/root.crt $REMOTE_CLIENT_TLS_DIR/root_crt_$TS.old" && scp_put $node $ROOT_CERT "$REMOTE_CLIENT_TLS_DIR/root.crt"
-  if [[ $? -ne 0 ]]; then return $?; fi
+  do_ssh $node "$MV $REMOTE_CLIENT_TLS_DIR/root.crt $REMOTE_CLIENT_TLS_DIR/root_crt_$TS.old" && scp_put $node $ROOT_CERT "$REMOTE_CLIENT_TLS_DIR/root.crt" || return $?
+  #if [[ $? -ne 0 ]]; then return $?; fi
 
   debug "Installing client certificate"
-  do_ssh $node "$MV $REMOTE_CLIENT_TLS_DIR/yugabytedb.crt $REMOTE_CLIENT_TLS_DIR/yugabytedb_crt_$TS.old" && scp_put $node $CLIENT_CERT "$REMOTE_CLIENT_TLS_DIR/"
-  if [[ $? -ne 0 ]]; then return $?; fi
+  do_ssh $node "$MV $REMOTE_CLIENT_TLS_DIR/yugabytedb.crt $REMOTE_CLIENT_TLS_DIR/yugabytedb_crt_$TS.old" && scp_put $node $CLIENT_CERT "$REMOTE_CLIENT_TLS_DIR/" || return $?
+  #if [[ $? -ne 0 ]]; then return $?; fi
   
   debug "Installing node certificate"
-  do_ssh $node "$MV $REMOTE_NODE_TLS_DIR/node.$NODE.crt $REMOTE_NODE_TLS_DIR/node.${NODE}_crt_$TS.old" && scp_put $node "$WORKDIR/node.$NODE.crt" "$REMOTE_NODE_TLS_DIR/"
-  if [[ $? -ne 0 ]]; then return $?; fi
+  do_ssh $node "$MV $REMOTE_NODE_TLS_DIR/node.$NODE.crt $REMOTE_NODE_TLS_DIR/node.${NODE}_crt_$TS.old" && scp_put $node "$WORKDIR/node.$NODE.crt" "$REMOTE_NODE_TLS_DIR/" || return $?
+  #if [[ $? -ne 0 ]]; then return $?; fi
 
   debug "Setting ownership and permissions on certificate files"
-  do_ssh $node "chmod 0400 $REMOTE_NODE_TLS_DIR/*.crt $REMOTE_NODE_TLS_DIR/*.key $REMOTE_CLIENT_TLS_DIR/*.crt $REMOTE_CLIENT_TLS_DIR/*.key"
-  if [[ $? -ne 0 ]]; then return $?; fi
+  do_ssh $node "chmod 0400 $REMOTE_NODE_TLS_DIR/*.crt $REMOTE_NODE_TLS_DIR/*.key $REMOTE_CLIENT_TLS_DIR/*.crt $REMOTE_CLIENT_TLS_DIR/*.key" || return $?
+  #if [[ $? -ne 0 ]]; then return $?; fi
 }
 
 scp_get () {
@@ -189,6 +206,9 @@ scp_put () {
   # TODO: Error handling
 }
 
+info "Starting $($BASENAME -- $0) version $VERSION"
+debug "Nodelist is $NODELIST"
+
 if [[ $EUID -eq 0 ]]; then
   debug "Running with root privileges. Disabling calls to sudo."
   SUDO=""
@@ -196,22 +216,19 @@ fi
 
 mkdir $WORKDIR
 if [[ $? -ne 0 ]]; then
-  echo "FATAL: Failed to create working directory $WORKDIR. Check ownership and permissions."
-  exit -6
+  fatal 6 "Failed to create working directory $WORKDIR. Check ownership and permissions."
 fi
 
 # Bail out if the "root cert" has multiple certs inside, since that means it's a cert bundle and we're likely dealing with real CA certs
 root_cert_count=$($GREP -c "BEGIN" $ROOT_CERT)
 if [[ $root_cert_count -gt 1 ]]; then
-  echo "FATAL: Found $cert_count certificates in the certificate bundle. This script only supports self-signed root certificates."
-  exit -1
+  fatal 1 "Found $root_cert_count certificates in the certificate bundle. This script only supports self-signed root certificates."
 fi
 
 debug "Backing up certificate files on platform node"
 $SUDO $TAR -czf $PLATFORM_CERT_BACKUP_FILE $ROOT_CERT_DIR/
 if [[ $? -ne 0 ]]; then
-  echo "FATAL: Failed to back up certificate files on platform node. Cowardly refusing to proceed without a backup."
-  exit -4
+  fatal 4 "Failed to back up certificate files on platform node. Cowardly refusing to proceed without a backup."
 fi
 
 # Back up node certs and keys
@@ -222,8 +239,7 @@ do
   # Back up .yugabytedb directory and yugabyte-tls-config directory
   do_ssh $NODE "$TAR -czf $REMOTE_CERT_BACKUP_FILE $REMOTE_CLIENT_TLS_DIR/* $REMOTE_NODE_TLS_DIR/*"
   if [[ $? -ne 0 ]]; then
-    echo "FATAL: Failed to back up certificate files on database node '$NODE'. Cowardly refusing to proceed without a backup."
-    exit -4
+    fatal 4 "Failed to back up certificate files on database node '$NODE'. Cowardly refusing to proceed without a backup."
   fi
 done
 
@@ -232,18 +248,15 @@ done
 # notAfter=Oct 24 19:16:31 2026 GMT
 root_cert_subject=$($OPENSSL x509 -in $ROOT_CERT -noout -subject | $AWK -F '=' '{ print $2 }' )
 if [[ $? -ne 0 || -z $root_cert_subject ]]; then
-  echo "FATAL: Failed to read Subject of certificate '$ROOT_CERT'."
-  exit -2
+  fatal 2 "Failed to read Subject of certificate '$ROOT_CERT'."
 fi
 root_cert_issuer=$($OPENSSL x509 -in $ROOT_CERT -noout -issuer | $AWK -F '=' '{ print $2 }' )
 if [[ $? -ne 0 || -z $root_cert_issuer ]]; then
-  echo "FATAL: Failed to read Issuer of certificate '$ROOT_CERT'."
-  exit -2
+  fatal 2 "Failed to read Issuer of certificate '$ROOT_CERT'."
 fi
 
-if [[ $root_cert_subject != $root_cert_issuer ]]; then
-  echo "FATAL: Root certificate Subject '$root_cert_subject' does not match Issuer '$root_cert_issuer'. This script only supports self-signed root certificates."
-  exit -3
+if [[ "$root_cert_subject" != "$root_cert_issuer" ]]; then
+  fatal 3 "Root certificate Subject '$root_cert_subject' does not match Issuer '$root_cert_issuer'. This script only supports self-signed root certificates."
 else
   debug "Self signed certificate detected. Proceeding."
 fi
@@ -264,8 +277,7 @@ fi
 # TODO: Handle OpenSSL versions where the -ext flag isn't supported
 root_subject_key_id=$($OPENSSL x509 -in $ROOT_CERT -noout -ext subjectKeyIdentifier )
 if [[ $? -ne 0 ]]; then
-  echo "FATAL: Failed to read certificate '$ROOT_CERT' while checking Subject Key Identifier,"
-  exit -2
+  fatal 2 "Failed to read certificate '$ROOT_CERT' while checking Subject Key Identifier,"
 fi
 
 if [[ -z $root_subject_key_id ]]; then
@@ -293,14 +305,12 @@ CACNF
   # Generate new cert from CSR
   $SUDO $OPENSSL x509 -req -in $ROOT_CSR -signkey $ROOT_KEY -set_serial $($DATE "+%s%3N") -out $ROOT_CERT_DIR/ca.root_new.crt -days $ROOT_CERT_DAYS -sha256 -extensions v3_req -extfile $CA_CONF_FILE
   if [[ "$?" -ne 0 ]]; then
-    echo "FATAL: Failed to generate new root certificate. Unable to continue."
-    exit -5
+    fatal 5 "Failed to generate new root certificate. Unable to continue."
   fi
   debug "Moving aside old platform root certificate and installing new root certificate"
   $SUDO $MV $ROOT_CERT_DIR/ca.root.crt $ROOT_CERT_DIR/ca.root_crt_$TS.old && $SUDO $MV $ROOT_CERT_DIR/ca.root_new.crt $ROOT_CERT_DIR/ca.root.crt
   if [[ "$?" -ne 0 ]]; then
-    echo "FATAL: Failed to install new root certificate '$ROOT_CERT_DIR/ca.root.crt'. Unable to continue. Check permissions, restore from backup '$PLATFORM_CERT_BACKUP_FILE' and try again."
-    exit -5
+    fatal 5 "Failed to install new root certificate '$ROOT_CERT_DIR/ca.root.crt'. Unable to continue. Check permissions, restore from backup '$PLATFORM_CERT_BACKUP_FILE' and try again."
   fi
 else
   debug "Skipping root certificate generation."
@@ -340,15 +350,13 @@ if [[ "$regenerate_client_cert" == true ]]; then
   # Need to sign with sudo since the output file is owned by root
   $SUDO $OPENSSL x509 -req -in $CLIENT_CSR -CA $ROOT_CERT -CAkey $ROOT_KEY -set_serial $($DATE "+%s%3N") -out $ROOT_CERT_DIR/yugabytedb_new.crt  -days $CLIENT_CERT_DAYS -sha256 -extensions v3_req -extfile $CLIENT_CRT_CONF_FILE
   if [[ "$?" -ne 0 ]]; then
-    echo "FATAL: Failed to generate new client certificate. Unable to continue."
-    exit -5
+    fatal 5 "Failed to generate new client certificate. Unable to continue."
   fi
   # TODO: This message could be improved
   debug "Moving aside old platform client certificate and installing new client certificate"
   $SUDO $MV $ROOT_CERT_DIR/yugabytedb.crt $ROOT_CERT_DIR/yugabytedb_crt_$TS.old && $SUDO $MV $ROOT_CERT_DIR/yugabytedb_new.crt $ROOT_CERT_DIR/yugabytedb.crt
   if [[ "$?" -ne 0 ]]; then
-    echo "FATAL: Failed to install new client certificate '$ROOT_CERT_DIR/yugabytedb.crt'. Unable to continue. Check permissions, restore from backup '$PLATFORM_CERT_BACKUP_FILE' and try again."
-    exit -5
+    fatal 5 "Failed to install new client certificate '$ROOT_CERT_DIR/yugabytedb.crt'. Unable to continue. Check permissions, restore from backup '$PLATFORM_CERT_BACKUP_FILE' and try again."
   fi
 fi
 
@@ -362,7 +370,7 @@ for NODE in $NODELIST; do
   scp_get $NODE "$REMOTE_NODE_TLS_DIR/node.$NODE.csr" "$WORKDIR/"
   debug "Regenerating OpenSSL config to add Subject Alt Name(s)"
   gen_node_crt_conf $NODE
-  debug "Cenerating node certificate for node $NODE"
+  debug "Generating node certificate for node $NODE"
   $OPENSSL x509 -req -in $WORKDIR/node.$NODE.csr -CA $ROOT_CERT -CAkey $ROOT_KEY -set_serial $($DATE "+%s%3N") -out $WORKDIR/node.$NODE.crt -days $NODE_CERT_DAYS -sha256 -extensions v3_req -extfile $NODE_CRT_CONF_FILE
 done
 
@@ -371,8 +379,7 @@ for NODE in $NODELIST
 do
   install_cert_files $NODE
   if [[ $? -ne 0 ]]; then
-    echo "FATAL: Failed to install certificate files on $NODE. Unable to continue. Restore platform certificate files from backup '$PLATFORM_CERT_BACKUP_FILE', restore node certificate files from backup '$REMOTE_CERT_BACKUP_FILE', and try again."
-    exit -5
+    fatal 5 "Failed to install certificate files on $NODE. Unable to continue. Restore platform certificate files from backup '$PLATFORM_CERT_BACKUP_FILE', restore node certificate files from backup '$REMOTE_CERT_BACKUP_FILE', and try again."
   fi
 done
 
@@ -388,4 +395,5 @@ if [[ "$CLEANUP" = true ]]; then
   $RM -f $WORKDIR/node.*.crt
 fi
 
+# TODO: Check for xcluster and tell customer to suspend replication before rotating?
 debug "Please restart master and tserver processes on each node to load the new certificate(s)."
