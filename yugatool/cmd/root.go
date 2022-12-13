@@ -33,7 +33,8 @@ import (
 var (
 	cfgFile string
 
-	Version = "DEV"
+	Version   = "DEV"
+	BuildTime = "From Makefile"
 )
 
 // rootCmd represents the base command when called without any subcommands

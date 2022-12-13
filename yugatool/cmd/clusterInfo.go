@@ -18,8 +18,10 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/pkg/format"
@@ -85,6 +87,39 @@ type TabletInfo struct {
 func clusterInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) error {
 	c := ctx.Client
 
+	type ReportInfo struct {
+		Date         time.Time `json:"date"`
+		Hostname     string    `json:"hostname"`
+		ToolsVersion string    `json:"tools_version"`
+		BuildDate    string    `json:"build_date"`
+	}
+	hostname, err := os.Hostname()
+	if err != nil {
+		return err
+	}
+	toolsVersion := Version
+	tabletReportHeader := format.Output{
+		OutputMessage: "ReportInfo",
+		JSONObject: ReportInfo{
+			Date:         time.Now(),
+			Hostname:     hostname,
+			ToolsVersion: toolsVersion,
+			BuildDate:    BuildTime,
+		},
+		OutputType: ctx.GlobalOptions.Output,
+		TableColumns: []format.Column{
+			{Name: "DATE", JSONPath: "$.date"},
+			{Name: "HOSTNAME", JSONPath: "$.hostname"},
+			{Name: "TOOLS_VERSION", JSONPath: "$.tools_version"},
+			{Name: "TOOLS_BUILD", JSONPath: "$.build_date"},
+		},
+	}
+
+	err = tabletReportHeader.Println()
+	if err != nil {
+		return err
+	}
+
 	masterClusterConfig, err := c.Master.MasterService.GetMasterClusterConfig(&master.GetMasterClusterConfigRequestPB{})
 	if err != nil {
 		return err
@@ -95,8 +130,9 @@ func clusterInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) erro
 	}
 
 	clusterConfigReport := format.Output{
-		JSONObject: masterClusterConfig.GetClusterConfig(),
-		OutputType: ctx.GlobalOptions.Output,
+		OutputMessage: "Cluster",
+		JSONObject:    masterClusterConfig.GetClusterConfig(),
+		OutputType:    ctx.GlobalOptions.Output,
 		TableColumns: []format.Column{
 			{Name: "CLUSTER_UUID", JSONPath: "$.clusterUuid"},
 			{Name: "LIVE_REPLICAS", JSONPath: "$.replicationInfo.liveReplicas.numReplicas"},
