@@ -88,22 +88,21 @@ func clusterInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) erro
 	c := ctx.Client
 
 	type ReportInfo struct {
-		Date         time.Time `json:"date"`
-		Hostname     string    `json:"hostname"`
-		ToolsVersion string    `json:"tools_version"`
-		BuildDate    string    `json:"build_date"`
+		Date         string `json:"date"`
+		Hostname     string `json:"hostname"`
+		ToolsVersion string `json:"tools_version"`
+		BuildDate    string `json:"build_date"`
 	}
 	hostname, err := os.Hostname()
 	if err != nil {
 		return err
 	}
-	toolsVersion := Version
 	tabletReportHeader := format.Output{
 		OutputMessage: "ReportInfo",
 		JSONObject: ReportInfo{
-			Date:         time.Now(),
+			Date:         time.Now().Format("2006-01-02T15:04:05 MST"),
 			Hostname:     hostname,
-			ToolsVersion: toolsVersion,
+			ToolsVersion: Version,
 			BuildDate:    BuildTime,
 		},
 		OutputType: ctx.GlobalOptions.Output,
