@@ -43,7 +43,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.20";
+our $VERSION = "0.21";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -136,7 +136,8 @@ __SQL__
 
 my ( $line, $json_line, $current_entity, $in_transaction);
 my %entity = (
-    CLUSTER => {REGEX=>'XXX-INVALID-NONEXISTANTXXX', HANDLER=>\&Parse_Cluster_line},
+    REPORTINFO => {REGEX => '^\[ ReportInfo \]', HANDLER=>sub{print "--$.:$line\n"}, COUNT=>0},
+    CLUSTER => {REGEX=>'^\[ Cluster \]', HANDLER=>\&Parse_Cluster_line,              COUNT=>0},
 	MASTER  => {REGEX=>'^\[ Masters \]',       		 HANDLER=>\&Parse_Master_line},
 	TSERVER => {REGEX=>'^\[ Tablet Servers \]',		 HANDLER=>\&Parse_Tserver_line },
 	TABLET  => {REGEX=>'^\[ Tablet Report: ', 
@@ -282,7 +283,7 @@ sub Parse_Cluster_line{
 	}
 	print "INSERT INTO cluster(type,uuid,zone) VALUES('CLUSTER',",
 	       "'$uuid','$zone');\n";
-    if ($. > 3){
+    if ($. > 9){
 	   print "SELECT 'ERROR: This does not appear to be a TABLET REPORT (too many CLUSTER lines)';\n";	
 	   die "ERROR: This does not appear to be a TABLET REPORT (too many 'CLUSTER' lines)";	
 	}
@@ -528,7 +529,7 @@ sub Table_Report{ # CLass method
 	
 	print "DROP TABLE temp_table_detail;\n"; # No longer needed 
 	print "UPDATE  tableinfo SET COMMENT=COMMENT || '[Excess tablets]'  WHERE UNIQ_TABLET_COUNT > UNIQ_TABLETS_ESTIMATE;\n";
-	# Estimate the number of tablets per table that would result in <= 1GB tablets (for different n-node clusters)
+	# Estimate the number of tablets per table that would result in <= 10GB tablets (for different n-node clusters)
 	print << "__tablet_estimate__";
    CREATE VIEW large_tables AS 
    SELECT namespace,tablename,uniq_tablet_count as uniq_tablets,
@@ -688,3 +689,4 @@ sub Parse_Tablet_line{
 }
 
 } # ----- ENd of JSON_Analyzer ---------------------------------------
+
