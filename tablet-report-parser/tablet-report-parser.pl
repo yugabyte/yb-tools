@@ -43,7 +43,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.21";
+our $VERSION = "0.22";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -110,6 +110,28 @@ CREATE VIEW large_wal AS
   GROUP by table_name 
   ORDER by GE128MB desc, GE96MB desc;
 
+CREATE VIEW unbalanced_tables AS 
+SELECT t.namespace , t.table_name, total_tablet_count,
+      unique_tablet_count,nodes,  
+       (SELECT tablet_uuid 
+		  FROM tablet x 
+		  WHERE x.namespace =t.namespace   and  x.table_name =t.table_name 
+		     and (x.sst_size +x.wal_size ) = max_tablet_size
+    		 LIMIT 1) as large_tablet, 
+      round(min_tablet_size/1024.0/1024.0,1) as min_tablet_mb,
+      round(max_tablet_size/1024.0/1024.0,1) as max_tablet_mb
+FROM 
+  (SELECT  namespace,table_name, count(*) as total_tablet_count,
+     count(DISTINCT tablet_uuid) as unique_tablet_count,
+     count(DISTINCT node_uuid) as nodes,
+     round(max(sst_size + wal_size)/min(sst_size+wal_size+0.1),1) as heat_level,
+     max(sst_size + wal_size) as max_tablet_size,
+     min(sst_size+wal_size) as min_tablet_size
+  FROM tablet t
+  GROUP BY namespace,table_name
+  HAVING heat_level > 2.5
+  ORDER BY heat_level desc) t  ;
+
 -- table to handle hex values from 0x0000 to 0xffff (Not requird) 
 --CREATE table hexval(h text primary key,i integer, covered integer);
 --WITH RECURSIVE
@@ -129,6 +151,9 @@ CREATE VIEW summary_report AS
 	UNION
 	 SELECT (SELECT sum(tablet_count) FROM tablet_replica_summary WHERE replicas < 3) 
 			 || ' tablets have RF < 3. (See "tablet_replica_summary/detail")'
+	UNION
+	   SELECT count(*) || ' tables have unbalanced tablet sizes (see "unbalanced_tables")' 
+	   from unbalanced_tables 
 	;
 CREATE VIEW version_info AS 
     SELECT '$0' as program, '$VERSION' as version, '$opt{STARTTIME}' AS run_on, '$opt{HOSTNAME}' as host;
