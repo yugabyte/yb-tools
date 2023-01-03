@@ -43,7 +43,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.22";
+our $VERSION = "0.23";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -308,6 +308,8 @@ sub Parse_Cluster_line{
 	}
 	print "INSERT INTO cluster(type,uuid,zone) VALUES('CLUSTER',",
 	       "'$uuid','$zone');\n";
+    # "CLUSTER" is the default type of line, and only ONE such line should exist EARLY in the file.
+	# Bail out If we find we are processing CLUSTER lines after 9  records		   
     if ($. > 9){
 	   print "SELECT 'ERROR: This does not appear to be a TABLET REPORT (too many CLUSTER lines)';\n";	
 	   die "ERROR: This does not appear to be a TABLET REPORT (too many 'CLUSTER' lines)";	
@@ -630,7 +632,9 @@ sub Parse_Cluster_line{
 	$zone ||= "Version:" . $_[0]->{version};
 	print "INSERT INTO cluster(type,uuid,zone) VALUES('CLUSTER',",
 	       "'$uuid','$zone');\n";
-    if ($. > 5){
+	# "CLUSTER" is the default type of line, and only ONE such line should exist EARLY in the file.
+	# Bail out If we find we are processing CLUSTER lines after 9 JSON records
+    if ($. > 9){
 	   die "ERROR: This does not appear to be a TABLET REPORT json (too many 'CLUSTER' lines)";	
 	}
 }
@@ -713,5 +717,5 @@ sub Parse_Tablet_line{
 		  ),");\n";
 }
 
-} # ----- ENd of JSON_Analyzer ---------------------------------------
+} # ----- End of JSON_Analyzer ---------------------------------------
 
