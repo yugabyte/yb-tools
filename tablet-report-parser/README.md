@@ -1,47 +1,52 @@
 # Tablet Report Parser
 
-* Reads a tablet report that was created by yugatool
+* Reads a tablet report that was created by **yugatool**
 * outputs a SQL stream that contains parsed data + analysis info
+* Can produce various reports, such as leaderless tablets, tablet-count recommendations...
+* Can be used to analyze table/tablet status, check replication factors etc.
 
-This can be used to analyze table/tablet status, check replication factors, look for and correct leaderless tablets.
+## HOW TO  Run THIS script  - and feed the generated SQL into sqlite3:
 
-### HOW TO  Run THIS script  - and feed the generated SQL into sqlite3:
+   `$ perl tablet_report_parser.pl  tablet-report-09-20T14.out | sqlite3 tablet-report-09-20T14.sqlite`
 
-   $ perl tablet_report_parser.pl  tablet-report-09-20T14.out | sqlite3 tablet-report-09-20T14.sqlite
-
-### Sample Run:
+## Sample Run:
 
 
 ```
-$ ./tablet_report_parser.pl tablet-report-cup2-006430.out | sqlite3 tablet-analysis.sqlite
-
-./tablet_report_parser.pl Version 0.06 generating SQL on Sat Sep 24 12:59:50 2022
+b$ perl ~/Code/Yuga/tablet-report-parser.pl yb-tools-tablet-report.out | sqlite3 tablet-report.jan04.sqlite
+/home/vijay/Code/Yuga/tablet-report-parser.pl Version 0.23 generating SQL on Wed Jan  4 09:43:46 2023
 ... 1 CLUSTER items processed.
-Processing line# 4 :MASTER from [ Masters ]
-... 3 MASTER items processed.
-Processing line# 10 :TSERVER from [ Tablet Servers ]
-... 12 TSERVER items processed.
-Processing line# 25 :TABLET from [ Tablet Report: [host:"10.184.7.181" port:9100] (bba8024cfc72437baa81ef02a7df3609) ]
-... 1 TABLET items processed.
-Processing line# 29 :TABLET from [ Tablet Report: [host:"10.185.8.19" port:9100] (3114e1c74509442dbd161577e5a654be) ]
-... 2642 TABLET items processed.
-...
-SQL loading Completed.
---- Available REPORT-NAMEs ---
-cluster                 tablet                  tablets_per_table
-hexval                  tablet_replica_detail   version_info
-leaderless              tablet_replica_summary
-summary_report          tablets_per_node
---- Summary Report ---
-     |12 TSERVERs, 115 Tables, 31384 Tablets loaded.
-     |2322 leaderless tablets found.(See "leaderless")
-     |4964 tablets have RF < 3. (See "tablet_replica_summary/detail")
---- To get a report, run: ---
-        sqlite3 -header -column tablet-analysis.sqlite "SELECT * from REPORT-NAME"
+Processing MASTER from [ Masters ] (Line#4)
+... 2 MASTER items processed.
+Processing TSERVER from [ Tablet Servers ] (Line#9)
+... 3 TSERVER items processed.
+Processing TABLET from [ Tablet Report: [host:"10.xxx.yy.zz1" port:9100] (cd9311591dae40519f2c84fc4ffeab61) ] (Line#15)
+... 6704 TABLET items processed.
+Processing TABLET from [ Tablet Report: [host:"10.xxx.yy.zz2" port:9100] (17bccceae56642c0ba9bee4ac9bdd0fc) ] (Line#6722)
+... 6704 TABLET items processed.
+Processing TABLET from [ Tablet Report: [host:"10.xxx.yy.zz3" port:9100] (d919aece7bbb41dba870b0936561ae27) ] (Line#13429)
+  ... 6704 TABLET items processed.
+Main SQL loading Completed. Generating table stats...
+--- Completed. Available REPORT-NAMEs ---
+cluster                       tableinfo
+delete_leaderless_be_careful  tablet
+large_tables                  tablet_replica_detail
+large_wal                     tablet_replica_summary
+leaderless                    tablets_per_node
+summary_report                unbalanced_tables
+table_detail                  version_info
+ --- To get a report, run: ---
+  sqlite3 -header -column /path/to/tablet-report.jan04.sqlite "SELECT * from <REPORT-NAME>"
+|--- Summary Report ---
+     |
+     |0 leaderless tablets found.(See "leaderless")
+     |14 tables have unbalanced tablet sizes (see "unbalanced_tables")
+     |3 TSERVERs, 127 Tables, 20112 Tablets loaded.
+
 ```
 
-### HOW TO Run Analysis using SQLITE ---
-
+## HOW TO Run Analysis using SQLITE ---
+### Identify Leaderless tablets
  $ sqlite3 -header -column tablet-analysis.sqlite
 
 ```
@@ -51,11 +56,50 @@ SQLite version 3.31.1 2020-01-27 19:55:54
     count(*)
     ----------
     2321
+
     sqlite> select *  from leaderless limit 3;
     tablet_uuid                       table_name    node_uuid                         status                        ip
     --------------------------------  ------------  --------------------------------  ----------------------------  -----------
-    67da88ffc8a54c63821fa85d82aaf463  custaccessid  5a720d3bc58f409c9bd2a7e0317f2663  NO_MAJORITY_REPLICATED_LEASE  10.185.8.18
-    31a7580dba224fcfb2cc57ec07aa056b  packetdocume  5a720d3bc58f409c9bd2a7e0317f2663  NO_MAJORITY_REPLICATED_LEASE  10.185.8.18
-    9795475a798d411cb25c1627df13a122  packet        5a720d3bc58f409c9bd2a7e0317f2663  NO_MAJORITY_REPLICATED_LEASE  10.185.8.18
+    67da88ffc8a54c63821fa85d82aaf463  table-name-1  5a720d3bc58f409c9bd2a7e0317f2663  NO_MAJORITY_REPLICATED_LEASE  10.xxx.yy.zz1
+    31a7580dba224fcfb2cc57ec07aa056b  table-name-2  5a720d3bc58f409c9bd2a7e0317f2663  NO_MAJORITY_REPLICATED_LEASE  10.xxx.yy.zz1
+    9795475a798d411cb25c1627df13a122  table-name-3  5a720d3bc58f409c9bd2a7e0317f2663  NO_MAJORITY_REPLICATED_LEASE  10.xxx.yy.zz1
     sqlite>
+```
+### Estimate tablet counts for large tables
+This is useful when the number of tablets gets very large, and impacts system performance.
+In this case, the following analysis can help determine the "proper" number of tablets for large tables.
+The "proper" number depends on how many nodes are in the cluster - so the report provides values for a few pre-configured node counts.
+
+```
+sqlite> select * from large_tables;
+NAMESPACE  TABLENAME          uniq_tablets  sst_table_mb  tablet_size_mb  rec_8node_tablets  rec_12node_tablets  rec_24node_tablets  repl_factor  wal_table_mb
+---------  -----------------  ------------  ------------  --------------  -----------------  ------------------  ------------------  -----------  ------------
+tbl_spc1   table----name---1  96            42997         447             2.1                1.6                 1.0                 3            1152
+tbl_spc1   table----name---2  96            20186         210             1.3                1.0                 0.8                 3            9216
+tbl_spc1   table----name---3  24            16142         672             1.1                0.9                 0.7                 3            3072
+tbl_spc1   table----name---4  96            15757         164             1.1                0.9                 0.7                 3            576
+tbl_spc1   table----name---5  24            13097         545             1.0                0.8                 0.7                 3            3072
+tbl_spc1   table----name---6  16            8775          548             0.8                0.7                 0.6                 3            32
+tbl_spc1   table----name---7  24            6553          273             0.7                0.7                 0.6                 3            3072
+tbl_spc1   table----name---8  24            6390          266             0.7                0.7                 0.6                 3            48
+tbl_spc1   table----name---9  24            5979          249             0.7                0.6                 0.6                 3            48
+tbl_spc1   table----name---x  24            5214          217             0.7                0.6                 0.6                 3            48
+sqlite>
+```
+
+In this example, the recommendation for "**table----name---1**" is that on a 12-node cluster, it should be configured to have **1.6** tablets, which should be rounded-up to 2 tablets.
+The system should be configured to default to creating **1** tablet per table, so that tables NOT identified by this report default to a single tablet.
+
+In case it becomes necessary to get recommendations for a 3-node system, here is the query:
+
+```
+SELECT tablename,uniq_tablet_count as uniq_tablets,
+      (sst_tot_bytes)*uniq_tablet_count/tot_tablet_count/1024/1024 as sst_table_mb,
+          (sst_tot_bytes /tot_tablet_count/1024/1024) as tablet_size_mb,
+          round((sst_tot_bytes /1024.0/1024.0/3.0  + 5000) / 10000,1) as rec_3node_tablets,
+           tot_tablet_count / uniq_tablet_count as repl_factor,
+      (wal_tot_bytes)*uniq_tablet_count/tot_tablet_count/1024/1024 as wal_table_mb
+        FROM tableinfo
+        WHERE sst_table_mb > 5000
+        ORDER by sst_table_mb desc;
 ```
