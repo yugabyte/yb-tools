@@ -5,6 +5,9 @@
 * Can produce various reports, such as leaderless tablets, tablet-count recommendations...
 * Can be used to analyze table/tablet status, check replication factors etc.
 
+## See KB article for details :
+### https://yugabyte.zendesk.com/knowledge/articles/12124512476045/en-us
+
 ## HOW TO  Run THIS script  - and feed the generated SQL into sqlite3:
 
    `$ perl tablet_report_parser.pl  tablet-report-09-20T14.out | sqlite3 tablet-report-09-20T14.sqlite`
