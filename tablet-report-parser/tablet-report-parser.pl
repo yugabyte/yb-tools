@@ -43,7 +43,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.20";
+our $VERSION = "0.23";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -110,6 +110,28 @@ CREATE VIEW large_wal AS
   GROUP by table_name 
   ORDER by GE128MB desc, GE96MB desc;
 
+CREATE VIEW unbalanced_tables AS 
+SELECT t.namespace , t.table_name, total_tablet_count,
+      unique_tablet_count,nodes,  
+       (SELECT tablet_uuid 
+		  FROM tablet x 
+		  WHERE x.namespace =t.namespace   and  x.table_name =t.table_name 
+		     and (x.sst_size +x.wal_size ) = max_tablet_size
+    		 LIMIT 1) as large_tablet, 
+      round(min_tablet_size/1024.0/1024.0,1) as min_tablet_mb,
+      round(max_tablet_size/1024.0/1024.0,1) as max_tablet_mb
+FROM 
+  (SELECT  namespace,table_name, count(*) as total_tablet_count,
+     count(DISTINCT tablet_uuid) as unique_tablet_count,
+     count(DISTINCT node_uuid) as nodes,
+     round(max(sst_size + wal_size)/min(sst_size+wal_size+0.1),1) as heat_level,
+     max(sst_size + wal_size) as max_tablet_size,
+     min(sst_size+wal_size) as min_tablet_size
+  FROM tablet t
+  GROUP BY namespace,table_name
+  HAVING heat_level > 2.5
+  ORDER BY heat_level desc) t  ;
+
 -- table to handle hex values from 0x0000 to 0xffff (Not requird) 
 --CREATE table hexval(h text primary key,i integer, covered integer);
 --WITH RECURSIVE
@@ -129,6 +151,9 @@ CREATE VIEW summary_report AS
 	UNION
 	 SELECT (SELECT sum(tablet_count) FROM tablet_replica_summary WHERE replicas < 3) 
 			 || ' tablets have RF < 3. (See "tablet_replica_summary/detail")'
+	UNION
+	   SELECT count(*) || ' tables have unbalanced tablet sizes (see "unbalanced_tables")' 
+	   from unbalanced_tables 
 	;
 CREATE VIEW version_info AS 
     SELECT '$0' as program, '$VERSION' as version, '$opt{STARTTIME}' AS run_on, '$opt{HOSTNAME}' as host;
@@ -136,7 +161,8 @@ __SQL__
 
 my ( $line, $json_line, $current_entity, $in_transaction);
 my %entity = (
-    CLUSTER => {REGEX=>'XXX-INVALID-NONEXISTANTXXX', HANDLER=>\&Parse_Cluster_line},
+    REPORTINFO => {REGEX => '^\[ ReportInfo \]', HANDLER=>sub{print "--$.:$line\n"}, COUNT=>0},
+    CLUSTER => {REGEX=>'^\[ Cluster \]', HANDLER=>\&Parse_Cluster_line,              COUNT=>0},
 	MASTER  => {REGEX=>'^\[ Masters \]',       		 HANDLER=>\&Parse_Master_line},
 	TSERVER => {REGEX=>'^\[ Tablet Servers \]',		 HANDLER=>\&Parse_Tserver_line },
 	TABLET  => {REGEX=>'^\[ Tablet Report: ', 
@@ -282,7 +308,9 @@ sub Parse_Cluster_line{
 	}
 	print "INSERT INTO cluster(type,uuid,zone) VALUES('CLUSTER',",
 	       "'$uuid','$zone');\n";
-    if ($. > 3){
+    # "CLUSTER" is the default type of line, and only ONE such line should exist EARLY in the file.
+	# Bail out If we find we are processing CLUSTER lines after 9  records		   
+    if ($. > 9){
 	   print "SELECT 'ERROR: This does not appear to be a TABLET REPORT (too many CLUSTER lines)';\n";	
 	   die "ERROR: This does not appear to be a TABLET REPORT (too many 'CLUSTER' lines)";	
 	}
@@ -528,7 +556,7 @@ sub Table_Report{ # CLass method
 	
 	print "DROP TABLE temp_table_detail;\n"; # No longer needed 
 	print "UPDATE  tableinfo SET COMMENT=COMMENT || '[Excess tablets]'  WHERE UNIQ_TABLET_COUNT > UNIQ_TABLETS_ESTIMATE;\n";
-	# Estimate the number of tablets per table that would result in <= 1GB tablets (for different n-node clusters)
+	# Estimate the number of tablets per table that would result in <= 10GB tablets (for different n-node clusters)
 	print << "__tablet_estimate__";
    CREATE VIEW large_tables AS 
    SELECT namespace,tablename,uniq_tablet_count as uniq_tablets,
@@ -604,7 +632,9 @@ sub Parse_Cluster_line{
 	$zone ||= "Version:" . $_[0]->{version};
 	print "INSERT INTO cluster(type,uuid,zone) VALUES('CLUSTER',",
 	       "'$uuid','$zone');\n";
-    if ($. > 5){
+	# "CLUSTER" is the default type of line, and only ONE such line should exist EARLY in the file.
+	# Bail out If we find we are processing CLUSTER lines after 9 JSON records
+    if ($. > 9){
 	   die "ERROR: This does not appear to be a TABLET REPORT json (too many 'CLUSTER' lines)";	
 	}
 }
@@ -687,4 +717,5 @@ sub Parse_Tablet_line{
 		  ),");\n";
 }
 
-} # ----- ENd of JSON_Analyzer ---------------------------------------
+} # ----- End of JSON_Analyzer ---------------------------------------
+

@@ -33,7 +33,8 @@ import (
 var (
 	cfgFile string
 
-	Version = "DEV"
+	Version   = "DEV"
+	BuildTime = "From Makefile"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -84,7 +85,7 @@ func RootInit(fs vfs.Filesystem) *cobra.Command {
 		Use:     "yugatool",
 		Short:   "A tool to make troubleshooting yugabyte somewhat easier",
 		Long:    `A tool to make troubleshooting yugabyte somewhat easier`,
-		Version: Version,
+		Version: Version + " Built " + BuildTime,
 	}
 
 	cmd.Flags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.yugatool.yaml)")
