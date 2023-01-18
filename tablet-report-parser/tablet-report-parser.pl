@@ -175,17 +175,17 @@ CREATE VIEW region_zone_distribution_detail AS
          t.tablet_uuid,
          c.region,
          c.zone,
-         c.ip,
-         count(*) as count
+         c.ip, 
+        count(*) as count
   FROM cluster c, tablet t
   WHERE c.uuid=t.node_uuid
-        AND c.region not like '%-rr'
+        AND c.zone not like '%-rr'
   GROUP BY
-        tablet_uuid, region
+        tablet_uuid, zone
   HAVING 
         count > 1
   ORDER BY
-        count DESC,namespace,table_name,tablet_uuid,c.ip,zone;
+        count DESC,namespace,table_name,tablet_uuid,c.ip,region,zone;
 
 -- table to handle hex values from 0x0000 to 0xffff (Not requird) 
 --CREATE table hexval(h text primary key,i integer, covered integer);
