@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 ##########################################################################
 ## Tablet Report Parser
+## See KB: https://yugabyte.zendesk.com/knowledge/articles/12124512476045/en-us
 
 # Run instructions:
 
@@ -43,7 +44,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.23";
+our $VERSION = "0.24";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -131,6 +132,60 @@ FROM
   GROUP BY namespace,table_name
   HAVING heat_level > 2.5
   ORDER BY heat_level desc) t  ;
+ 
+ CREATE VIEW region_zone_distribution AS
+ SELECT namespace,region,zone,
+       count(*) as tablets,
+       count(DISTINCT tablet_uuid) as uniq_tablet,
+       sum(CASE WHEN leader=c.uuid THEN 1 ELSE 0 END) as leaders,
+       count(DISTINCT table_name) as tables,
+       count(DISTINCT node_uuid) as tservers,
+       (SELECT count(*) from cluster c1  WHERE type='MASTER' and c1.zone=c.zone and c1.region=c.region) as masters
+FROM tablet,cluster c 
+WHERE c.uuid=node_uuid 
+GROUP  BY namespace,region,zone
+UNION 
+SELECT namespace,region,'~'||namespace||' Total~',
+       count(*) as tablets,
+       count(DISTINCT tablet_uuid) as uniq_tablet,
+       sum(CASE WHEN leader=c.uuid THEN 1 ELSE 0 END) as leaders,
+       count(DISTINCT table_name) as tables,
+       count(DISTINCT node_uuid) as tservers,
+       (SELECT count(*) from cluster c1  WHERE type='MASTER' and c1.region=c.region) as masters
+FROM tablet,cluster c 
+WHERE c.uuid=node_uuid 
+GROUP  BY namespace,region
+UNION 
+SELECT '~Total~','~ALL~','~ALL~',
+       count(*) as tablets,
+       count(DISTINCT tablet_uuid) as uniq_tablet,
+       sum(CASE WHEN leader=c.uuid THEN 1 ELSE 0 END) as leaders,
+       count(DISTINCT table_name) as tables,
+       count(DISTINCT node_uuid) as tservers,
+       (SELECT count(*) from cluster c1  WHERE type='MASTER' ) as masters
+FROM tablet,cluster c 
+WHERE c.uuid=node_uuid 
+ORDER BY namespace,region,zone;
+
+
+CREATE VIEW region_zone_distribution_detail AS
+  SELECT 
+         t.namespace,
+         t.table_name,
+         t.tablet_uuid,
+         c.region,
+         c.zone,
+         c.ip,
+         count(*) as count
+  FROM cluster c, tablet t
+  WHERE c.uuid=t.node_uuid
+        AND c.region not like '%-rr'
+  GROUP BY
+        tablet_uuid, region
+  HAVING 
+        count > 1
+  ORDER BY
+        count DESC,namespace,table_name,tablet_uuid,c.ip,zone;
 
 -- table to handle hex values from 0x0000 to 0xffff (Not requird) 
 --CREATE table hexval(h text primary key,i integer, covered integer);
@@ -273,13 +328,6 @@ my $retry = 30; # Could take 30 sec to generate summary report...
 while ($retry-- > 0 and ! -e $tmpfile){
   sleep 1; # Wait for sqlite to close up 
 }
-#-- OLD CODE SQL commented below
-#-- .show
-#-- .output stdout
-#-- .print --- To get a report, run: ---
-#-- -- Note: strange escaping below for the benefit of perl, sqlite, and the shell. Wierdness just to get sqlite file name.
-#-- .shell perl -nE 'm/filename: (\\S+)/ and say qq^\\\tsqlite3 -header -column \\\$1 \\"SELECT \\* from REPORT-NAME\\"^'  $tmpfile
-#-- .shell rm $tmpfile
 
 # Get filename output by ".databases" above..
 open my $tmp, "<", $tmpfile or exit 0; # Ignore if missing 
@@ -412,10 +460,6 @@ sub Process_Headers{
 			my $hdr_item = $1;
 			
 		   	$entity{$current_entity}{HEADERS}[$hdr_idx] =  {NAME=>$hdr_item, START=>$-[0], END=> $+[0], LEN=> $+[0] - $-[0]};
-			#if ($entity{$current_entity}{HEADERS}[$hdr_idx]{START} != ($entity{$current_entity}{PREVIOUS_HEADERS}[$hdr_idx]{START}||=0)){
-			#	print "-- Hdr: ",$entity{$current_entity}{HEADERS}[$hdr_idx]{NAME} , " changed from ",
-			#	      $entity{$current_entity}{PREVIOUS_HEADERS}[$hdr_idx]{START}," to ",$entity{$current_entity}{HEADERS}[$hdr_idx]{START},"\n";
-		    #}
 			$hdr_idx++;
 		}
 }
@@ -718,4 +762,3 @@ sub Parse_Tablet_line{
 }
 
 } # ----- End of JSON_Analyzer ---------------------------------------
-
