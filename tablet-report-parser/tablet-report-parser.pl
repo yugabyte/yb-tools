@@ -175,7 +175,7 @@ CREATE VIEW region_zone_distribution_detail AS
          t.tablet_uuid,
          c.region,
          c.zone,
-         c.ip, 
+         c.ip,
         count(*) as count
   FROM cluster c, tablet t
   WHERE c.uuid=t.node_uuid
@@ -186,6 +186,20 @@ CREATE VIEW region_zone_distribution_detail AS
         count > 1
   ORDER BY
         count DESC,namespace,table_name,tablet_uuid,c.ip,region,zone;
+
+CREATE VIEW region_zone_distribution_summary AS
+
+ SELECT count AS 'Number of Duplicates' , count(*) AS Qty
+   FROM region_zone_distribution_detail
+ GROUP BY count
+ UNION 
+
+ SELECT ('Total Tablet IDs with Dup'),count(*)
+ FROM region_zone_distribution_detail
+ UNION 
+
+ SELECT ('Total Unique Tablets'),count(DISTINCT t.tablet_uuid)
+ FROM tablet t;
 
 -- table to handle hex values from 0x0000 to 0xffff (Not requird) 
 --CREATE table hexval(h text primary key,i integer, covered integer);
