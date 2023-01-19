@@ -200,6 +200,14 @@ CREATE VIEW region_zone_distribution_summary AS
  SELECT ('Total Unique Tablets'),count(DISTINCT t.tablet_uuid)
  FROM tablet t;
 
+CREATE VIEW underreplicated AS
+     SELECT t.tablet_uuid, replicas,t.namespace,t.table_name,node_uuid,status,ip ,leader_count
+         from tablet t,cluster ,tablet_replica_detail trd
+         WHERE  cluster.type='TSERVER' AND cluster.uuid=node_uuid
+               AND  t.tablet_uuid=trd.tablet_uuid  AND t.status != 'TABLET_DATA_TOMBSTONED'
+                   AND trd.replicas < 3
+/* underreplicated(tablet_uuid,replicas,namespace,table_name,node_uuid,status,ip,leader_count) */;
+
 -- table to handle hex values from 0x0000 to 0xffff (Not requird) 
 --CREATE table hexval(h text primary key,i integer, covered integer);
 --WITH RECURSIVE
