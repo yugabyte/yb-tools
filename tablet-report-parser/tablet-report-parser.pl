@@ -179,7 +179,6 @@ CREATE VIEW region_zone_distribution_detail AS
         count(*) as count
   FROM cluster c, tablet t
   WHERE c.uuid=t.node_uuid
-        AND c.zone not like '%-rr'
   GROUP BY
         tablet_uuid, zone
   HAVING 
