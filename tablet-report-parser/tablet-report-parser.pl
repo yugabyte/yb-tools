@@ -60,6 +60,24 @@ my %opt=(
 	HOSTNAME    => $ENV{HOST} || $ENV{HOSTNAME} || $ENV{NAME} || qx|hostname|,
 	JSON        => 0, # Auto set to 1 when  "JSON" discovered. default is Reading "table" style.
 );
+our $USAGE = << "__USAGE__";
+  Tablet Report Parser $VERSION
+  ====================
+  ## See KB: https://yugabyte.zendesk.com/knowledge/articles/12124512476045/en-us
+  The input to this program is a "tablet report" created by yugatool.
+  The output is SQL suitable to be fed to sqlite3, to created a database.
+  Typical usage:
+
+  perl $0 TABLET-REPORT-FROM-YUGATOOL | sqlite3 OUTPUT-DB-FILE-NAME
+
+__USAGE__
+if (@ARGV){
+	# User has specified and argument - we will process it as a filename
+}elsif (-t STDIN){
+	# No args supplied, and STDIN is a TERMINAL - show usage and quit.
+	print "ERROR: Input not specified. \n\n$USAGE";
+	exit 1;
+}
 # Sqlite 3.7 does not support ".print", so we use wierd SELECT statements to print messages.
 print << "__SQL__";
 SELECT '$0 Version $VERSION generating SQL on $opt{STARTTIME}';
@@ -229,6 +247,7 @@ my %kilo_multiplier=(
 	GB		=> 1024*1024*1024,
 );
 my $entity_regex = join "|", map {$entity{$_}{REGEX}} keys %entity;
+
 $current_entity = "CLUSTER"; # This line should have been in the report, but first item is the cluster 
 #--- Main input & processing loop -----
 while ($line=<>){
