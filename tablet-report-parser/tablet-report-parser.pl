@@ -44,7 +44,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.24";
+our $VERSION = "0.25";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -285,7 +285,7 @@ while ($line=<>){
 		print "--     for ", map({"$_=$entity{$current_entity}{$_} "} @{$entity{$current_entity}{HDR_KEYS}} ),"\n";
 		next;
 	}
-    if (substr($line,0,3) eq "   " ){
+    if (substr($line,0,1) eq " "  and  $line =~/^ [A-Z_\s]+$/ ){
 		Process_Headers();
 		print "--Headers:", map({$_->{NAME} . "(",$_->{START},"), "} @{$entity{$current_entity}{HEADERS}}),"\n";
 		next;
