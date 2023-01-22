@@ -44,7 +44,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.25";
+our $VERSION = "0.26";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -59,27 +59,53 @@ my %opt=(
 	DEBUG		=> 0,
 	HOSTNAME    => $ENV{HOST} || $ENV{HOSTNAME} || $ENV{NAME} || qx|hostname|,
 	JSON        => 0, # Auto set to 1 when  "JSON" discovered. default is Reading "table" style.
+	AUTORUN_SQLITE => -t STDOUT , # If STDOUT is NOT redirected, we automatically run sqlite3
+	SQLITE_ERROR   => (qx|sqlite3 -version|=~m/([^\s]+)/  ?  0 : "Could not run SQLITE3: $!"), # Checks if sqlite3 can run 
 );
 our $USAGE = << "__USAGE__";
   Tablet Report Parser $VERSION
   ====================
   ## See KB: https://yugabyte.zendesk.com/knowledge/articles/12124512476045/en-us
   The input to this program is a "tablet report" created by yugatool.
-  The output is SQL suitable to be fed to sqlite3, to created a database.
-  Typical usage:
+  The default output is a sqlite database.
 
-  perl $0 TABLET-REPORT-FROM-YUGATOOL | sqlite3 OUTPUT-DB-FILE-NAME
+  TYPICAL/DEFAULT/PREFERRED usage:
+  ================================
+
+  perl $0 TABLET-REPORT-FROM-YUGATOOL
+
+  This will create and output database file named TABLET-REPORT-FROM-YUGATOOL.sqlite
+
+  ADVANCED usage1: perl $0 TABLET-REPORT-FROM-YUGATOOL | sqlite3 OUTPUT-DB-FILE-NAME
+  ADVANCED usage2: perl $0 [<] TABLET-REPORT-FROM-YUGATOOL > OUTPUT.SQL
 
 __USAGE__
-if (@ARGV){
-	# User has specified and argument - we will process it as a filename
+my ($SQL_OUTPUT_FH, $output_sqlite_dbfilename); # Output file handle to feed to SQLITE
+
+if (my $inputfilename = $ARGV[0]){
+	# User has specified and argument (Default usage) - we will process it as a filename
+	-f $inputfilename or die "ERROR: No file '$inputfilename'";
+	$output_sqlite_dbfilename = $inputfilename . ".sqlite";
+	if ($opt{AUTORUN_SQLITE}){
+		if ($opt{SQLITE_ERROR}){
+			print $USAGE;
+			die "ERROR: $opt{SQLITE_ERROR}";
+		}
+		print  $opt{STARTTIME}," $0 version $VERSION\n",
+		   "\tReading $inputfilename,\n",
+		   "\tcreating/updating sqlite db $output_sqlite_dbfilename.\n";
+		open ($SQL_OUTPUT_FH, "|-", "sqlite3 $output_sqlite_dbfilename")
+		    or die "ERROR: Could not start sqlite3 : $!";
+        select $SQL_OUTPUT_FH; # All subsequent "print" goes to this file handle.
+    }
 }elsif (-t STDIN){
 	# No args supplied, and STDIN is a TERMINAL - show usage and quit.
-	print "ERROR: Input not specified. \n\n$USAGE";
-	exit 1;
+	print  $USAGE;
+	die "ERROR: Input file-name not specified.";
 }
-# Sqlite 3.7 does not support ".print", so we use wierd SELECT statements to print messages.
-print << "__SQL__";
+
+# Sqlite 3.7 does not support ".print", so we use wierd SELECT statements to print  messages.
+print  << "__SQL__";
 SELECT '$0 Version $VERSION generating SQL on $opt{STARTTIME}';
 CREATE TABLE cluster(type, uuid TEXT PRIMARY KEY, ip, port, region, zone ,role, uptime);
 CREATE TABLE tablet (node_uuid,tablet_uuid TEXT , table_name,table_uuid, namespace,state,status,
@@ -322,6 +348,10 @@ SELECT '     ',* FROM summary_report;
 .quit
 __ENDING_STUFF__
 close STDOUT; # Done talking to sqlite3
+if ($opt{AUTORUN_SQLITE}){
+	close $SQL_OUTPUT_FH;
+	select STDOUT;
+}
 open  STDOUT, ">", "/dev/null"; # To avoid Warning about "Filehandle STDOUT reopened as xxx"
 my $retry = 30; # Could take 30 sec to generate summary report...
 while ($retry-- > 0 and ! -e $tmpfile){
