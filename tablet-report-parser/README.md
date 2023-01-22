@@ -1,7 +1,7 @@
 # Tablet Report Parser
 
 * Reads a tablet report that was created by **yugatool**
-* outputs a SQL stream that contains parsed data + analysis info
+* outputs a *sqlite* database (or SQL stream) that contains parsed data + analysis info
 * Can produce various reports, such as leaderless tablets, tablet-count recommendations...
 * Can be used to analyze table/tablet status, check replication factors etc.
 
@@ -10,25 +10,24 @@
 
 ## HOW TO  Run THIS script  - and feed the generated SQL into sqlite3:
 
-   `$ perl tablet_report_parser.pl  tablet-report-09-20T14.out | sqlite3 tablet-report-09-20T14.sqlite`
+   `$ perl tablet_report_parser.pl  tablet-report-09-20T14.out`
 
 ## Sample Run:
 
 
 ```
-b$ perl ~/Code/Yuga/tablet-report-parser.pl yb-tools-tablet-report.out | sqlite3 tablet-report.jan04.sqlite
-/home/vijay/Code/Yuga/tablet-report-parser.pl Version 0.23 generating SQL on Wed Jan  4 09:43:46 2023
+$ ./tablet-report-parser.pl tablet-report.out
+Sun Jan 22 00:00:50 2023 ./tablet-report-parser.pl version 0.26
+        Reading tablet-report.out,
+        creating/updating sqlite db tablet-report.out.sqlite.
+./tablet-report-parser.pl Version 0.26 generating SQL on Sun Jan 22 00:00:50 2023
 ... 1 CLUSTER items processed.
 Processing MASTER from [ Masters ] (Line#4)
-... 2 MASTER items processed.
-Processing TSERVER from [ Tablet Servers ] (Line#9)
-... 3 TSERVER items processed.
-Processing TABLET from [ Tablet Report: [host:"10.xxx.yy.zz1" port:9100] (cd9311591dae40519f2c84fc4ffeab61) ] (Line#15)
-... 6704 TABLET items processed.
-Processing TABLET from [ Tablet Report: [host:"10.xxx.yy.zz2" port:9100] (17bccceae56642c0ba9bee4ac9bdd0fc) ] (Line#6722)
-... 6704 TABLET items processed.
-Processing TABLET from [ Tablet Report: [host:"10.xxx.yy.zz3" port:9100] (d919aece7bbb41dba870b0936561ae27) ] (Line#13429)
-  ... 6704 TABLET items processed.
+... 3 MASTER items processed.
+Processing TSERVER from [ Tablet Servers ] (Line#10)
+... 12 TSERVER items processed.
+... ... ...
+  ... 871 TABLET items processed.
 Main SQL loading Completed. Generating table stats...
 --- Completed. Available REPORT-NAMEs ---
 cluster                       tableinfo
@@ -36,15 +35,18 @@ delete_leaderless_be_careful  tablet
 large_tables                  tablet_replica_detail
 large_wal                     tablet_replica_summary
 leaderless                    tablets_per_node
-summary_report                unbalanced_tables
-table_detail                  version_info
- --- To get a report, run: ---
-  sqlite3 -header -column /path/to/tablet-report.jan04.sqlite "SELECT * from <REPORT-NAME>"
+region_zone_distribution      unbalanced_tables
+summary_report                version_info
+table_detail
 |--- Summary Report ---
      |
-     |0 leaderless tablets found.(See "leaderless")
-     |14 tables have unbalanced tablet sizes (see "unbalanced_tables")
-     |3 TSERVERs, 127 Tables, 20112 Tablets loaded.
+     |12 TSERVERs, 129 Tables, 9387 Tablets loaded.
+     |45 tablets have RF < 3. (See "tablet_replica_summary/detail")
+     |63 tables have unbalanced tablet sizes (see "unbalanced_tables")
+     |90 leaderless tablets found.(See "leaderless")
+ --- To get a report, run: ---
+  sqlite3 -header -column tablet-report-parser/tablet-report.out.sqlite "SELECT * from <REPORT-NAME>"
+
 
 ```
 
@@ -106,3 +108,13 @@ SELECT tablename,uniq_tablet_count as uniq_tablets,
         WHERE sst_table_mb > 5000
         ORDER by sst_table_mb desc;
 ```
+
+### "Advanced" Run options:
+By default, the script will automatically pipe the  output stream to sqlite3, and create a sqlite database named <input-file>.sqlite.
+You can change the default behaviour by explicitly piping the output:
+
+$ ./tablet-report-parser.pl tablet-report.out | sqlite3 i.can.name.my.sqlite.db.here.sqlite
+
+Alternatively, you can save the SQL stream to a file, then run sqlite separately:
+
+$ ./tablet-report-parser.pl tablet-report.out > saved.SQL.statements.sql
