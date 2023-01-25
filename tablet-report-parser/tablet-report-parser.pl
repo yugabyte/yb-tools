@@ -120,8 +120,8 @@ if (my $inputfilename = $ARGV[0]){
 			die "ERROR: $opt{SQLITE_ERROR}";
 		}
 		if (-e $output_sqlite_dbfilename){
-			my $ctime     = (stat _)[10];
-			my $rename_to = $inputfilename .".". unixtime_to_printable($ctime,"YYYY-MM-DD") . ".sqlite";
+			my $mtime     = (stat  $output_sqlite_dbfilename)[9];
+			my $rename_to = $inputfilename .".". unixtime_to_printable($mtime,"YYYY-MM-DD") . ".sqlite";
             if  (-e $rename_to){
                die "ERROR:Files $output_sqlite_dbfilename and  $rename_to already exist. Please cleanup!";
 			} 
@@ -555,7 +555,7 @@ sub Set_Transaction{
 
 sub unixtime_to_printable{
 	my ($unixtime,$format) = @_;
-	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($unixtime);
 	if (not defined $format  or  $format eq "YYYY-MM-DD HH:MM:SS"){
        return sprintf("%04d-%02d-%02d %02d:%02d:%02d", $year+1900, $mon+1, $mday, $hour, $min, $sec);
 	}
