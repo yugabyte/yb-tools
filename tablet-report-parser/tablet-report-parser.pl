@@ -44,7 +44,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.26";
+our $VERSION = "0.27";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -55,29 +55,57 @@ BEGIN{ # Namespace forward declarations
   package JSON_Analyzer;
 } # End of namespace declaration 
 my %opt=(
-	STARTTIME	=>  scalar(localtime),
+	STARTTIME	=>  unixtime_to_printable(time(),"YYYY-MM-DD HH:MM"),
 	DEBUG		=> 0,
 	HOSTNAME    => $ENV{HOST} || $ENV{HOSTNAME} || $ENV{NAME} || qx|hostname|,
 	JSON        => 0, # Auto set to 1 when  "JSON" discovered. default is Reading "table" style.
 	AUTORUN_SQLITE => -t STDOUT , # If STDOUT is NOT redirected, we automatically run sqlite3
 	SQLITE_ERROR   => (qx|sqlite3 -version|=~m/([^\s]+)/  ?  0 : "Could not run SQLITE3: $!"), # Checks if sqlite3 can run 
 );
+my %ANSICOLOR = (
+	ENCLOSE        => sub{"\e[$_[1]m$_[0]\e[0m"},
+	NORMAL         => "\e[0m",
+	BOLD           => "\e[1m",
+	DARK           => "\e[2m",
+	FAINT          => "\e[2m",
+	UNDERLINE      => "\e[4m",
+	UNDERSCORE     => "\e[4m",
+	BLINK          => "\e[5m",
+	REVERSE        => "\e[7m",
+    CONCEALED      => "\e[8m",	
+	BLACK          => "\e[30m",
+	RED            => "\e[31m",
+	GREEN          => "\e[32m",
+	YELLOW         => "\e[33m",
+	BLUE           => "\e[34m",
+	MAGENTA        => "\e[35m",
+	CYAN           => "\e[36m",
+	WHITE          => "\e[37m",
+	BRIGHT_BLACK   => "\e[90m",
+	BRIGHT_RED     => "\e[91m",
+	BRIGHT_GREEN   => "\e[92m",
+	BRIGHT_YELLOW  => "\e[93m",
+	BRIGHT_BLUE    => "\e[94m",
+	BRIGHT_MAGENTA => "\e[95m",
+	BRIGHT_CYAN    => "\e[96m",
+	BRIGHT_WHITE   => "\e[97m",
+);
 our $USAGE = << "__USAGE__";
-  Tablet Report Parser $VERSION
+  $ANSICOLOR{REVERSE}Tablet Report Parser$ANSICOLOR{YELLOW} $VERSION$ANSICOLOR{NORMAL}
   ====================
-  ## See KB: https://yugabyte.zendesk.com/knowledge/articles/12124512476045/en-us
+  ## See KB: $ANSICOLOR{UNDERLINE}https://yugabyte.zendesk.com/knowledge/articles/12124512476045/en-us$ANSICOLOR{NORMAL}
+  
   The input to this program is a "tablet report" created by yugatool.
   The default output is a sqlite database.
 
-  TYPICAL/DEFAULT/PREFERRED usage:
-  ================================
-
-  perl $0 TABLET-REPORT-FROM-YUGATOOL
+  $ANSICOLOR{REVERSE}TYPICAL/DEFAULT/PREFERRED$ANSICOLOR{NORMAL} usage:
+    
+   $ANSICOLOR{BRIGHT_YELLOW} perl $0 $ANSICOLOR{CYAN}TABLET-REPORT-FROM-YUGATOOL$ANSICOLOR{NORMAL}
 
   This will create and output database file named TABLET-REPORT-FROM-YUGATOOL.sqlite
 
-  ADVANCED usage1: perl $0 TABLET-REPORT-FROM-YUGATOOL | sqlite3 OUTPUT-DB-FILE-NAME
-  ADVANCED usage2: perl $0 [<] TABLET-REPORT-FROM-YUGATOOL > OUTPUT.SQL
+  $ANSICOLOR{FAINT}ADVANCED usage1: perl $0 TABLET-REPORT-FROM-YUGATOOL | sqlite3 OUTPUT-DB-FILE-NAME$ANSICOLOR{NORMAL}
+  $ANSICOLOR{FAINT}ADVANCED usage2: perl $0 [<] TABLET-REPORT-FROM-YUGATOOL > OUTPUT.SQL$ANSICOLOR{NORMAL}
 
 __USAGE__
 my ($SQL_OUTPUT_FH, $output_sqlite_dbfilename); # Output file handle to feed to SQLITE
@@ -90,6 +118,16 @@ if (my $inputfilename = $ARGV[0]){
 		if ($opt{SQLITE_ERROR}){
 			print $USAGE;
 			die "ERROR: $opt{SQLITE_ERROR}";
+		}
+		if (-e $output_sqlite_dbfilename){
+			my $ctime     = (stat _)[10];
+			my $rename_to = $inputfilename .".". unixtime_to_printable($ctime,"YYYY-MM-DD") . ".sqlite";
+            if  (-e $rename_to){
+               die "ERROR:Files $output_sqlite_dbfilename and  $rename_to already exist. Please cleanup!";
+			} 
+			print "WARNING: Renaming Existing file $output_sqlite_dbfilename to $rename_to.\n";
+            rename $output_sqlite_dbfilename, $rename_to or die "ERROR:cannot rename: $!";
+			sleep 2; # Allow time to read the message 
 		}
 		print  $opt{STARTTIME}," $0 version $VERSION\n",
 		   "\tReading $inputfilename,\n",
@@ -513,6 +551,21 @@ sub Set_Transaction{
    }else{
 	   # no-op
    }
+}
+
+sub unixtime_to_printable{
+	my ($unixtime,$format) = @_;
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
+	if (not defined $format  or  $format eq "YYYY-MM-DD HH:MM:SS"){
+       return sprintf("%04d-%02d-%02d %02d:%02d:%02d", $year+1900, $mon+1, $mday, $hour, $min, $sec);
+	}
+	if (not defined $format  or  $format eq "YYYY-MM-DD HH:MM"){
+       return sprintf("%04d-%02d-%02d %02d:%02d", $year+1900, $mon+1, $mday, $hour, $min);
+	}	
+	if ($format eq "YYYY-MM-DD"){
+		  return sprintf("%04d-%02d-%02d", $year+1900, $mon+1, $mday);
+	}
+	die "ERROR: Unsupported format:'$format' ";
 }
 ####################################################################################
 BEGIN{
