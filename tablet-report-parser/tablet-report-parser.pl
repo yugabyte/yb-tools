@@ -44,7 +44,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.27";
+our $VERSION = "0.28";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -455,6 +455,7 @@ sub Parse_Tserver_line{
     $entity{TSERVER}{BY_UUID}{$uuid}={
 		HOST=>$host,PORT=>$port,REGION=>$region,ZONE=>$zone,UPTIME=>$uptime
 	        };
+	TableInfo::->Register_Region_Zone($region, $zone, $uuid);
 }
 
 sub Parse_Tablet_line{
@@ -569,9 +570,12 @@ sub unixtime_to_printable{
 }
 ####################################################################################
 BEGIN{
-package TableInfo;
+package TableInfo; # Also provides Region/Zone info
 
 my %collection = (); # Collection of Tableinfo objects, key is namespace:table_name:uuid  
+our %region_zone = ();
+our %Tserver_to_region_zone=();
+our %Tablet_by_region_zone = ();
 my %field      = (   # Key=Database field name
 	TABLE_UUID		=>{TYPE=>'TEXT', SOURCE=>'table_uuid', SEQ=>3},
 	NAMESPACE		=>{TYPE=>'TEXT', SOURCE=>'namespace' , SEQ=>1},
@@ -639,6 +643,17 @@ sub collect{
 	}
 	$start_key % $self->{KEYS_PER_TABLET} != 0 and $self->{KEY_RANGE_OVERLAP}++; 
 	$self->{KEYRANGELIST}[int($start_key / $self->{KEYS_PER_TABLET}) ] ++;
+
+	my ($region,$zone) = @{ $Tserver_to_region_zone{ $node_uuid } };
+	return if $tablet->{status} eq 'TABLET_DATA_TOMBSTONED';
+    ##$region_zone{$region}{$zone}{TABLET}{ $tablet->{tablet_uuid} }++;
+	$Tablet_by_region_zone{$tablet->{tablet_uuid}}{$region}{$zone}++;
+}
+
+sub Register_Region_Zone{ 
+	my ($class, $region, $zone, $tserver_uuid) = @_;
+	push @{ $region_zone{$region}{$zone}{TSERVER} }, $tserver_uuid; 
+	$Tserver_to_region_zone{$tserver_uuid} = [$region, $zone];
 }
 
 sub Table_Report{ # CLass method
@@ -697,7 +712,45 @@ sub Table_Report{ # CLass method
         WHERE sst_table_mb > 5000
         ORDER by sst_table_mb desc;
 
+	CREATE TABLE region_zone_tablets(
+		region		  TEXT,
+		zone		  TEXT,
+		tservers	  INTEGER,
+		uniq_tablets  INTEGER,
+		replicas_eq_0 INTEGER,
+		replicas_eq_1 INTEGER,
+		replicas_gt_1 INTEGER
+	);
 __tablet_estimate__
+
+	# R e g i o n / Z o n e info
+	for my $r (sort keys %region_zone){
+		for my $z (sort keys %{ $region_zone{$r} }){
+			#print "---REGION: $r  $z  ----- ", scalar(keys %{$region_zone{$r}{$z}{TABLET}}), " unique tablets ----\n";
+			$Tablet_by_region_zone{$_}{$r}{$z} ||= 0 for keys %Tablet_by_region_zone;
+
+			my ($uniq_tablets, $replica_count_0,$replica_count_1, $replica_count_GT_1);
+			for my $t (keys %Tablet_by_region_zone){
+				my $replicas = $Tablet_by_region_zone{$t}{$r}{$z} ;
+				if ($replicas < 1){
+					$replica_count_0++;
+				}elsif ($replicas == 1){
+					$replica_count_1++;
+					$uniq_tablets++;
+				}else{
+					$replica_count_GT_1++;
+					$uniq_tablets++;
+				}
+			}
+			print "INSERT INTO region_zone_tablets VALUES('$r','$z',",
+			      scalar(@{$region_zone{$r}{$z}{TSERVER}}), ",",    # Tserver count
+				  $uniq_tablets, ",", # Unique tablets 
+                  ($replica_count_0||0),",",
+				  ($replica_count_1||0),",",
+				  $replica_count_GT_1||0 ,
+				  ");\n",
+		} 
+	}
 };
 1;	
 } # End of TableInfo
@@ -844,3 +897,4 @@ sub Parse_Tablet_line{
 }
 
 } # ----- End of JSON_Analyzer ---------------------------------------
+
