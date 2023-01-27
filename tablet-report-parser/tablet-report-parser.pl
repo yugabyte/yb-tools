@@ -271,6 +271,9 @@ CREATE VIEW summary_report AS
 	UNION
 	   SELECT count(*) || ' tables have unbalanced tablet sizes (see "unbalanced_tables")' 
 	   from unbalanced_tables 
+	UNION
+	   SELECT count(*) || ' Zones have unbalanced tablets (See "region_zone_tablets")'
+	    from  region_zone_tablets WHERE balanced='NO'
 	;
 CREATE VIEW version_info AS 
     SELECT '$0' as program, '$VERSION' as version, '$opt{STARTTIME}' AS run_on, '$opt{HOSTNAME}' as host;
@@ -576,6 +579,7 @@ my %collection = (); # Collection of Tableinfo objects, key is namespace:table_n
 our %region_zone = ();
 our %Tserver_to_region_zone=();
 our %Tablet_by_region_zone = ();
+our $tablet_bucket_max     = 0; 
 my %field      = (   # Key=Database field name
 	TABLE_UUID		=>{TYPE=>'TEXT', SOURCE=>'table_uuid', SEQ=>3},
 	NAMESPACE		=>{TYPE=>'TEXT', SOURCE=>'namespace' , SEQ=>1},
@@ -647,7 +651,8 @@ sub collect{
 	my ($region,$zone) = @{ $Tserver_to_region_zone{ $node_uuid } };
 	return if $tablet->{status} eq 'TABLET_DATA_TOMBSTONED';
     ##$region_zone{$region}{$zone}{TABLET}{ $tablet->{tablet_uuid} }++;
-	$Tablet_by_region_zone{$tablet->{tablet_uuid}}{$region}{$zone}++;
+	my $replicas = ++$Tablet_by_region_zone{$tablet->{tablet_uuid}}{$region}{$zone};
+	$tablet_bucket_max = $replicas if $replicas > $tablet_bucket_max;
 }
 
 sub Register_Region_Zone{ 
@@ -711,43 +716,40 @@ sub Table_Report{ # CLass method
         FROM tableinfo
         WHERE sst_table_mb > 5000
         ORDER by sst_table_mb desc;
+__tablet_estimate__
+
+	# R e g i o n / Z o n e info
+
+    print << "__region_zone_tablets__";
 
 	CREATE TABLE region_zone_tablets(
 		region		  TEXT,
 		zone		  TEXT,
 		tservers	  INTEGER,
-		uniq_tablets  INTEGER,
-		replicas_eq_0 INTEGER,
-		replicas_eq_1 INTEGER,
-		replicas_gt_1 INTEGER
-	);
-__tablet_estimate__
+		missing_replicas INTEGER,
+__region_zone_tablets__
+    print  # Dynamically generate columns..
+	       map ({"\[${_}_replicas\]   INTEGER,\n"} 1..$tablet_bucket_max),
+	      "balanced TEXT\n",
+	     "    );\n";
+		
 
-	# R e g i o n / Z o n e info
 	for my $r (sort keys %region_zone){
 		for my $z (sort keys %{ $region_zone{$r} }){
 			#print "---REGION: $r  $z  ----- ", scalar(keys %{$region_zone{$r}{$z}{TABLET}}), " unique tablets ----\n";
 			$Tablet_by_region_zone{$_}{$r}{$z} ||= 0 for keys %Tablet_by_region_zone;
 
-			my ($uniq_tablets, $replica_count_0,$replica_count_1, $replica_count_GT_1);
+			my ( $replica_count, @replica_bucket); # $replica_count_0,$replica_count_1, $replica_count_GT_1);
 			for my $t (keys %Tablet_by_region_zone){
 				my $replicas = $Tablet_by_region_zone{$t}{$r}{$z} ;
-				if ($replicas < 1){
-					$replica_count_0++;
-				}elsif ($replicas == 1){
-					$replica_count_1++;
-					$uniq_tablets++;
-				}else{
-					$replica_count_GT_1++;
-					$uniq_tablets++;
-				}
+				$replica_bucket[ $replicas ]++;
+				$replica_count++;
 			}
+			my $balanced = 
 			print "INSERT INTO region_zone_tablets VALUES('$r','$z',",
 			      scalar(@{$region_zone{$r}{$z}{TSERVER}}), ",",    # Tserver count
-				  $uniq_tablets, ",", # Unique tablets 
-                  ($replica_count_0||0),",",
-				  ($replica_count_1||0),",",
-				  $replica_count_GT_1||0 ,
+                  map({($replica_bucket[$_]||=0) . ", "}0..$tablet_bucket_max),
+                  ($replica_count == $replica_bucket[1] ? "'YES'": "'NO'"),
 				  ");\n",
 		} 
 	}
