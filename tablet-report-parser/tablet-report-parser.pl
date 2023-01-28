@@ -44,7 +44,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.28";
+our $VERSION = "0.29";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -579,6 +579,7 @@ my %collection = (); # Collection of Tableinfo objects, key is namespace:table_n
 our %region_zone = ();
 our %Tserver_to_region_zone=();
 our %Tablet_by_region_zone = ();
+our %Tablet_bytes=(); # wal + SST, in bytes, indexed by tablet_uuid 
 our $tablet_bucket_max     = 0; 
 my %field      = (   # Key=Database field name
 	TABLE_UUID		=>{TYPE=>'TEXT', SOURCE=>'table_uuid', SEQ=>3},
@@ -652,6 +653,7 @@ sub collect{
 	return if $tablet->{status} eq 'TABLET_DATA_TOMBSTONED';
     ##$region_zone{$region}{$zone}{TABLET}{ $tablet->{tablet_uuid} }++;
 	my $replicas = ++$Tablet_by_region_zone{$tablet->{tablet_uuid}}{$region}{$zone};
+	$Tablet_bytes{ $tablet->{tablet_uuid} } = $tablet->{sst_size} + $tablet->{wal_size}; # Keep only ONE instance worth
 	$tablet_bucket_max = $replicas if $replicas > $tablet_bucket_max;
 }
 
@@ -726,12 +728,12 @@ __tablet_estimate__
 		region		  TEXT,
 		zone		  TEXT,
 		tservers	  INTEGER,
-		missing_replicas INTEGER,
+		missing_replicas TEXT,
 __region_zone_tablets__
     print  # Dynamically generate columns..
-	       map ({"\[${_}_replicas\]   INTEGER,\n"} 1..$tablet_bucket_max),
+	       map ({"\[${_}_replicas\]   TEXT,\n"} 1..$tablet_bucket_max),
 	      "balanced TEXT\n",
-	     "    );\n";
+	      ");\n";
 		
 
 	for my $r (sort keys %region_zone){
@@ -739,17 +741,24 @@ __region_zone_tablets__
 			#print "---REGION: $r  $z  ----- ", scalar(keys %{$region_zone{$r}{$z}{TABLET}}), " unique tablets ----\n";
 			$Tablet_by_region_zone{$_}{$r}{$z} ||= 0 for keys %Tablet_by_region_zone;
 
-			my ( $replica_count, @replica_bucket); # $replica_count_0,$replica_count_1, $replica_count_GT_1);
+			my ( $replica_count, $missing_bytes, @replica_bucket);
 			for my $t (keys %Tablet_by_region_zone){
 				my $replicas = $Tablet_by_region_zone{$t}{$r}{$z} ;
+				if ($replicas == 0){
+					$missing_bytes += $Tablet_bytes{$t};
+				}
 				$replica_bucket[ $replicas ]++;
 				$replica_count++;
 			}
-			my $balanced = 
+			# Update missing bytes, and total tablets in the "1" bucket
+			my @replica_bucket_text = map {$replica_bucket[$_] ||= 0} 0..$tablet_bucket_max ; # copy it , zeroing undefs
+			$replica_bucket_text[0] = $replica_bucket[0] . sprintf(' (%.1f GB)',$missing_bytes/1024**3) if $missing_bytes;
+			$replica_bucket_text[1] = $replica_bucket[1] . "/" . $replica_count;
+			
 			print "INSERT INTO region_zone_tablets VALUES('$r','$z',",
 			      scalar(@{$region_zone{$r}{$z}{TSERVER}}), ",",    # Tserver count
-                  map({($replica_bucket[$_]||=0) . ", "}0..$tablet_bucket_max),
-                  ($replica_count == $replica_bucket[1] ? "'YES'": "'NO'"),
+                  map({"'" . $replica_bucket_text[$_] . "', "}0..$tablet_bucket_max),
+                  ((grep {$replica_count == $replica_bucket[$_]} 1..$tablet_bucket_max) ? "'YES'": "'NO'"),
 				  ");\n",
 		} 
 	}
