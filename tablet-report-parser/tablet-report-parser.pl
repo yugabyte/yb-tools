@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 ##########################################################################
 ## Tablet Report Parser
+## See KB: https://yugabyte.zendesk.com/knowledge/articles/12124512476045/en-us
 
 # Run instructions:
 
@@ -43,7 +44,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.23";
+our $VERSION = "0.29";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -54,13 +55,95 @@ BEGIN{ # Namespace forward declarations
   package JSON_Analyzer;
 } # End of namespace declaration 
 my %opt=(
-	STARTTIME	=>  scalar(localtime),
+	STARTTIME	=>  unixtime_to_printable(time(),"YYYY-MM-DD HH:MM"),
 	DEBUG		=> 0,
 	HOSTNAME    => $ENV{HOST} || $ENV{HOSTNAME} || $ENV{NAME} || qx|hostname|,
 	JSON        => 0, # Auto set to 1 when  "JSON" discovered. default is Reading "table" style.
+	AUTORUN_SQLITE => -t STDOUT , # If STDOUT is NOT redirected, we automatically run sqlite3
+	SQLITE_ERROR   => (qx|sqlite3 -version|=~m/([^\s]+)/  ?  0 : "Could not run SQLITE3: $!"), # Checks if sqlite3 can run 
 );
-# Sqlite 3.7 does not support ".print", so we use wierd SELECT statements to print messages.
-print << "__SQL__";
+my %ANSICOLOR = (
+	ENCLOSE        => sub{"\e[$_[1]m$_[0]\e[0m"},
+	NORMAL         => "\e[0m",
+	BOLD           => "\e[1m",
+	DARK           => "\e[2m",
+	FAINT          => "\e[2m",
+	UNDERLINE      => "\e[4m",
+	UNDERSCORE     => "\e[4m",
+	BLINK          => "\e[5m",
+	REVERSE        => "\e[7m",
+    CONCEALED      => "\e[8m",	
+	BLACK          => "\e[30m",
+	RED            => "\e[31m",
+	GREEN          => "\e[32m",
+	YELLOW         => "\e[33m",
+	BLUE           => "\e[34m",
+	MAGENTA        => "\e[35m",
+	CYAN           => "\e[36m",
+	WHITE          => "\e[37m",
+	BRIGHT_BLACK   => "\e[90m",
+	BRIGHT_RED     => "\e[91m",
+	BRIGHT_GREEN   => "\e[92m",
+	BRIGHT_YELLOW  => "\e[93m",
+	BRIGHT_BLUE    => "\e[94m",
+	BRIGHT_MAGENTA => "\e[95m",
+	BRIGHT_CYAN    => "\e[96m",
+	BRIGHT_WHITE   => "\e[97m",
+);
+our $USAGE = << "__USAGE__";
+  $ANSICOLOR{REVERSE}Tablet Report Parser$ANSICOLOR{YELLOW} $VERSION$ANSICOLOR{NORMAL}
+  ====================
+  ## See KB: $ANSICOLOR{UNDERLINE}https://yugabyte.zendesk.com/knowledge/articles/12124512476045/en-us$ANSICOLOR{NORMAL}
+  
+  The input to this program is a "tablet report" created by yugatool.
+  The default output is a sqlite database.
+
+  $ANSICOLOR{REVERSE}TYPICAL/DEFAULT/PREFERRED$ANSICOLOR{NORMAL} usage:
+    
+   $ANSICOLOR{BRIGHT_YELLOW} perl $0 $ANSICOLOR{CYAN}TABLET-REPORT-FROM-YUGATOOL$ANSICOLOR{NORMAL}
+
+  This will create and output database file named TABLET-REPORT-FROM-YUGATOOL.sqlite
+
+  $ANSICOLOR{FAINT}ADVANCED usage1: perl $0 TABLET-REPORT-FROM-YUGATOOL | sqlite3 OUTPUT-DB-FILE-NAME$ANSICOLOR{NORMAL}
+  $ANSICOLOR{FAINT}ADVANCED usage2: perl $0 [<] TABLET-REPORT-FROM-YUGATOOL > OUTPUT.SQL$ANSICOLOR{NORMAL}
+
+__USAGE__
+my ($SQL_OUTPUT_FH, $output_sqlite_dbfilename); # Output file handle to feed to SQLITE
+
+if (my $inputfilename = $ARGV[0]){
+	# User has specified and argument (Default usage) - we will process it as a filename
+	-f $inputfilename or die "ERROR: No file '$inputfilename'";
+	$output_sqlite_dbfilename = $inputfilename . ".sqlite";
+	if ($opt{AUTORUN_SQLITE}){
+		if ($opt{SQLITE_ERROR}){
+			print $USAGE;
+			die "ERROR: $opt{SQLITE_ERROR}";
+		}
+		if (-e $output_sqlite_dbfilename){
+			my $mtime     = (stat  $output_sqlite_dbfilename)[9];
+			my $rename_to = $inputfilename .".". unixtime_to_printable($mtime,"YYYY-MM-DD") . ".sqlite";
+            if  (-e $rename_to){
+               die "ERROR:Files $output_sqlite_dbfilename and  $rename_to already exist. Please cleanup!";
+			} 
+			print "WARNING: Renaming Existing file $output_sqlite_dbfilename to $rename_to.\n";
+            rename $output_sqlite_dbfilename, $rename_to or die "ERROR:cannot rename: $!";
+			sleep 2; # Allow time to read the message 
+		}
+		print  $opt{STARTTIME}," $0 version $VERSION\n",
+		   "\tReading $inputfilename,\n",
+		   "\tcreating/updating sqlite db $output_sqlite_dbfilename.\n";
+		open ($SQL_OUTPUT_FH, "|-", "sqlite3 $output_sqlite_dbfilename")
+		    or die "ERROR: Could not start sqlite3 : $!";
+        select $SQL_OUTPUT_FH; # All subsequent "print" goes to this file handle.
+    }
+}elsif (-t STDIN){
+	# No args supplied, and STDIN is a TERMINAL - show usage and quit.
+	print  $USAGE;
+	die "ERROR: Input file-name not specified.";
+}
+
+# Sqlite 3.7 does not support ".print", so we use wierd SELECT statements to print  messages.
+print  << "__SQL__";
 SELECT '$0 Version $VERSION generating SQL on $opt{STARTTIME}';
 CREATE TABLE cluster(type, uuid TEXT PRIMARY KEY, ip, port, region, zone ,role, uptime);
 CREATE TABLE tablet (node_uuid,tablet_uuid TEXT , table_name,table_uuid, namespace,state,status,
@@ -131,6 +214,40 @@ FROM
   GROUP BY namespace,table_name
   HAVING heat_level > 2.5
   ORDER BY heat_level desc) t  ;
+ 
+ CREATE VIEW region_zone_distribution AS
+ SELECT namespace,region,zone,
+       count(*) as tablets,
+       count(DISTINCT tablet_uuid) as uniq_tablet,
+       sum(CASE WHEN leader=c.uuid THEN 1 ELSE 0 END) as leaders,
+       count(DISTINCT table_name) as tables,
+       count(DISTINCT node_uuid) as tservers,
+       (SELECT count(*) from cluster c1  WHERE type='MASTER' and c1.zone=c.zone and c1.region=c.region) as masters
+FROM tablet,cluster c 
+WHERE c.uuid=node_uuid 
+GROUP  BY namespace,region,zone
+UNION 
+SELECT namespace,region,'~'||namespace||' Total~',
+       count(*) as tablets,
+       count(DISTINCT tablet_uuid) as uniq_tablet,
+       sum(CASE WHEN leader=c.uuid THEN 1 ELSE 0 END) as leaders,
+       count(DISTINCT table_name) as tables,
+       count(DISTINCT node_uuid) as tservers,
+       (SELECT count(*) from cluster c1  WHERE type='MASTER' and c1.region=c.region) as masters
+FROM tablet,cluster c 
+WHERE c.uuid=node_uuid 
+GROUP  BY namespace,region
+UNION 
+SELECT '~Total~','~ALL~','~ALL~',
+       count(*) as tablets,
+       count(DISTINCT tablet_uuid) as uniq_tablet,
+       sum(CASE WHEN leader=c.uuid THEN 1 ELSE 0 END) as leaders,
+       count(DISTINCT table_name) as tables,
+       count(DISTINCT node_uuid) as tservers,
+       (SELECT count(*) from cluster c1  WHERE type='MASTER' ) as masters
+FROM tablet,cluster c 
+WHERE c.uuid=node_uuid 
+ORDER BY namespace,region,zone;
 
 -- table to handle hex values from 0x0000 to 0xffff (Not requird) 
 --CREATE table hexval(h text primary key,i integer, covered integer);
@@ -154,6 +271,9 @@ CREATE VIEW summary_report AS
 	UNION
 	   SELECT count(*) || ' tables have unbalanced tablet sizes (see "unbalanced_tables")' 
 	   from unbalanced_tables 
+	UNION
+	   SELECT count(*) || ' Zones have unbalanced tablets (See "region_zone_tablets")'
+	    from  region_zone_tablets WHERE balanced='NO'
 	;
 CREATE VIEW version_info AS 
     SELECT '$0' as program, '$VERSION' as version, '$opt{STARTTIME}' AS run_on, '$opt{HOSTNAME}' as host;
@@ -194,6 +314,7 @@ my %kilo_multiplier=(
 	GB		=> 1024*1024*1024,
 );
 my $entity_regex = join "|", map {$entity{$_}{REGEX}} keys %entity;
+
 $current_entity = "CLUSTER"; # This line should have been in the report, but first item is the cluster 
 #--- Main input & processing loop -----
 while ($line=<>){
@@ -231,7 +352,7 @@ while ($line=<>){
 		print "--     for ", map({"$_=$entity{$current_entity}{$_} "} @{$entity{$current_entity}{HDR_KEYS}} ),"\n";
 		next;
 	}
-    if (substr($line,0,3) eq "   " ){
+    if (substr($line,0,1) eq " "  and  $line =~/^ [A-Z_\s]+$/ ){
 		Process_Headers();
 		print "--Headers:", map({$_->{NAME} . "(",$_->{START},"), "} @{$entity{$current_entity}{HEADERS}}),"\n";
 		next;
@@ -268,18 +389,15 @@ SELECT '     ',* FROM summary_report;
 .quit
 __ENDING_STUFF__
 close STDOUT; # Done talking to sqlite3
+if ($opt{AUTORUN_SQLITE}){
+	close $SQL_OUTPUT_FH;
+	select STDOUT;
+}
 open  STDOUT, ">", "/dev/null"; # To avoid Warning about "Filehandle STDOUT reopened as xxx"
 my $retry = 30; # Could take 30 sec to generate summary report...
 while ($retry-- > 0 and ! -e $tmpfile){
   sleep 1; # Wait for sqlite to close up 
 }
-#-- OLD CODE SQL commented below
-#-- .show
-#-- .output stdout
-#-- .print --- To get a report, run: ---
-#-- -- Note: strange escaping below for the benefit of perl, sqlite, and the shell. Wierdness just to get sqlite file name.
-#-- .shell perl -nE 'm/filename: (\\S+)/ and say qq^\\\tsqlite3 -header -column \\\$1 \\"SELECT \\* from REPORT-NAME\\"^'  $tmpfile
-#-- .shell rm $tmpfile
 
 # Get filename output by ".databases" above..
 open my $tmp, "<", $tmpfile or exit 0; # Ignore if missing 
@@ -340,6 +458,7 @@ sub Parse_Tserver_line{
     $entity{TSERVER}{BY_UUID}{$uuid}={
 		HOST=>$host,PORT=>$port,REGION=>$region,ZONE=>$zone,UPTIME=>$uptime
 	        };
+	TableInfo::->Register_Region_Zone($region, $zone, $uuid);
 }
 
 sub Parse_Tablet_line{
@@ -412,10 +531,6 @@ sub Process_Headers{
 			my $hdr_item = $1;
 			
 		   	$entity{$current_entity}{HEADERS}[$hdr_idx] =  {NAME=>$hdr_item, START=>$-[0], END=> $+[0], LEN=> $+[0] - $-[0]};
-			#if ($entity{$current_entity}{HEADERS}[$hdr_idx]{START} != ($entity{$current_entity}{PREVIOUS_HEADERS}[$hdr_idx]{START}||=0)){
-			#	print "-- Hdr: ",$entity{$current_entity}{HEADERS}[$hdr_idx]{NAME} , " changed from ",
-			#	      $entity{$current_entity}{PREVIOUS_HEADERS}[$hdr_idx]{START}," to ",$entity{$current_entity}{HEADERS}[$hdr_idx]{START},"\n";
-		    #}
 			$hdr_idx++;
 		}
 }
@@ -441,11 +556,31 @@ sub Set_Transaction{
 	   # no-op
    }
 }
+
+sub unixtime_to_printable{
+	my ($unixtime,$format) = @_;
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($unixtime);
+	if (not defined $format  or  $format eq "YYYY-MM-DD HH:MM:SS"){
+       return sprintf("%04d-%02d-%02d %02d:%02d:%02d", $year+1900, $mon+1, $mday, $hour, $min, $sec);
+	}
+	if (not defined $format  or  $format eq "YYYY-MM-DD HH:MM"){
+       return sprintf("%04d-%02d-%02d %02d:%02d", $year+1900, $mon+1, $mday, $hour, $min);
+	}	
+	if ($format eq "YYYY-MM-DD"){
+		  return sprintf("%04d-%02d-%02d", $year+1900, $mon+1, $mday);
+	}
+	die "ERROR: Unsupported format:'$format' ";
+}
 ####################################################################################
 BEGIN{
-package TableInfo;
+package TableInfo; # Also provides Region/Zone info
 
 my %collection = (); # Collection of Tableinfo objects, key is namespace:table_name:uuid  
+our %region_zone = ();
+our %Tserver_to_region_zone=();
+our %Tablet_by_region_zone = ();
+our %Tablet_bytes=(); # wal + SST, in bytes, indexed by tablet_uuid 
+our $tablet_bucket_max     = 0; 
 my %field      = (   # Key=Database field name
 	TABLE_UUID		=>{TYPE=>'TEXT', SOURCE=>'table_uuid', SEQ=>3},
 	NAMESPACE		=>{TYPE=>'TEXT', SOURCE=>'namespace' , SEQ=>1},
@@ -513,6 +648,19 @@ sub collect{
 	}
 	$start_key % $self->{KEYS_PER_TABLET} != 0 and $self->{KEY_RANGE_OVERLAP}++; 
 	$self->{KEYRANGELIST}[int($start_key / $self->{KEYS_PER_TABLET}) ] ++;
+
+	my ($region,$zone) = @{ $Tserver_to_region_zone{ $node_uuid } };
+	return if $tablet->{status} eq 'TABLET_DATA_TOMBSTONED';
+    ##$region_zone{$region}{$zone}{TABLET}{ $tablet->{tablet_uuid} }++;
+	my $replicas = ++$Tablet_by_region_zone{$tablet->{tablet_uuid}}{$region}{$zone};
+	$Tablet_bytes{ $tablet->{tablet_uuid} } = $tablet->{sst_size} + $tablet->{wal_size}; # Keep only ONE instance worth
+	$tablet_bucket_max = $replicas if $replicas > $tablet_bucket_max;
+}
+
+sub Register_Region_Zone{ 
+	my ($class, $region, $zone, $tserver_uuid) = @_;
+	push @{ $region_zone{$region}{$zone}{TSERVER} }, $tserver_uuid; 
+	$Tserver_to_region_zone{$tserver_uuid} = [$region, $zone];
 }
 
 sub Table_Report{ # CLass method
@@ -570,8 +718,50 @@ sub Table_Report{ # CLass method
         FROM tableinfo
         WHERE sst_table_mb > 5000
         ORDER by sst_table_mb desc;
-
 __tablet_estimate__
+
+	# R e g i o n / Z o n e info
+
+    print << "__region_zone_tablets__";
+
+	CREATE TABLE region_zone_tablets(
+		region		  TEXT,
+		zone		  TEXT,
+		tservers	  INTEGER,
+		missing_replicas TEXT,
+__region_zone_tablets__
+    print  # Dynamically generate columns..
+	       map ({"\[${_}_replicas\]   TEXT,\n"} 1..$tablet_bucket_max),
+	      "balanced TEXT\n",
+	      ");\n";
+		
+
+	for my $r (sort keys %region_zone){
+		for my $z (sort keys %{ $region_zone{$r} }){
+			#print "---REGION: $r  $z  ----- ", scalar(keys %{$region_zone{$r}{$z}{TABLET}}), " unique tablets ----\n";
+			$Tablet_by_region_zone{$_}{$r}{$z} ||= 0 for keys %Tablet_by_region_zone;
+
+			my ( $replica_count, $missing_bytes, @replica_bucket);
+			for my $t (keys %Tablet_by_region_zone){
+				my $replicas = $Tablet_by_region_zone{$t}{$r}{$z} ;
+				if ($replicas == 0){
+					$missing_bytes += $Tablet_bytes{$t};
+				}
+				$replica_bucket[ $replicas ]++;
+				$replica_count++;
+			}
+			# Update missing bytes, and total tablets in the "1" bucket
+			my @replica_bucket_text = map {$replica_bucket[$_] ||= 0} 0..$tablet_bucket_max ; # copy it , zeroing undefs
+			$replica_bucket_text[0] = $replica_bucket[0] . sprintf(' (%.1f GB)',$missing_bytes/1024**3) if $missing_bytes;
+			$replica_bucket_text[1] = $replica_bucket[1] . "/" . $replica_count;
+			
+			print "INSERT INTO region_zone_tablets VALUES('$r','$z',",
+			      scalar(@{$region_zone{$r}{$z}{TSERVER}}), ",",    # Tserver count
+                  map({"'" . $replica_bucket_text[$_] . "', "}0..$tablet_bucket_max),
+                  ((grep {$replica_count == $replica_bucket[$_]} 1..$tablet_bucket_max) ? "'YES'": "'NO'"),
+				  ");\n",
+		} 
+	}
 };
 1;	
 } # End of TableInfo
