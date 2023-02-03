@@ -1,8 +1,9 @@
 #!/bin/bash
 
-VERSION=0.1.1
+VERSION=0.1.2
 
-# TODO: Do a bunch of `set` things for error handling
+set -o nounset
+set -o pipefail
 
 AWK=/usr/bin/awk
 BASENAME=/usr/bin/basename
@@ -129,8 +130,8 @@ req_extensions = v3_req
 
 [v3_req]
 basicConstraints = critical, CA:FALSE
-authorityKeyIdentifier=keyid:always,issuer:always
-subjectKeyIdentifier=hash
+authorityKeyIdentifier = keyid:always,issuer:always
+subjectKeyIdentifier = hash
 keyUsage = digitalSignature, nonRepudiation, keyEncipherment, keyCertSign
 CLCRTCNF
 }
@@ -147,8 +148,8 @@ req_extensions = v3_req
 
 [v3_req]
 basicConstraints = critical, CA:FALSE
-authorityKeyIdentifier=keyid:always,issuer:always
-subjectKeyIdentifier=hash
+authorityKeyIdentifier = keyid:always,issuer:always
+subjectKeyIdentifier = hash
 keyUsage = digitalSignature, nonRepudiation, keyEncipherment, keyCertSign
 subjectAltName = @alt_names
 
@@ -274,8 +275,9 @@ else
 fi
 
 # If the root cert doesn't have a Subject Key Identifier, we need to regenerate it
-# TODO: Handle OpenSSL versions where the -ext flag isn't supported
-root_subject_key_id=$($OPENSSL x509 -in $ROOT_CERT -noout -ext subjectKeyIdentifier )
+# It would be better to use -ext SubjectKeyIdentifier here but ancient openssl releases
+# (1.0.2 and the like) don't support that flag.
+root_subject_key_id=$($OPENSSL x509 -in $ROOT_CERT -noout -text | grep -A1 "Subject Key Identifier" )
 if [[ $? -ne 0 ]]; then
   fatal 2 "Failed to read certificate '$ROOT_CERT' while checking Subject Key Identifier,"
 fi
@@ -372,6 +374,9 @@ for NODE in $NODELIST; do
   gen_node_crt_conf $NODE
   debug "Generating node certificate for node $NODE"
   $OPENSSL x509 -req -in $WORKDIR/node.$NODE.csr -CA $ROOT_CERT -CAkey $ROOT_KEY -set_serial $($DATE "+%s%3N") -out $WORKDIR/node.$NODE.crt -days $NODE_CERT_DAYS -sha256 -extensions v3_req -extfile $NODE_CRT_CONF_FILE
+  if [[ "$?" -ne 0 ]]; then
+    fatal 5 "Failed to generate new node certificate for node $NODE. Unable to continue."
+  fi
 done
 
 # Copy new cert files to the nodes
