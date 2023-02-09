@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 ##########################################################################
 ## Tablet Report Parser
+##    Parses the "tablet report" created by yugatool, and creates a sqlite DB.
 ## See KB: https://yugabyte.zendesk.com/knowledge/articles/12124512476045/en-us
 
 # Run instructions:
@@ -23,7 +24,7 @@
 # 2: Run THIS script  - which reads the tablet report and generates SQL.
 #    Feed the generated SQL into sqlite3:
 
-#        $ perl tablet_report_parser.pl tablet-report-09-20T14.out | sqlite3 tablet-report-09-20T14.sqlite
+#        $ perl tablet_report_parser.pl tablet-report-09-20T14.out
 
 # 3: Run Analysis using SQLITE ---
 
@@ -35,16 +36,16 @@
 #         ----------
 #         2321
 #         sqlite> select *  from leaderless limit 3;
-#         tablet_uuid                       table_name    node_uuid                         status                        ip
-#         --------------------------------  ------------  --------------------------------  ----------------------------  -----------
-#         67da88ffc8a54c63821fa85d82aaf463  custaccessid  5a720d3bc58f409c9bd2a7e0317f2663  NO_MAJORITY_REPLICATED_LEASE  10.185.8.18
-#         31a7580dba224fcfb2cc57ec07aa056b  packetdocume  5a720d3bc58f409c9bd2a7e0317f2663  NO_MAJORITY_REPLICATED_LEASE  10.185.8.18
-#         9795475a798d411cb25c1627df13a122  packet        5a720d3bc58f409c9bd2a7e0317f2663  NO_MAJORITY_REPLICATED_LEASE  10.185.8.18
+#         tablet_uuid    table_name    node_uuid     status                        ip
+#         -------------  ------------  ------------  ----------------------------  -----------
+#         67da88ffc8a54  custacce      5a720d3bc58f  NO_MAJORITY_REPLICATED_LEASE  10.xxx.yyy.z
+#         31a7580dba224  packetdoc     5a720d3bc58f  NO_MAJORITY_REPLICATED_LEASE  10.xxx.yyy.z
+#         9795475a798d4  packetx       5a720d3bc58f  NO_MAJORITY_REPLICATED_LEASE  10.xxx.yyy.z
 #         sqlite>
 
 
 ##########################################################################
-our $VERSION = "0.29";
+our $VERSION = "0.30";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -96,7 +97,7 @@ our $USAGE = << "__USAGE__";
   ## See KB: $ANSICOLOR{UNDERLINE}https://yugabyte.zendesk.com/knowledge/articles/12124512476045/en-us$ANSICOLOR{NORMAL}
   
   The input to this program is a "tablet report" created by yugatool.
-  The default output is a sqlite database.
+  The default output is a sqlite database containing various reports.
 
   $ANSICOLOR{REVERSE}TYPICAL/DEFAULT/PREFERRED$ANSICOLOR{NORMAL} usage:
     
@@ -113,6 +114,12 @@ my ($SQL_OUTPUT_FH, $output_sqlite_dbfilename); # Output file handle to feed to 
 if (my $inputfilename = $ARGV[0]){
 	# User has specified and argument (Default usage) - we will process it as a filename
 	-f $inputfilename or die "ERROR: No file '$inputfilename'";
+	if ($inputfilename =~/\.gz$/){# Input is compressed
+		print $ANSICOLOR{GREEN},"$inputfilename appears to be a compressed file.$ANSICOLOR{BRIGHT_GREEN} Auto-gunzipping it on the fly...$ANSICOLOR{NORMAL}\n";
+		open (STDIN,"-|", "gunzip -c $inputfilename") or die "ERROR: Could not gunzip $inputfilename: $!";
+		shift @ARGV; # drop the filename from stdin, so it will read the STDING FH
+		$inputfilename = substr($inputfilename,0,-3); # Drop the ".gz"
+	}
 	$output_sqlite_dbfilename = $inputfilename . ".sqlite";
 	if ($opt{AUTORUN_SQLITE}){
 		if ($opt{SQLITE_ERROR}){
@@ -129,9 +136,10 @@ if (my $inputfilename = $ARGV[0]){
             rename $output_sqlite_dbfilename, $rename_to or die "ERROR:cannot rename: $!";
 			sleep 2; # Allow time to read the message 
 		}
-		print  $opt{STARTTIME}," $0 version $VERSION\n",
-		   "\tReading $inputfilename,\n",
-		   "\tcreating/updating sqlite db $output_sqlite_dbfilename.\n";
+		print  $opt{STARTTIME},$ANSICOLOR{BRIGHT_BLUE}," $0 version $VERSION\n",
+		   $ANSICOLOR{BRIGHT_GREEN},"\tReading $inputfilename,\n",$ANSICOLOR{NORMAL},
+		   "\tcreating/updating sqlite db $ANSICOLOR{BRIGHT_RED}$output_sqlite_dbfilename$ANSICOLOR{NORMAL}.\n";
+
 		open ($SQL_OUTPUT_FH, "|-", "sqlite3 $output_sqlite_dbfilename")
 		    or die "ERROR: Could not start sqlite3 : $!";
         select $SQL_OUTPUT_FH; # All subsequent "print" goes to this file handle.
