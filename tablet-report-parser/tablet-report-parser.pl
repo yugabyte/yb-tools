@@ -45,7 +45,7 @@
 
 
 ##########################################################################
-our $VERSION = "0.30";
+our $VERSION = "0.31";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -643,7 +643,7 @@ sub collect{
 	if (0 == ($self->{UNIQ_TABLETS_ESTIMATE}||=0)){
 	   # Need to calcuate this 	
 	   $self->{KEYS_PER_TABLET}        = $end_key - $start_key; # keys < $end key, so don't add 1. 
-	   $self->{UNIQ_TABLETS_ESTIMATE} = int( (0xffff) / $self->{KEYS_PER_TABLET} ); # Truncate decimals 
+	   $self->{UNIQ_TABLETS_ESTIMATE} = int( (0xffff) / ($self->{KEYS_PER_TABLET} || 1) ); # Truncate decimals 
 	}
 	$tablet->{lease_status} eq 'HAS_LEASE' and $self->{LEADER_TABLETS}++;
 	if ($end_key == 0xffff){
@@ -654,9 +654,12 @@ sub collect{
 		#print ".print ERROR:Line $.: Tablet $tablet->{tablet_uuid} offsets $end_key - $start_key dont match diff=$self->{KEYS_PER_TABLET}\n";
 		$self->{UNMATCHED_KEY_SIZE}++;
 	}
-	$start_key % $self->{KEYS_PER_TABLET} != 0 and $self->{KEY_RANGE_OVERLAP}++; 
-	$self->{KEYRANGELIST}[int($start_key / $self->{KEYS_PER_TABLET}) ] ++;
-
+	if ($self->{KEYS_PER_TABLET} == 0){
+		$self->{KEY_RANGE_OVERLAP}++
+	}else{
+		$start_key % $self->{KEYS_PER_TABLET} != 0 and $self->{KEY_RANGE_OVERLAP}++; 
+		$self->{KEYRANGELIST}[int($start_key / $self->{KEYS_PER_TABLET}) ] ++;
+	}
 	my ($region,$zone) = @{ $Tserver_to_region_zone{ $node_uuid } };
 	return if $tablet->{status} eq 'TABLET_DATA_TOMBSTONED';
     ##$region_zone{$region}{$zone}{TABLET}{ $tablet->{tablet_uuid} }++;
