@@ -1,6 +1,30 @@
 #!/bin/bash
 
-VERSION=0.1.2
+##############
+# HOW TO USE #
+#######################################################################################################################
+# Edit the variables in the script below (or use export, e.g. export NODELIST="10.1.1.101 10.2.1.102 10.3.1.103")     #
+# to match the configuration in the customer's environment.                                                           #
+#                                                                                                                     #
+# Mandatory variables:                                                                                                #
+#  - NODELIST - a space separated list of IPs or hostnames                                                            #
+#  - SSH_KEY - the absolute path to the SSH private key needed to log into the database nodes in $NODELIST            #
+#  - ROOT_CERT_DIR - the absolute path to the directory containing the root certificate. There may be multiple certs  #
+#    in the /opt/yugabyte/yugaware/data/certs/ directory. You can find the correct path by checking which cert is     #
+#    associated with the Universe in YBA, then finding the details in the security configs:                           #
+#      1. Go to Universes, select the Universe you want to rotate the cert for, then                                  #
+#           Actions => Edit Security => Encryption in-Transit                                                         #
+#         Make a note of the certificate name.                                                                        #
+#      2. Go to Configs => Security => Encryption in Transit, find the corresponding cert in the list and select      #
+#         Show details.                                                                                               #
+#                                                                                                                     #
+# There are several other variables such as SSH_PORT that may need to be changed depending on the customer's          #
+# environment.                                                                                                        #
+#                                                                                                                     #
+# Please report any issues with this script to Ian Anderson <ianderson@yugabyte.com>.                                 #
+#######################################################################################################################
+
+VERSION=0.1.3
 
 set -o nounset
 set -o pipefail
@@ -30,7 +54,7 @@ SSH_PORT="${SSH_PORT:=22}"
 SSH_USER="${SSH_USER:=yugabyte}"
 
 # TODO: Dynamically get platform root cert path
-ROOT_CERT_DIR=/opt/yugabyte/yugaware/data/certs/b024bd98-bbba-42ea-97a7-fa4d7bb3116d/973a6b3b-013e-40d3-8270-ef3ab4c0a534
+ROOT_CERT_DIR="${ROOT_CERT_DIR:=/opt/yugabyte/yugaware/data/certs/b024bd98-bbba-42ea-97a7-fa4d7bb3116d/973a6b3b-013e-40d3-8270-ef3ab4c0a534}"
 ROOT_CERT=$ROOT_CERT_DIR/ca.root.crt
 ROOT_KEY=$ROOT_CERT_DIR/ca.key.pem
 ROOT_CSR=$ROOT_CERT_DIR/ca.root.csr
@@ -50,7 +74,7 @@ RESTART_WAIT_SECONDS=5
 
 CLEANUP=true
 DEBUG=true
-# TODO: Add support for an expiry threshold flag, so certs are regenerated if the will expire with the next n days
+# TODO: Add support for an expiry threshold flag, so certs are regenerated if they will expire with the next n days
 FORCE=false
 
 TS=$($DATE +%s)
@@ -139,7 +163,7 @@ CLCRTCNF
 gen_node_crt_conf () {
   # TODO: Check whether this is a hostname or IP address
   node=$1
-  
+
   debug "Creating OpenSSL configuration file $NODE_CRT_CONF_FILE for node certificate"
   debug "Adding Subject Alternative Name '$node' to the certificate"
   $CAT << NOCRTCNF > $NODE_CRT_CONF_FILE
@@ -173,7 +197,7 @@ install_cert_files () {
   debug "Installing client certificate"
   do_ssh $node "$MV $REMOTE_CLIENT_TLS_DIR/yugabytedb.crt $REMOTE_CLIENT_TLS_DIR/yugabytedb_crt_$TS.old" && scp_put $node $CLIENT_CERT "$REMOTE_CLIENT_TLS_DIR/" || return $?
   #if [[ $? -ne 0 ]]; then return $?; fi
-  
+
   debug "Installing node certificate"
   do_ssh $node "$MV $REMOTE_NODE_TLS_DIR/node.$NODE.crt $REMOTE_NODE_TLS_DIR/node.${NODE}_crt_$TS.old" && scp_put $node "$WORKDIR/node.$NODE.crt" "$REMOTE_NODE_TLS_DIR/" || return $?
   #if [[ $? -ne 0 ]]; then return $?; fi
@@ -277,12 +301,17 @@ fi
 # If the root cert doesn't have a Subject Key Identifier, we need to regenerate it
 # It would be better to use -ext SubjectKeyIdentifier here but ancient openssl releases
 # (1.0.2 and the like) don't support that flag.
-root_subject_key_id=$($OPENSSL x509 -in $ROOT_CERT -noout -text | grep -A1 "Subject Key Identifier" )
+#
+# Checking the Subject Key Identifier is now a two stage process because a direct pipe to
+# grep produces ambiguous results during a failure. First we read the certificate into a
+# variable, then we grep that variable for the Subject Key Identifier using heredoc syntax.
+root_cert_text=$($OPENSSL x509 -in $ROOT_CERT -noout -text)
 if [[ $? -ne 0 ]]; then
   fatal 2 "Failed to read certificate '$ROOT_CERT' while checking Subject Key Identifier,"
 fi
 
-if [[ -z $root_subject_key_id ]]; then
+$GREP -A1 "Subject Key Identifier" <<< $root_cert_text
+if [[ $? -ne 0 ]]; then
   debug "Root certificate's Subject Key Identifier is missing. Need to regenerate."
   regenerate_root_cert=true
 else
