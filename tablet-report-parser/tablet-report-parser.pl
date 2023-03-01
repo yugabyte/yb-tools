@@ -42,10 +42,17 @@
 #         31a7580dba224  packetdoc     5a720d3bc58f  NO_MAJORITY_REPLICATED_LEASE  10.xxx.yyy.z
 #         9795475a798d4  packetx       5a720d3bc58f  NO_MAJORITY_REPLICATED_LEASE  10.xxx.yyy.z
 #         sqlite>
-
-
+#
+# EXTRAS:
+#   * Input giles can be gzip compressed (must end with .gz)
+#   * Versions >= 0.32 can parse multiple files (of different types):
+#   * Files with "entities" in the name are processed as "dump-entities" files.
+#      The "Entities" file is created using:
+#          curl <master-leader-hostname>:7000/dump-entities | gzip -c > $(date -I)-<master-leader-hostname>.dump-entities.gz
+#   * Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
+#         ./yugatool -m $MASTERS $TLS_CONFIG tablet_info $TABLET_UUID > $TABLET_UUID.txt 
 ##########################################################################
-our $VERSION = "0.32";
+our $VERSION = "0.33";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -55,6 +62,7 @@ BEGIN{ # Namespace forward declarations
   package TableInfo;
   package JSON_Analyzer;
   package entities_parser;
+  package Tablet_Info; #Handles  Output from yugatool tablet_info 
 } # End of namespace declaration 
 my %opt=(
 	STARTTIME	=>  unixtime_to_printable(time(),"YYYY-MM-DD HH:MM"),
@@ -102,18 +110,23 @@ our $USAGE = << "__USAGE__";
 
   $ANSICOLOR{REVERSE}TYPICAL/DEFAULT/PREFERRED usage:$ANSICOLOR{NORMAL} 
     
-   $ANSICOLOR{BRIGHT_YELLOW} perl $0 $ANSICOLOR{BRIGHT_CYAN}TABLET-REPORT-FROM-YUGATOOL$ANSICOLOR{NORMAL}
+   $ANSICOLOR{BRIGHT_YELLOW} perl $0 $ANSICOLOR{BRIGHT_CYAN}\[TABLET-REPORT-FROM-YUGATOOL] \[ENTITY-file] \[tablet-info-file]... $ANSICOLOR{NORMAL}
 
   This will create and output database file named TABLET-REPORT-FROM-YUGATOOL.sqlite
 
   $ANSICOLOR{FAINT}ADVANCED usage1: perl $0 TABLET-REPORT-FROM-YUGATOOL | sqlite3 OUTPUT-DB-FILE-NAME$ANSICOLOR{NORMAL}
   $ANSICOLOR{FAINT}ADVANCED usage2: perl $0 [<] TABLET-REPORT-FROM-YUGATOOL > OUTPUT.SQL$ANSICOLOR{NORMAL}
 
+ $ANSICOLOR{CYAN}* Input giles can be gzip compressed (must end with .gz)
+ $ANSICOLOR{CYAN}* Files with "entities" in the name are processed as "dump-entities" files. These are created by:
+ $ANSICOLOR{BLUE}       curl <master-leader-hostname>:7000/dump-entities | gzip -c > $(date -I)-<master-leader-hostname>.dump-entities.gz
+ $ANSICOLOR{CYAN}* Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
+ $ANSICOLOR{BLUE}      ./yugatool -m \$MASTERS \$TLS_CONFIG tablet_info \$TABLET_UUID > \$TABLET_UUID.txt $ANSICOLOR{NORMAL}
 __USAGE__
 
 if (-t STDIN and not @ARGV){
 	# No args supplied, and STDIN is a TERMINAL - show usage and quit.
-	print  $USAGE;
+	print  $USAGE,"\n\n";
 	die "ERROR: Input file-name not specified.";
 }
 my ($SQL_OUTPUT_FH, $output_sqlite_dbfilename); # Output file handle to feed to SQLITE
@@ -137,6 +150,9 @@ while (my $inputfilename = shift @more_input_specified){
 	if ($inputfilename =~/entities/i){
 		my $entities = entities_parser::->new();
 		$entities->Ingest_decode_and_Generate(); # Read from stdin
+	}elsif ($inputfilename =~/^\w{32}\.\w{3,4}$/){
+		my $tabletinfo = Tablet_Info::->new();
+
 	}else{
 		Process_tablet_report();
 	}
@@ -610,6 +626,9 @@ sub unixtime_to_printable{
 	}
 	die "ERROR: Unsupported format:'$format' ";
 }
+#=============================================================================================
+#  C l a s s e s 
+#=============================================================================================
 ####################################################################################
 BEGIN{
 package TableInfo; # Also provides Region/Zone info
@@ -1009,3 +1028,236 @@ __CREATE_TABLES__
 1;
 } # End of entities_parser
 ####################################################################################
+BEGIN{
+package Tablet_Info;
+# Parses output of yugatool "tablet_info"
+
+{ #Local classes - pre-declaration
+  package TSERVER;
+  package TABLET;
+}
+
+sub new{
+
+   print << "__CREATE_TABLES__";
+CREATE TABLE IF NOT EXISTS tserver(id TEXT PRIMARY KEY,
+            host TEXT ,placement_cloud TEXT ,placement_region TEXT ,
+			placement_zone TEXT ,port TEXT);
+CREATE TABLE IF NOT EXISTS TABLET_INFO ( UUID, server_uuid,last_status,
+    leader_lease_status,namespace_name,op_id_index,op_id_term,sst_files_disk_size,
+	state,table_id,table_name,tablet_data_state,leader);
+CREATE VIEW IF NOT EXISTS good_tablets AS
+    SELECT uuid,substr(server_uuid,1,5)||'..' as svr_uid,state,
+	substr(tablet_data_state,-10) as data_state,substr(leader,1,5)||'..' as leader,
+	substr(leader_lease_status,1,10) as ldr_lease,op_id_term, op_id_index,host as tserver
+	FROM TABLET_INFO,tserver 
+	WHERE  tablet_data_state !='TABLET_DATA_TOMBSTONED' and tserver.id=TABLET_INFO.server_uuid 
+	ORDER BY UUID,op_id_term asc, op_id_index asc,server_uuid;
+
+__CREATE_TABLES__
+
+	my ($tserver,$tablet, $action, @stack);
+
+	my %keyword_handler=(
+		tablet_id		=> sub{$tablet = TABLET::->find_or_create($_[1] ."+". $tserver->{ID});
+							$tablet->{UUID} = $_[1];
+							$tablet->Dependent("TSERVER",$tserver->{ID});
+							$tablet->{server_UUID} = $tserver->{ID};
+							},
+		map({$_=>sub{$tablet->{$_[0]}=$_[1]}} 
+			qw| namespace_name table_name table_id state tablet_data_state last_status
+					estimated_on_disk_size    consensus_metadata_disk_size 
+				wal_files_disk_size sst_files_disk_size uncompressed_sst_files_disk_size 
+				leader_lease_status
+			|),
+	);
+	my %attrib_complete_action=(
+		peers => sub {#print "Peer=",$_[0]->{permanent_uuid},"\n";
+						my $ts = TSERVER::->find_or_create($_[0]->{permanent_uuid});
+						$ts->populate_from_peer($_[0]);
+						$_[0]=undef;
+						$tablet->Dependent("TSERVER",$ts->{ID});
+						},
+
+		cstate => sub{$tablet->{LEADER} = $_[0]->{leader_uuid}},
+		op_id  => sub{$tablet->{'op_id_' . $_} = $_[0]->{$_} for keys %{$_[0]}},
+	);
+
+	while(<>){
+		next if m/^==/;
+		next if m/^\s*$/; # empty
+		next if m/^\d+:\s\d+$/; # 16:2
+		
+		if ( /\s*\[.+?\] \(UUID\s(\w+)\)/){  # [host:"240b:.." port:9100] (UUID 7a6..)"
+		$tserver = TSERVER::->find_or_create($1);
+		## $tablet and $tablet->Print();
+		next;
+		}
+		if (m/^\s*}\s*$/){ # Close }
+			my $completed = pop @stack;
+			my $action = $attrib_complete_action{$completed};
+			next unless $action;
+			my $target = $tablet;
+			for (@stack, $completed){ # include recently popped element 
+					$target = $target->{$_}; 
+			}
+			$action->($target);
+			next;
+		}	
+		if (my ($key,$val) = m/\s*(\w+):\s*(.+)/){
+		$val =~tr/\"\r\n//d;
+		if ($val eq "{"){
+			push @stack, $key;
+		}elsif (@stack){
+			my $target = $tablet;
+			for (@stack){
+					$target = $target->{$_}||={}; 
+			}
+			$target->{$key} = $val;
+			next;
+		}
+		my $action = $keyword_handler{$key} or next;
+
+		$action->($key,$val,$_);
+		next;	   
+		}
+	}
+
+	## $tablet and $tablet->Print(); # Debug
+
+	print "BEGIN TRANSACTION; -- $ARGV\n";
+
+	TSERVER::->for_each(
+		sub{
+			my ($ts) = @_;
+			$ts->Print_SQL();
+		}
+	);	
+
+	TABLET::->for_each(
+		sub{
+			my ($t) = @_;
+			$t->Print_SQL();
+		}
+	);
+
+	print "COMMIT;\n";	
+}
+
+
+1;
+} # End of Tablet_Info
+#=============================================================================================
+BEGIN{
+package Generic::Class;
+use Carp;
+
+my %collection; # Index by {$class}{$id} get an instance
+
+sub find_or_create{
+  my ($class,$id,$att_ref) = @_;
+  confess "ERROR: object ID required" unless $id;
+
+  return $collection{$class}{$id}  if $collection{$class}{$id};
+  #print "DEBUG:Creating object of class $class, id $id\n";
+  return $collection{$class}{$id} = bless({ID=>$id, %{$att_ref||{}}}, $class);
+}
+
+sub Dependent{ # getter/setter
+  my ($self,$dep_type,$dep_id,$dep_att) = @_;
+  my $class = ref $self;
+  my $dep = find_or_create($dep_type,$dep_id,$dep_att); 
+  $self->{$dep_type}{$dep_id} and return $dep;
+  $self->{DEP_COUNTS}{$dep_type}++;
+  return $self->{$dep_type}{$dep_id} = $dep;
+}
+
+sub for_each_dependent{
+  my ($self,$dep_type,$callback) = @_;
+  confess  "ERROR: Callback method required" unless $callback and ref($callback) eq "CODE";
+  $callback->(  $_ ) for keys %{$self->{$dep_type}};
+}
+
+sub for_each{
+  my ($class,$callback) = @_;
+  confess "ERROR: Callback method required" unless $callback and ref($callback) eq "CODE";
+  $callback->(  $_ ) for values %{$collection{$class}};
+}
+
+sub Print{
+	my ($self) = @_;
+    print "OBJECT ",ref($self)," named $self->{ID} (";
+	print join(",", map {"$_=$self->{$_}"} grep {!ref($self->{$_})}sort keys %$self),")\n";
+    for my $dep_type (keys %{$self->{DEP_COUNTS}}){
+	   print "\t$self->{DEP_COUNTS}{$dep_type} ${dep_type}'s :";
+	   $self->for_each_dependent(
+	     $dep_type,
+	     sub{print $_[0]," "}
+	   );
+    }
+    $self->{DEP_COUNTS} and print "\n";
+}
+
+sub Merge_Into{
+   my ($self, $other) = @_;
+   $other->{$_} ||= $self->{$_} for keys %$self; # Shallow copy
+   $self->Delete();
+   return $other;
+}
+
+sub Delete{
+   my ($self) = @_;
+   my $class = ref $self;
+   delete $collection{$class}{$self->{ID}};
+}	
+
+} # End of generic class
+#=============================================================================================
+BEGIN{
+package TSERVER;
+use parent  -norequire, "Generic::Class";
+
+my %collection; # Index by {$class}{$id} get an instance
+
+sub populate_from_peer{
+  my ($self,$peer) = @_;
+  #print "Populating tserver\n";  
+  $self->{$_} ||= $peer->{cloud_info}{$_} for keys %{ $peer->{cloud_info} };
+  $self->{$_} ||= $peer->{last_known_private_addr}{$_} for keys %{ $peer->{last_known_private_addr} };
+}
+
+sub Print_SQL{
+  my ($self) = @_;
+  print "INSERT OR IGNORE INTO TSERVER (",
+     "id, host  ,placement_cloud ,placement_region ,placement_zone ,port )",
+        " VALUES (\n   '",
+		join("','",map {$self->{$_}||''} qw |
+		     ID host  placement_cloud placement_region placement_zone port
+		   |),
+        "');\n";		
+}
+
+1;
+} # End of TSERVER
+#======================================================================================
+
+BEGIN{
+package TABLET;
+
+use parent  -norequire, "Generic::Class";
+
+sub Print_SQL{
+  my ($self) = @_;
+  print "INSERT OR REPLACE  INTO TABLET_INFO (",
+        " UUID, server_uuid,last_status,  leader_lease_status,namespace_name,op_id_index,op_id_term,",
+		"sst_files_disk_size,state,table_id,table_name,tablet_data_state,leader)",
+        " VALUES (\n   '",
+		join("','",	map {$self->{$_}||''} qw |UUID server_UUID last_status 
+    leader_lease_status namespace_name op_id_index op_id_term sst_files_disk_size 
+	state table_id table_name tablet_data_state LEADER |),
+        "');\n";		
+}
+1;
+} # End of TABLET
+#======================================================================================
+#======================================================================================
