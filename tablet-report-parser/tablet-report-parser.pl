@@ -117,7 +117,7 @@ our $USAGE = << "__USAGE__";
   $ANSICOLOR{FAINT}ADVANCED usage1: perl $0 TABLET-REPORT-FROM-YUGATOOL | sqlite3 OUTPUT-DB-FILE-NAME$ANSICOLOR{NORMAL}
   $ANSICOLOR{FAINT}ADVANCED usage2: perl $0 [<] TABLET-REPORT-FROM-YUGATOOL > OUTPUT.SQL$ANSICOLOR{NORMAL}
 
- $ANSICOLOR{CYAN}* Input giles can be gzip compressed (must end with .gz)
+ $ANSICOLOR{CYAN}* Input files can be gzip compressed (must end with .gz)
  $ANSICOLOR{CYAN}* Files with "entities" in the name are processed as "dump-entities" files. These are created by:
  $ANSICOLOR{BLUE}       curl <master-leader-hostname>:7000/dump-entities | gzip -c > $(date -I)-<master-leader-hostname>.dump-entities.gz
  $ANSICOLOR{CYAN}* Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
