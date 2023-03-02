@@ -305,7 +305,9 @@ fi
 # Checking the Subject Key Identifier is now a two stage process because a direct pipe to
 # grep produces ambiguous results during a failure. First we read the certificate into a
 # variable, then we grep that variable for the Subject Key Identifier using heredoc syntax.
-root_cert_text=$($OPENSSL x509 -in $ROOT_CERT -noout -text)
+cmd="$OPENSSL x509 -in $ROOT_CERT -noout -text"
+debug "Executing '${cmd}' to read root certificate"
+root_cert_text=$($cmd)
 if [[ $? -ne 0 ]]; then
   fatal 2 "Failed to read certificate '$ROOT_CERT' while checking Subject Key Identifier,"
 fi
