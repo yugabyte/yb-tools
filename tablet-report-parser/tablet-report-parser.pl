@@ -577,15 +577,15 @@ sub Parse_Tablet_line{
 
 sub Process_Headers{
 	my ($line,$current_entity, $entity) =@_;
-		$entity->{$current_entity}{PREVIOUS_HEADERS} = $entity->{$current_entity}{HEADERS};
-		$entity->{$current_entity}{HEADERS}=[]; # Zap it 
-		my $hdr_idx = 0;
-		while ( $line =~/([A-Z_]+)/g ){
-			my $hdr_item = $1;
-			
-		   	$entity->{$current_entity}{HEADERS}[$hdr_idx] =  {NAME=>$hdr_item, START=>$-[0], END=> $+[0], LEN=> $+[0] - $-[0]};
-			$hdr_idx++;
-		}
+	$entity->{$current_entity}{PREVIOUS_HEADERS} = $entity->{$current_entity}{HEADERS};
+	$entity->{$current_entity}{HEADERS}=[]; # Zap it 
+	my $hdr_idx = 0;
+	while ( $line =~/([A-Z_]+)/g ){
+		my $hdr_item = $1;
+		
+		$entity->{$current_entity}{HEADERS}[$hdr_idx] =  {NAME=>$hdr_item, START=>$-[0], END=> $+[0], LEN=> $+[0] - $-[0]};
+		$hdr_idx++;
+	}
 }
 
 BEGIN{
@@ -707,7 +707,9 @@ sub collect{
 	if ($self->{KEYS_PER_TABLET} == 0){
 		$self->{KEY_RANGE_OVERLAP}++
 	}else{
+		# start_key must be  an integer multiple of KEYS_PER_TABLET. If not, increment OVERLAP.
 		$start_key % $self->{KEYS_PER_TABLET} != 0 and $self->{KEY_RANGE_OVERLAP}++; 
+        # Keep a list of key ranges - will check for holes  in this later..
 		$self->{KEYRANGELIST}[int($start_key / $self->{KEYS_PER_TABLET}) ] ++;
 	}
 	my ($region,$zone) = @{ $Tserver_to_region_zone{ $node_uuid } };
