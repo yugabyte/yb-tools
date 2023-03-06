@@ -52,7 +52,7 @@
 #   * Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
 #         ./yugatool -m $MASTERS $TLS_CONFIG tablet_info $TABLET_UUID > $TABLET_UUID.txt 
 ##########################################################################
-our $VERSION = "0.33";
+our $VERSION = "0.34";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -272,30 +272,11 @@ ORDER BY namespace,region,zone;
 --WITH RECURSIVE
 --     cnt(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM cnt WHERE x<0xffff)
 --    INSERT INTO hexval  SELECT printf('0x%0.4x',x) ,x, NULL  FROM cnt;
---- Summary report ----
-CREATE VIEW summary_report AS
-	SELECT (SELECT count(*) from cluster where type='TSERVER') || ' TSERVERs, ' 
-	     || (SELECT count(DISTINCT table_name) FROM tablet) || ' Tables, ' 
-		 || (SELECT count(*) from tablet) || ' Tablets loaded.'
-		AS Summary_Report
-	UNION 
-	 SELECT count(*) || ' leaderless tablets found.(See "leaderless")' FROM leaderless
-	UNION
-	  SELECT sum(GE128MB) || ' wal files in ' ||sum(CASE WHEN GE128MB>0 then 1 else 0 END) 
-	        || ' tables are > 128MB' FROM large_wal
-	UNION
-	 SELECT (SELECT sum(tablet_count) FROM tablet_replica_summary WHERE replicas < 3) 
-			 || ' tablets have RF < 3. (See "tablet_replica_summary/detail")'
-	UNION
-	   SELECT count(*) || ' tables have unbalanced tablet sizes (see "unbalanced_tables")' 
-	   from unbalanced_tables 
-	UNION
-	   SELECT count(*) || ' Zones have unbalanced tablets (See "region_zone_tablets")'
-	    from  region_zone_tablets WHERE balanced='NO'
-	;
+
 CREATE VIEW version_info AS 
     SELECT '$0' as program, '$VERSION' as version, '$opt{STARTTIME}' AS run_on, '$opt{HOSTNAME}' as host;
 __SQL__
+# summary_report is moved towards the end, for older SQLITE which requires ALL components to exist when view created.
 
 my ( $line, $json_line, $current_entity);
 my %entity = (
@@ -395,13 +376,33 @@ my $tmpfile = "/tmp/tablet-report-analysis-settings$$";
 print << "__ENDING_STUFF__";
 SELECT '--- Completed. Available REPORT-NAMEs ---';
 .tables
-.output $tmpfile
-.databases
-.output stdout
-CREATE VIEW IF NOT EXISTS summary_report as SELECT 'No Summary available';
+--- Summary report ----
+CREATE VIEW summary_report AS
+	SELECT (SELECT count(*) from cluster where type='TSERVER') || ' TSERVERs, ' 
+	     || (SELECT count(DISTINCT table_name) FROM tablet) || ' Tables, ' 
+		 || (SELECT count(*) from tablet) || ' Tablets loaded.'
+		AS Summary_Report
+	UNION 
+	 SELECT count(*) || ' leaderless tablets found.(See "leaderless")' FROM leaderless
+	UNION
+	  SELECT sum(GE128MB) || ' wal files in ' ||sum(CASE WHEN GE128MB>0 then 1 else 0 END) 
+	        || ' tables are > 128MB' FROM large_wal
+	UNION
+	 SELECT (SELECT sum(tablet_count) FROM tablet_replica_summary WHERE replicas < 3) 
+			 || ' tablets have RF < 3. (See "tablet_replica_summary/detail")'
+	UNION
+	   SELECT count(*) || ' tables have unbalanced tablet sizes (see "unbalanced_tables")' 
+	   from unbalanced_tables 
+	UNION
+	   SELECT count(*) || ' Zones have unbalanced tablets (See "region_zone_tablets")'
+	    from  region_zone_tablets WHERE balanced='NO'
+	;
 SELECT '','--- Summary Report ---'
 UNION 
 SELECT '     ',* FROM summary_report;
+.output $tmpfile
+.databases
+.output stdout
 .quit
 __ENDING_STUFF__
 close STDOUT; # Done talking to sqlite3
