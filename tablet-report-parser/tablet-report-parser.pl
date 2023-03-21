@@ -52,7 +52,7 @@
 #   * Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
 #         ./yugatool -m $MASTERS $TLS_CONFIG tablet_info $TABLET_UUID > $TABLET_UUID.txt 
 ##########################################################################
-our $VERSION = "0.34";
+our $VERSION = "0.35";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -772,16 +772,14 @@ sub Table_Report{ # CLass method
 	print << "__tablet_estimate__";
    CREATE VIEW large_tables AS 
    SELECT namespace,tablename,uniq_tablet_count as uniq_tablets,
-      (sst_tot_bytes)*uniq_tablet_count/tot_tablet_count/1024/1024 as sst_table_mb,
+      (sst_tot_bytes)*uniq_tablet_count/tot_tablet_count/1024/1024 as sst_RF1_mb,
 	  (sst_tot_bytes /tot_tablet_count/1024/1024) as tablet_size_mb,
-	  round((sst_tot_bytes /1024.0/1024.0/8.0  + 5000) / 10000,1) as rec_8node_tablets,
-	  round((sst_tot_bytes /1024.0/1024.0/12.0 + 5000) / 10000,1) as rec_12node_tablets,
-	  round((sst_tot_bytes /1024.0/1024.0/24.0 + 5000) / 10000,1) as rec_24node_tablets,
+	  round((sst_tot_bytes*uniq_tablet_count/tot_tablet_count /1024.0/1024.0 + 5000) / 10000,1) as recommended_tablets,
 	   tot_tablet_count / uniq_tablet_count as repl_factor,
-      (wal_tot_bytes)*uniq_tablet_count/tot_tablet_count/1024/1024 as wal_table_mb
+      (wal_tot_bytes)*uniq_tablet_count/tot_tablet_count/1024/1024 as wal_RF1_mb
         FROM tableinfo
-        WHERE sst_table_mb > 5000
-        ORDER by sst_table_mb desc;
+        WHERE sst_RF1_mb > 5000
+        ORDER by sst_RF1_mb desc;
 __tablet_estimate__
 
 	# R e g i o n / Z o n e info
