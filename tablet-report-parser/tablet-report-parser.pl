@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 ##########################################################################
 ## Tablet Report Parser
+##    Parses the "tablet report" created by yugatool, and creates a sqlite DB.
 ## See KB: https://yugabyte.zendesk.com/knowledge/articles/12124512476045/en-us
 
 # Run instructions:
@@ -16,18 +17,18 @@
 #		  -m $MASTERS \
 #		  $TLS_CONFIG \
 #		  --tablet-report \
-#		  > /tmp/tablet-report-$(hostname).out
+#		  | gzip -c > /tmp/tablet-report-$(hostname).out.gz
 #
 #       You can also use the "-o json" option. This code accepts that output also.
 
 # 2: Run THIS script  - which reads the tablet report and generates SQL.
 #    Feed the generated SQL into sqlite3:
 
-#        $ perl tablet_report_parser.pl tablet-report-09-20T14.out | sqlite3 tablet-report-09-20T14.sqlite
+#        $ perl tablet_report_parser.pl tablet-report.out[.gz]
 
 # 3: Run Analysis using SQLITE ---
 
-#         $ sqlite3 -header -column tablet-report-09-20T14.sqlite
+#         $ sqlite3 -header -column tablet-report.out.sqlite
 #         SQLite version 3.31.1 2020-01-27 19:55:54
 #         Enter ".help" for usage hints.
 #         sqlite> select count(*) from leaderless;
@@ -35,16 +36,23 @@
 #         ----------
 #         2321
 #         sqlite> select *  from leaderless limit 3;
-#         tablet_uuid                       table_name    node_uuid                         status                        ip
-#         --------------------------------  ------------  --------------------------------  ----------------------------  -----------
-#         67da88ffc8a54c63821fa85d82aaf463  custaccessid  5a720d3bc58f409c9bd2a7e0317f2663  NO_MAJORITY_REPLICATED_LEASE  10.185.8.18
-#         31a7580dba224fcfb2cc57ec07aa056b  packetdocume  5a720d3bc58f409c9bd2a7e0317f2663  NO_MAJORITY_REPLICATED_LEASE  10.185.8.18
-#         9795475a798d411cb25c1627df13a122  packet        5a720d3bc58f409c9bd2a7e0317f2663  NO_MAJORITY_REPLICATED_LEASE  10.185.8.18
+#         tablet_uuid    table_name    node_uuid     status                        ip
+#         -------------  ------------  ------------  ----------------------------  -----------
+#         67da88ffc8a54  custacce      5a720d3bc58f  NO_MAJORITY_REPLICATED_LEASE  10.xxx.yyy.z
+#         31a7580dba224  packetdoc     5a720d3bc58f  NO_MAJORITY_REPLICATED_LEASE  10.xxx.yyy.z
+#         9795475a798d4  packetx       5a720d3bc58f  NO_MAJORITY_REPLICATED_LEASE  10.xxx.yyy.z
 #         sqlite>
-
-
+#
+# EXTRAS:
+#   * Input giles can be gzip compressed (must end with .gz)
+#   * Versions >= 0.32 can parse multiple files (of different types):
+#   * Files with "entities" in the name are processed as "dump-entities" files.
+#      The "Entities" file is created using:
+#          curl <master-leader-hostname>:7000/dump-entities | gzip -c > $(date -I)-<master-leader-hostname>.dump-entities.gz
+#   * Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
+#         ./yugatool -m $MASTERS $TLS_CONFIG tablet_info $TABLET_UUID > $TABLET_UUID.txt 
 ##########################################################################
-our $VERSION = "0.29";
+our $VERSION = "0.35";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -53,6 +61,8 @@ use MIME::Base64;
 BEGIN{ # Namespace forward declarations
   package TableInfo;
   package JSON_Analyzer;
+  package entities_parser;
+  package Tablet_Info; #Handles  Output from yugatool tablet_info 
 } # End of namespace declaration 
 my %opt=(
 	STARTTIME	=>  unixtime_to_printable(time(),"YYYY-MM-DD HH:MM"),
@@ -92,56 +102,64 @@ my %ANSICOLOR = (
 );
 our $USAGE = << "__USAGE__";
   $ANSICOLOR{REVERSE}Tablet Report Parser$ANSICOLOR{YELLOW} $VERSION$ANSICOLOR{NORMAL}
-  ====================
+  $ANSICOLOR{GREEN}=========================$ANSICOLOR{NORMAL}
   ## See KB: $ANSICOLOR{UNDERLINE}https://yugabyte.zendesk.com/knowledge/articles/12124512476045/en-us$ANSICOLOR{NORMAL}
   
-  The input to this program is a "tablet report" created by yugatool.
-  The default output is a sqlite database.
+  The input to this program is a "$ANSICOLOR{CYAN}tablet report$ANSICOLOR{NORMAL}" created by yugatool.
+  The default output is a sqlite database containing various reports.
 
-  $ANSICOLOR{REVERSE}TYPICAL/DEFAULT/PREFERRED$ANSICOLOR{NORMAL} usage:
+  $ANSICOLOR{REVERSE}TYPICAL/DEFAULT/PREFERRED usage:$ANSICOLOR{NORMAL} 
     
-   $ANSICOLOR{BRIGHT_YELLOW} perl $0 $ANSICOLOR{CYAN}TABLET-REPORT-FROM-YUGATOOL$ANSICOLOR{NORMAL}
+   $ANSICOLOR{BRIGHT_YELLOW} perl $0 $ANSICOLOR{BRIGHT_CYAN}\[TABLET-REPORT-FROM-YUGATOOL] \[ENTITY-file] \[tablet-info-file]... $ANSICOLOR{NORMAL}
 
   This will create and output database file named TABLET-REPORT-FROM-YUGATOOL.sqlite
 
   $ANSICOLOR{FAINT}ADVANCED usage1: perl $0 TABLET-REPORT-FROM-YUGATOOL | sqlite3 OUTPUT-DB-FILE-NAME$ANSICOLOR{NORMAL}
   $ANSICOLOR{FAINT}ADVANCED usage2: perl $0 [<] TABLET-REPORT-FROM-YUGATOOL > OUTPUT.SQL$ANSICOLOR{NORMAL}
 
+ $ANSICOLOR{CYAN}* Input files can be gzip compressed (must end with .gz)
+ $ANSICOLOR{CYAN}* Files with "entities" in the name are processed as "dump-entities" files. These are created by:
+ $ANSICOLOR{BLUE}       curl <master-leader-hostname>:7000/dump-entities | gzip -c > $(date -I)-<master-leader-hostname>.dump-entities.gz
+ $ANSICOLOR{CYAN}* Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
+ $ANSICOLOR{BLUE}      ./yugatool -m \$MASTERS \$TLS_CONFIG tablet_info \$TABLET_UUID > \$TABLET_UUID.txt $ANSICOLOR{NORMAL}
 __USAGE__
-my ($SQL_OUTPUT_FH, $output_sqlite_dbfilename); # Output file handle to feed to SQLITE
 
-if (my $inputfilename = $ARGV[0]){
-	# User has specified and argument (Default usage) - we will process it as a filename
-	-f $inputfilename or die "ERROR: No file '$inputfilename'";
-	$output_sqlite_dbfilename = $inputfilename . ".sqlite";
-	if ($opt{AUTORUN_SQLITE}){
-		if ($opt{SQLITE_ERROR}){
-			print $USAGE;
-			die "ERROR: $opt{SQLITE_ERROR}";
-		}
-		if (-e $output_sqlite_dbfilename){
-			my $mtime     = (stat  $output_sqlite_dbfilename)[9];
-			my $rename_to = $inputfilename .".". unixtime_to_printable($mtime,"YYYY-MM-DD") . ".sqlite";
-            if  (-e $rename_to){
-               die "ERROR:Files $output_sqlite_dbfilename and  $rename_to already exist. Please cleanup!";
-			} 
-			print "WARNING: Renaming Existing file $output_sqlite_dbfilename to $rename_to.\n";
-            rename $output_sqlite_dbfilename, $rename_to or die "ERROR:cannot rename: $!";
-			sleep 2; # Allow time to read the message 
-		}
-		print  $opt{STARTTIME}," $0 version $VERSION\n",
-		   "\tReading $inputfilename,\n",
-		   "\tcreating/updating sqlite db $output_sqlite_dbfilename.\n";
-		open ($SQL_OUTPUT_FH, "|-", "sqlite3 $output_sqlite_dbfilename")
-		    or die "ERROR: Could not start sqlite3 : $!";
-        select $SQL_OUTPUT_FH; # All subsequent "print" goes to this file handle.
-    }
-}elsif (-t STDIN){
+if (-t STDIN and not @ARGV){
 	# No args supplied, and STDIN is a TERMINAL - show usage and quit.
-	print  $USAGE;
+	print  $USAGE,"\n\n";
 	die "ERROR: Input file-name not specified.";
 }
+my ($SQL_OUTPUT_FH, $output_sqlite_dbfilename); # Output file handle to feed to SQLITE
+my @more_input_specified = @ARGV;
+@ARGV=(); # Zap it -we will specify each file to feed into <>
 
+while (my $inputfilename = shift @more_input_specified){
+	# User has specified and argument (Default usage) - we will process it as a filename
+	-f $inputfilename or die "ERROR: No file '$inputfilename'";
+	if ($inputfilename =~/\.gz$/){# Input is compressed
+		print $ANSICOLOR{GREEN},"$inputfilename appears to be a compressed file.$ANSICOLOR{BRIGHT_GREEN} Auto-gunzipping it on the fly...$ANSICOLOR{NORMAL}\n";
+		open (STDIN,"-|", "gunzip -c $inputfilename") or die "ERROR: Could not gunzip $inputfilename: $!";
+		$inputfilename = substr($inputfilename,0,-3); # Drop the ".gz"
+	}else{
+		open (STDIN,"<",  $inputfilename) or die "ERROR: Could not open $inputfilename: $!";
+	}
+
+	if (not $output_sqlite_dbfilename){
+		Setup_Output_Processing($inputfilename );
+    }
+	if ($inputfilename =~/entities/i){
+		my $entities = entities_parser::->new();
+		$entities->Ingest_decode_and_Generate(); # Read from stdin
+	}elsif ($inputfilename =~/^\w{32}\.\w{3,4}$/){
+		my $tabletinfo = Tablet_Info::->new();
+
+	}else{
+		Process_tablet_report();
+	}
+	#close STDIN; # Causes errors if closed. Works fine leaving parent STDIN open.
+}
+
+sub Process_tablet_report{
 # Sqlite 3.7 does not support ".print", so we use wierd SELECT statements to print  messages.
 print  << "__SQL__";
 SELECT '$0 Version $VERSION generating SQL on $opt{STARTTIME}';
@@ -254,32 +272,13 @@ ORDER BY namespace,region,zone;
 --WITH RECURSIVE
 --     cnt(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM cnt WHERE x<0xffff)
 --    INSERT INTO hexval  SELECT printf('0x%0.4x',x) ,x, NULL  FROM cnt;
---- Summary report ----
-CREATE VIEW summary_report AS
-	SELECT (SELECT count(*) from cluster where type='TSERVER') || ' TSERVERs, ' 
-	     || (SELECT count(DISTINCT table_name) FROM tablet) || ' Tables, ' 
-		 || (SELECT count(*) from tablet) || ' Tablets loaded.'
-		AS Summary_Report
-	UNION 
-	 SELECT count(*) || ' leaderless tablets found.(See "leaderless")' FROM leaderless
-	UNION
-	  SELECT sum(GE128MB) || ' wal files in ' ||sum(CASE WHEN GE128MB>0 then 1 else 0 END) 
-	        || ' tables are > 128MB' FROM large_wal
-	UNION
-	 SELECT (SELECT sum(tablet_count) FROM tablet_replica_summary WHERE replicas < 3) 
-			 || ' tablets have RF < 3. (See "tablet_replica_summary/detail")'
-	UNION
-	   SELECT count(*) || ' tables have unbalanced tablet sizes (see "unbalanced_tables")' 
-	   from unbalanced_tables 
-	UNION
-	   SELECT count(*) || ' Zones have unbalanced tablets (See "region_zone_tablets")'
-	    from  region_zone_tablets WHERE balanced='NO'
-	;
+
 CREATE VIEW version_info AS 
     SELECT '$0' as program, '$VERSION' as version, '$opt{STARTTIME}' AS run_on, '$opt{HOSTNAME}' as host;
 __SQL__
+# summary_report is moved towards the end, for older SQLITE which requires ALL components to exist when view created.
 
-my ( $line, $json_line, $current_entity, $in_transaction);
+my ( $line, $json_line, $current_entity);
 my %entity = (
     REPORTINFO => {REGEX => '^\[ ReportInfo \]', HANDLER=>sub{print "--$.:$line\n"}, COUNT=>0},
     CLUSTER => {REGEX=>'^\[ Cluster \]', HANDLER=>\&Parse_Cluster_line,              COUNT=>0},
@@ -307,12 +306,7 @@ my %entity = (
 									 
 	},
 );
-my %kilo_multiplier=(
-    BYTES	=> 1,
-	KB		=> 1024,
-	MB		=> 1024*1024,
-	GB		=> 1024*1024*1024,
-);
+
 my $entity_regex = join "|", map {$entity{$_}{REGEX}} keys %entity;
 
 $current_entity = "CLUSTER"; # This line should have been in the report, but first item is the cluster 
@@ -347,18 +341,18 @@ while ($line=<>){
 		$entity{$current_entity}{COUNT} = 0;
 		Set_Transaction(1,"Starting $current_entity");
 		next unless my $extract_sub = $entity{$current_entity}{HDR_EXTRACT};
-		my @extracted_values = $extract_sub->($line);
+		my @extracted_values = $extract_sub->($line,$current_entity,\%entity);
 		$entity{$current_entity}{$_} = shift @extracted_values for @{$entity{$current_entity}{HDR_KEYS}};
 		print "--     for ", map({"$_=$entity{$current_entity}{$_} "} @{$entity{$current_entity}{HDR_KEYS}} ),"\n";
 		next;
 	}
     if (substr($line,0,1) eq " "  and  $line =~/^ [A-Z_\s]+$/ ){
-		Process_Headers();
+		Process_Headers($line,$current_entity,\%entity);
 		print "--Headers:", map({$_->{NAME} . "(",$_->{START},"), "} @{$entity{$current_entity}{HEADERS}}),"\n";
 		next;
 	}
     die "ERROR:Line $.: No context for $line" unless $current_entity;
-	$entity{$current_entity}{HANDLER}->(); # $line is global
+	$entity{$current_entity}{HANDLER}->($line,$current_entity,\%entity); # $line is global
 	$entity{$current_entity}{COUNT}++;
 }
 # --- End of Main loop ----
@@ -375,17 +369,40 @@ __MAIN_COMPLETE__
 	TableInfo::Table_Report();
 	Set_Transaction(0);
 }
+}
+#---------------------------------------------------------------------------------------------
 my $tmpfile = "/tmp/tablet-report-analysis-settings$$";
 
 print << "__ENDING_STUFF__";
 SELECT '--- Completed. Available REPORT-NAMEs ---';
 .tables
-.output $tmpfile
-.databases
-.output stdout
+--- Summary report ----
+CREATE VIEW summary_report AS
+	SELECT (SELECT count(*) from cluster where type='TSERVER') || ' TSERVERs, ' 
+	     || (SELECT count(DISTINCT table_name) FROM tablet) || ' Tables, ' 
+		 || (SELECT count(*) from tablet) || ' Tablets loaded.'
+		AS Summary_Report
+	UNION 
+	 SELECT count(*) || ' leaderless tablets found.(See "leaderless")' FROM leaderless
+	UNION
+	  SELECT sum(GE128MB) || ' wal files in ' ||sum(CASE WHEN GE128MB>0 then 1 else 0 END) 
+	        || ' tables are > 128MB' FROM large_wal
+	UNION
+	 SELECT (SELECT sum(tablet_count) FROM tablet_replica_summary WHERE replicas < 3) 
+			 || ' tablets have RF < 3. (See "tablet_replica_summary/detail")'
+	UNION
+	   SELECT count(*) || ' tables have unbalanced tablet sizes (see "unbalanced_tables")' 
+	   from unbalanced_tables 
+	UNION
+	   SELECT count(*) || ' Zones have unbalanced tablets (See "region_zone_tablets")'
+	    from  region_zone_tablets WHERE balanced='NO'
+	;
 SELECT '','--- Summary Report ---'
 UNION 
 SELECT '     ',* FROM summary_report;
+.output $tmpfile
+.databases
+.output stdout
 .quit
 __ENDING_STUFF__
 close STDOUT; # Done talking to sqlite3
@@ -413,15 +430,44 @@ warn " --- To get a report, run: ---\n",
      qq|  sqlite3 -header -column $sql_db_file "SELECT * from <REPORT-NAME>"\n|;
 unlink $tmpfile;
 exit 0;
+#-------------------------------------------------------------------------------------
+sub Setup_Output_Processing{
+	my ($inputfilename) = @_;
+	$output_sqlite_dbfilename = $inputfilename . ".sqlite";
+	if (not $opt{AUTORUN_SQLITE}){
+		return; # No output processing needed-this has been setup manually
+	}
+	if ($opt{SQLITE_ERROR}){
+		print $USAGE;
+		die "ERROR: $opt{SQLITE_ERROR}";
+	}
+	if (-e $output_sqlite_dbfilename){
+		my $mtime     = (stat  $output_sqlite_dbfilename)[9];
+		my $rename_to = $inputfilename .".". unixtime_to_printable($mtime,"YYYY-MM-DD") . ".sqlite";
+		if  (-e $rename_to){
+			die "ERROR:Files $output_sqlite_dbfilename and  $rename_to already exist. Please cleanup!";
+		} 
+		print "WARNING: Renaming Existing file $output_sqlite_dbfilename to $rename_to.\n";
+		rename $output_sqlite_dbfilename, $rename_to or die "ERROR:cannot rename: $!";
+		sleep 2; # Allow time to read the message 
+	}
+	print  $opt{STARTTIME},$ANSICOLOR{BRIGHT_BLUE}," $0 version $VERSION\n",
+		$ANSICOLOR{BRIGHT_GREEN},"\tReading $inputfilename,\n",$ANSICOLOR{NORMAL},
+		"\tcreating/updating sqlite db $ANSICOLOR{BRIGHT_RED}$output_sqlite_dbfilename$ANSICOLOR{NORMAL}.\n";
 
+	open ($SQL_OUTPUT_FH, "|-", "sqlite3 $output_sqlite_dbfilename")
+		or die "ERROR: Could not start sqlite3 : $!";
+	select $SQL_OUTPUT_FH; # All subsequent "print" goes to this file handle.
+}
 #-------------------------------------------------------------------------------------
 sub Parse_Cluster_line{
+	my ($line,$current_entity, $entity) =@_;
 	my ($uuid,$zone) = $line=~m/^\s*([\w\-]+).+(\[.*\])/; 
 	if (! $zone){ # Zone may not have been enclosed in []
 	   my @piece = split /\s+/,	$line;
 	   $piece[0] eq '' and shift @piece; # First piece is empty because of leading blanks in $line 
 	   $uuid = $piece[0];
-	   my ($zone_idx) = grep { $entity{$current_entity}{HEADERS}[$_]->{NAME} eq "ZONES" } 0..$#{ $entity{$current_entity}{HEADERS} };
+	   my ($zone_idx) = grep { $entity->{$current_entity}{HEADERS}[$_]->{NAME} eq "ZONES" } 0..$#{ $entity->{$current_entity}{HEADERS} };
 	   $zone = $piece[$zone_idx];
 	}
 	print "INSERT INTO cluster(type,uuid,zone) VALUES('CLUSTER',",
@@ -434,6 +480,7 @@ sub Parse_Cluster_line{
 	}
 }
 sub Parse_Master_line{
+	my ($line) =@_;	
 	my ($uuid, $host, $port, $region,$zone,$role) = $line=~m/(\S+)/g;
 	print "INSERT INTO cluster(type, uuid , ip, port, region, zone ,role)\n",
 	      "  VALUES('MASTER','",
@@ -442,6 +489,7 @@ sub Parse_Master_line{
 }
 
 sub Parse_Tserver_line{
+	my ($line,$current_entity, $entity) =@_;
 	if (substr($line,0,1) eq "{"){ # Some sort of error message - ignore
 	    chomp $line;
 		print "SELECT 'ERROR in input line# $. : ",substr($line,0,40)," ... ignored.';\n";
@@ -455,17 +503,22 @@ sub Parse_Tserver_line{
 	      "  VALUES('TSERVER','",
           join("','", $uuid,$host,$port,$region,$zone,$uptime),
 		  "');\n";
-    $entity{TSERVER}{BY_UUID}{$uuid}={
+    $entity->{TSERVER}{BY_UUID}{$uuid}={
 		HOST=>$host,PORT=>$port,REGION=>$region,ZONE=>$zone,UPTIME=>$uptime
 	        };
 	TableInfo::->Register_Region_Zone($region, $zone, $uuid);
 }
 
 sub Parse_Tablet_line{
-
+	my ($line,$current_entity, $entity) =@_;
 # 0a2aa531ce7541f4bfffc634200d16c5   brokerageaccountphone                                          titan_prod   RUNNING   TABLET_DATA_READY   0x728e      0x7538    21 MB      2048 kB    27      288541     b686d09824b4455997873522dedcd3a9   HAS_LEASE
-
-    if ($line =~ $entity{$current_entity}{LINE_REGEX}){
+	my %kilo_multiplier=(
+		BYTES	=> 1,
+		KB		=> 1024,
+		MB		=> 1024*1024,
+		GB		=> 1024*1024*1024,
+	);
+    if ($line =~ $entity->{$current_entity}{LINE_REGEX}){
 		# Fall through and process it
 	}else{
 	    #Regex failed to match 
@@ -502,7 +555,7 @@ sub Parse_Tablet_line{
 	$save_val{wal_size} *= ($kilo_multiplier{ uc $save_val{wal_unit} } || 1);
 	print "INSERT INTO tablet (node_uuid,tablet_uuid , table_name,table_uuid,namespace,state,status,",
                   "start_key, end_key, sst_size, wal_size, cterm, cidx, leader, lease_status) VALUES('",
-				  $entity{TABLET}{NODE_UUID},"'", 
+				  $entity->{TABLET}{NODE_UUID},"'", 
 	              map({ ",'" . ($save_val{$_}||'') . "'" } 
         		  qw|tablet_uuid tablename table_uuid namespace  state status  start_key end_key sst_size  wal_size 
              		  cterm cidx leader lease_status|  
@@ -514,27 +567,30 @@ sub Parse_Tablet_line{
 	   # Special case - in $line, $start key is missing, but regex mistakenly places end at start.
 	   print "UPDATE tablet SET start_key='', end_key='$save_val{start_key}' ",
 	         " WHERE tablet_uuid='$save_val{tablet_uuid}' AND node_uuid='",
-			 $entity{TABLET}{NODE_UUID}, "'; -- correction for line $.\n";
+			 $entity->{TABLET}{NODE_UUID}, "'; -- correction for line $.\n";
        $save_val{end_key}   = $save_val{start_key};
        $save_val{start_key} = undef;	   
 	}
 	
     TableInfo::find_or_new( \%save_val )
-	        ->collect(\%save_val, $entity{TABLET}{NODE_UUID});
+	        ->collect(\%save_val, $entity->{TABLET}{NODE_UUID});
 }
 
 sub Process_Headers{
-		$entity{$current_entity}{PREVIOUS_HEADERS} = $entity{$current_entity}{HEADERS};
-		$entity{$current_entity}{HEADERS}=[]; # Zap it 
-		my $hdr_idx = 0;
-		while ( $line =~/([A-Z_]+)/g ){
-			my $hdr_item = $1;
-			
-		   	$entity{$current_entity}{HEADERS}[$hdr_idx] =  {NAME=>$hdr_item, START=>$-[0], END=> $+[0], LEN=> $+[0] - $-[0]};
-			$hdr_idx++;
-		}
+	my ($line,$current_entity, $entity) =@_;
+	$entity->{$current_entity}{PREVIOUS_HEADERS} = $entity->{$current_entity}{HEADERS};
+	$entity->{$current_entity}{HEADERS}=[]; # Zap it 
+	my $hdr_idx = 0;
+	while ( $line =~/([A-Z_]+)/g ){
+		my $hdr_item = $1;
+		
+		$entity->{$current_entity}{HEADERS}[$hdr_idx] =  {NAME=>$hdr_item, START=>$-[0], END=> $+[0], LEN=> $+[0] - $-[0]};
+		$hdr_idx++;
+	}
 }
 
+BEGIN{
+	 my $in_transaction = 0; # Private/static  var
 
 sub Set_Transaction{
    my ($start, $msg)=@_;	
@@ -556,7 +612,7 @@ sub Set_Transaction{
 	   # no-op
    }
 }
-
+}
 sub unixtime_to_printable{
 	my ($unixtime,$format) = @_;
 	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($unixtime);
@@ -571,6 +627,9 @@ sub unixtime_to_printable{
 	}
 	die "ERROR: Unsupported format:'$format' ";
 }
+#=============================================================================================
+#  C l a s s e s 
+#=============================================================================================
 ####################################################################################
 BEGIN{
 package TableInfo; # Also provides Region/Zone info
@@ -635,7 +694,7 @@ sub collect{
 	if (0 == ($self->{UNIQ_TABLETS_ESTIMATE}||=0)){
 	   # Need to calcuate this 	
 	   $self->{KEYS_PER_TABLET}        = $end_key - $start_key; # keys < $end key, so don't add 1. 
-	   $self->{UNIQ_TABLETS_ESTIMATE} = int( (0xffff) / $self->{KEYS_PER_TABLET} ); # Truncate decimals 
+	   $self->{UNIQ_TABLETS_ESTIMATE} = int( (0xffff) / ($self->{KEYS_PER_TABLET} || 1) ); # Truncate decimals 
 	}
 	$tablet->{lease_status} eq 'HAS_LEASE' and $self->{LEADER_TABLETS}++;
 	if ($end_key == 0xffff){
@@ -646,9 +705,14 @@ sub collect{
 		#print ".print ERROR:Line $.: Tablet $tablet->{tablet_uuid} offsets $end_key - $start_key dont match diff=$self->{KEYS_PER_TABLET}\n";
 		$self->{UNMATCHED_KEY_SIZE}++;
 	}
-	$start_key % $self->{KEYS_PER_TABLET} != 0 and $self->{KEY_RANGE_OVERLAP}++; 
-	$self->{KEYRANGELIST}[int($start_key / $self->{KEYS_PER_TABLET}) ] ++;
-
+	if ($self->{KEYS_PER_TABLET} == 0){
+		$self->{KEY_RANGE_OVERLAP}++
+	}else{
+		# start_key must be  an integer multiple of KEYS_PER_TABLET. If not, increment OVERLAP.
+		$start_key % $self->{KEYS_PER_TABLET} != 0 and $self->{KEY_RANGE_OVERLAP}++; 
+        # Keep a list of key ranges - will check for holes  in this later..
+		$self->{KEYRANGELIST}[int($start_key / $self->{KEYS_PER_TABLET}) ] ++;
+	}
 	my ($region,$zone) = @{ $Tserver_to_region_zone{ $node_uuid } };
 	return if $tablet->{status} eq 'TABLET_DATA_TOMBSTONED';
     ##$region_zone{$region}{$zone}{TABLET}{ $tablet->{tablet_uuid} }++;
@@ -708,16 +772,14 @@ sub Table_Report{ # CLass method
 	print << "__tablet_estimate__";
    CREATE VIEW large_tables AS 
    SELECT namespace,tablename,uniq_tablet_count as uniq_tablets,
-      (sst_tot_bytes)*uniq_tablet_count/tot_tablet_count/1024/1024 as sst_table_mb,
+      (sst_tot_bytes)*uniq_tablet_count/tot_tablet_count/1024/1024 as sst_RF1_mb,
 	  (sst_tot_bytes /tot_tablet_count/1024/1024) as tablet_size_mb,
-	  round((sst_tot_bytes /1024.0/1024.0/8.0  + 5000) / 10000,1) as rec_8node_tablets,
-	  round((sst_tot_bytes /1024.0/1024.0/12.0 + 5000) / 10000,1) as rec_12node_tablets,
-	  round((sst_tot_bytes /1024.0/1024.0/24.0 + 5000) / 10000,1) as rec_24node_tablets,
+	  round((sst_tot_bytes*uniq_tablet_count/tot_tablet_count /1024.0/1024.0 + 5000) / 10000,1) as recommended_tablets,
 	   tot_tablet_count / uniq_tablet_count as repl_factor,
-      (wal_tot_bytes)*uniq_tablet_count/tot_tablet_count/1024/1024 as wal_table_mb
+      (wal_tot_bytes)*uniq_tablet_count/tot_tablet_count/1024/1024 as wal_RF1_mb
         FROM tableinfo
-        WHERE sst_table_mb > 5000
-        ORDER by sst_table_mb desc;
+        WHERE sst_RF1_mb > 5000
+        ORDER by sst_RF1_mb desc;
 __tablet_estimate__
 
 	# R e g i o n / Z o n e info
@@ -790,21 +852,8 @@ sub Process_line{
    if ($json){
 	   # All is well
    }else{
-	    my $json_module_exists =
-     	  eval{
-		    require JSON;
-		    JSON->import();
-		    1;
-		  };
-
-	    if($json_module_exists){
-	        $json = JSON->new();
-			# all well from this point on
-	    }else{
-	        die "ERROR: JSON (perl) module is not installed. Unable to process."
-	    }
+	  $json = entities_parser::->new()->{JSON};
    }
-
 
    	my $data = $json->decode($j);
     my $msg = $data->{msg} || "cluster"; # Initial JSON for cluster does not have "msg"
@@ -909,3 +958,307 @@ sub Parse_Tablet_line{
 
 } # ----- End of JSON_Analyzer ---------------------------------------
 
+####################################################################################
+BEGIN{
+package entities_parser;
+
+sub new{
+	my ($class, %atts) = @_;
+	my $self = bless {%atts}, $class;
+	$self->{JSON_MODULE_EXISTS} =
+		eval{
+			require JSON;
+			JSON->import();
+			1;
+		};
+
+	if($self->{JSON_MODULE_EXISTS}){
+		$self->{JSON} = JSON->new();
+		# all well from this point on
+	}else{
+		die "ERROR: JSON (perl) module is not installed. Unable to process."
+	}
+	return $self;
+}
+
+sub Ingest_decode_and_Generate{
+	my ($self) = @_;
+ 
+	# Slurp file 
+	my $contents = do {
+		local $/;
+		<>;
+	};
+    $self->{DECODED} = $self->{JSON}->decode($contents); 
+
+    print << "__CREATE_TABLES__";
+-- Generated by Entity parser 
+CREATE TABLE ENT_KEYSPACE (id TEXT PRIMARY KEY,name,type);
+CREATE TABLE ENT_TABLE (id TEXT PRIMARY KEY, keyspace_id,state, table_name);
+CREATE TABLE ENT_TABLET (id TEXT ,table_id,state,is_leader,server_uuid,server_addr,type);
+
+__CREATE_TABLES__
+
+	main::Set_Transaction(1,"Entity Keyspaces");
+	for my $ks (@{ $self->{DECODED}->{keyspaces} }){
+		print "INSERT INTO ENT_KEYSPACE (id,name,type) VALUES('",
+			join("','", map {$ks->{$_}} qw|keyspace_id keyspace_name keyspace_type|), "');\n";
+	}
+	main::Set_Transaction(0);
+
+	main::Set_Transaction(1, "Entity TABLES");
+	for my $tbl (@{ $self->{DECODED}->{tables} }){
+		print "INSERT INTO ENT_TABLE (id, keyspace_id,state, table_name) VALUES('",
+			join("','", map {$tbl->{$_}} qw|table_id keyspace_id state  table_name|), "');\n";
+		}
+	main::Set_Transaction(0);
+
+	main::Set_Transaction(1,"Entity ENT_TABLETs");
+	for my $t (@{ $self->{DECODED}->{tablets} }){
+		my $leader = $t->{leader};
+		for my $r (@{ $t->{replicas} }){
+			print "INSERT INTO ENT_TABLET (id,table_id,state,is_leader,server_uuid,server_addr,type) VALUES('",
+			
+			join("','", $t->{tablet_id}, $t->{table_id}, $t->{state},
+				($r->{server_uuid} eq $leader ? 1 : 0),
+				map {$r->{$_}} qw|server_uuid addr type|), "');\n";
+		}
+	}
+	main::Set_Transaction(0);
+}
+1;
+} # End of entities_parser
+####################################################################################
+BEGIN{
+package Tablet_Info;
+# Parses output of yugatool "tablet_info"
+
+{ #Local classes - pre-declaration
+  package TSERVER;
+  package TABLET;
+}
+
+sub new{
+
+   print << "__CREATE_TABLES__";
+CREATE TABLE IF NOT EXISTS tserver(id TEXT PRIMARY KEY,
+            host TEXT ,placement_cloud TEXT ,placement_region TEXT ,
+			placement_zone TEXT ,port TEXT);
+CREATE TABLE IF NOT EXISTS TABLET_INFO ( UUID, server_uuid,last_status,
+    leader_lease_status,namespace_name,op_id_index,op_id_term,sst_files_disk_size,
+	state,table_id,table_name,tablet_data_state,leader);
+CREATE VIEW IF NOT EXISTS good_tablets AS
+    SELECT uuid,substr(server_uuid,1,5)||'..' as svr_uid,state,
+	substr(tablet_data_state,-10) as data_state,substr(leader,1,5)||'..' as leader,
+	substr(leader_lease_status,1,10) as ldr_lease,op_id_term, op_id_index,host as tserver
+	FROM TABLET_INFO,tserver 
+	WHERE  tablet_data_state !='TABLET_DATA_TOMBSTONED' and tserver.id=TABLET_INFO.server_uuid 
+	ORDER BY UUID,op_id_term asc, op_id_index asc,server_uuid;
+
+__CREATE_TABLES__
+
+	my ($tserver,$tablet, $action, @stack);
+
+	my %keyword_handler=(
+		tablet_id		=> sub{$tablet = TABLET::->find_or_create($_[1] ."+". $tserver->{ID});
+							$tablet->{UUID} = $_[1];
+							$tablet->Dependent("TSERVER",$tserver->{ID});
+							$tablet->{server_UUID} = $tserver->{ID};
+							},
+		map({$_=>sub{$tablet->{$_[0]}=$_[1]}} 
+			qw| namespace_name table_name table_id state tablet_data_state last_status
+					estimated_on_disk_size    consensus_metadata_disk_size 
+				wal_files_disk_size sst_files_disk_size uncompressed_sst_files_disk_size 
+				leader_lease_status
+			|),
+	);
+	my %attrib_complete_action=(
+		peers => sub {#print "Peer=",$_[0]->{permanent_uuid},"\n";
+						my $ts = TSERVER::->find_or_create($_[0]->{permanent_uuid});
+						$ts->populate_from_peer($_[0]);
+						$_[0]=undef;
+						$tablet->Dependent("TSERVER",$ts->{ID});
+						},
+
+		cstate => sub{$tablet->{LEADER} = $_[0]->{leader_uuid}},
+		op_id  => sub{$tablet->{'op_id_' . $_} = $_[0]->{$_} for keys %{$_[0]}},
+	);
+
+	while(<>){
+		next if m/^==/;
+		next if m/^\s*$/; # empty
+		next if m/^\d+:\s\d+$/; # 16:2
+		
+		if ( /\s*\[.+?\] \(UUID\s(\w+)\)/){  # [host:"240b:.." port:9100] (UUID 7a6..)"
+		$tserver = TSERVER::->find_or_create($1);
+		## $tablet and $tablet->Print();
+		next;
+		}
+		if (m/^\s*}\s*$/){ # Close }
+			my $completed = pop @stack;
+			my $action = $attrib_complete_action{$completed};
+			next unless $action;
+			my $target = $tablet;
+			for (@stack, $completed){ # include recently popped element 
+					$target = $target->{$_}; 
+			}
+			$action->($target);
+			next;
+		}	
+		if (my ($key,$val) = m/\s*(\w+):\s*(.+)/){
+		$val =~tr/\"\r\n//d;
+		if ($val eq "{"){
+			push @stack, $key;
+		}elsif (@stack){
+			my $target = $tablet;
+			for (@stack){
+					$target = $target->{$_}||={}; 
+			}
+			$target->{$key} = $val;
+			next;
+		}
+		my $action = $keyword_handler{$key} or next;
+
+		$action->($key,$val,$_);
+		next;	   
+		}
+	}
+
+	## $tablet and $tablet->Print(); # Debug
+
+	print "BEGIN TRANSACTION; -- $ARGV\n";
+
+	TSERVER::->for_each(
+		sub{
+			my ($ts) = @_;
+			$ts->Print_SQL();
+		}
+	);	
+
+	TABLET::->for_each(
+		sub{
+			my ($t) = @_;
+			$t->Print_SQL();
+		}
+	);
+
+	print "COMMIT;\n";	
+}
+
+
+1;
+} # End of Tablet_Info
+#=============================================================================================
+BEGIN{
+package Generic::Class;
+use Carp;
+
+my %collection; # Index by {$class}{$id} get an instance
+
+sub find_or_create{
+  my ($class,$id,$att_ref) = @_;
+  confess "ERROR: object ID required" unless $id;
+
+  return $collection{$class}{$id}  if $collection{$class}{$id};
+  #print "DEBUG:Creating object of class $class, id $id\n";
+  return $collection{$class}{$id} = bless({ID=>$id, %{$att_ref||{}}}, $class);
+}
+
+sub Dependent{ # getter/setter
+  my ($self,$dep_type,$dep_id,$dep_att) = @_;
+  my $class = ref $self;
+  my $dep = find_or_create($dep_type,$dep_id,$dep_att); 
+  $self->{$dep_type}{$dep_id} and return $dep;
+  $self->{DEP_COUNTS}{$dep_type}++;
+  return $self->{$dep_type}{$dep_id} = $dep;
+}
+
+sub for_each_dependent{
+  my ($self,$dep_type,$callback) = @_;
+  confess  "ERROR: Callback method required" unless $callback and ref($callback) eq "CODE";
+  $callback->(  $_ ) for keys %{$self->{$dep_type}};
+}
+
+sub for_each{
+  my ($class,$callback) = @_;
+  confess "ERROR: Callback method required" unless $callback and ref($callback) eq "CODE";
+  $callback->(  $_ ) for values %{$collection{$class}};
+}
+
+sub Print{
+	my ($self) = @_;
+    print "OBJECT ",ref($self)," named $self->{ID} (";
+	print join(",", map {"$_=$self->{$_}"} grep {!ref($self->{$_})}sort keys %$self),")\n";
+    for my $dep_type (keys %{$self->{DEP_COUNTS}}){
+	   print "\t$self->{DEP_COUNTS}{$dep_type} ${dep_type}'s :";
+	   $self->for_each_dependent(
+	     $dep_type,
+	     sub{print $_[0]," "}
+	   );
+    }
+    $self->{DEP_COUNTS} and print "\n";
+}
+
+sub Merge_Into{
+   my ($self, $other) = @_;
+   $other->{$_} ||= $self->{$_} for keys %$self; # Shallow copy
+   $self->Delete();
+   return $other;
+}
+
+sub Delete{
+   my ($self) = @_;
+   my $class = ref $self;
+   delete $collection{$class}{$self->{ID}};
+}	
+
+} # End of generic class
+#=============================================================================================
+BEGIN{
+package TSERVER;
+use parent  -norequire, "Generic::Class";
+
+my %collection; # Index by {$class}{$id} get an instance
+
+sub populate_from_peer{
+  my ($self,$peer) = @_;
+  #print "Populating tserver\n";  
+  $self->{$_} ||= $peer->{cloud_info}{$_} for keys %{ $peer->{cloud_info} };
+  $self->{$_} ||= $peer->{last_known_private_addr}{$_} for keys %{ $peer->{last_known_private_addr} };
+}
+
+sub Print_SQL{
+  my ($self) = @_;
+  print "INSERT OR IGNORE INTO TSERVER (",
+     "id, host  ,placement_cloud ,placement_region ,placement_zone ,port )",
+        " VALUES (\n   '",
+		join("','",map {$self->{$_}||''} qw |
+		     ID host  placement_cloud placement_region placement_zone port
+		   |),
+        "');\n";		
+}
+
+1;
+} # End of TSERVER
+#======================================================================================
+
+BEGIN{
+package TABLET;
+
+use parent  -norequire, "Generic::Class";
+
+sub Print_SQL{
+  my ($self) = @_;
+  print "INSERT OR REPLACE  INTO TABLET_INFO (",
+        " UUID, server_uuid,last_status,  leader_lease_status,namespace_name,op_id_index,op_id_term,",
+		"sst_files_disk_size,state,table_id,table_name,tablet_data_state,leader)",
+        " VALUES (\n   '",
+		join("','",	map {$self->{$_}||''} qw |UUID server_UUID last_status 
+    leader_lease_status namespace_name op_id_index op_id_term sst_files_disk_size 
+	state table_id table_name tablet_data_state LEADER |),
+        "');\n";		
+}
+1;
+} # End of TABLET
+#======================================================================================
+#======================================================================================
