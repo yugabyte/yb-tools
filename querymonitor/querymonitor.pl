@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.04";
+our $VERSION = "0.05";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -22,7 +22,6 @@ my %opt=(
 
     # Operating variables
     STARTTIME	                  => unixtime_to_printable(time(),"YYYY-MM-DD HH:MM"),
-    OUTPUT_FILE                   => "monitor_queries." . unixtime_to_printable(time(),"YYYY-MM-DD") . ".gz",
     INTERVAL_SEC                  => 5,             # You can put fractions of a second here
     RUN_FOR                       => "4h",  # 4 hours
     ENDTIME_EPOCH                 => 0, # Calculated after options are processed
@@ -36,6 +35,7 @@ my %opt=(
     DAEMON                        => 1,
     LOCKFILE                      => "/var/lock/querymonitor.lock",
     LOCK_FH                      => undef,
+	MAX_QUERY_LEN                => 100,
 );
 
 my $quit_daemon = 0;
@@ -103,19 +103,23 @@ sub Main_loop_Iteration{
 #------------------------------------------------------------------------------
 sub SQL_Sanitize{ # Remove PII 
    my ($q) = @_;
-    # Removbe leading spaces
+    # Remove leading spaces
    $q=~s/^\s+//;
     # For INSERT, remove VALUES
 	# For SELECT, remove WHERE clause
    $q=~s/ values .+//gi;
-   $q=~s/ where .+//gi;
+   $q=~s/( where\s+\S[^=<>!"'\s]+).*/$1/i; # Include Var name after WHERE, but not value 
+   if (length($q) > $opt{MAX_QUERY_LEN}){
+	   $q = substr($q,0,$opt{MAX_QUERY_LEN}/2 -2) . ".." . substr($q,-($opt{MAX_QUERY_LEN}/2));
+   }
    return $q;
 }
 #------------------------------------------------------------------------------
 sub Output_Handler{
   my ($ts, $type, $q, $sanitized_query) = @_;
   
-  $q->{query} = qq|'$sanitized_query'|;
+  $sanitized_query =~tr/"/~/; # Zap internal double quotes - which will mess CSV
+  $q->{query} = qq|"$sanitized_query"|;
   if (! $outinfo{$type} ){
 	  $opt{DEBUG} and print "DEBUG: Opening ($type) output file=" , $opt{uc $type . "_OUTPUT"},"\n";
 	  my $output_already_exists = -f $opt{uc $type . "_OUTPUT"};
@@ -135,8 +139,9 @@ sub Initialize{
 
   my @program_options = qw[ DEBUG! HELP! DAEMON!
                        API_TOKEN=s YBA_HOST=s CUST_UUID=s UNIV_UUID=s
-                       OUTPUT_FILE=s INTERVAL_SEC=i RUN_FOR|RUNFOR=s CURL=s
-                       FLAGFILE=s YSQL_OUTPUT=s YCQL_OUTPUT=s];
+                       INTERVAL_SEC=i RUN_FOR|RUNFOR=s CURL=s
+                       FLAGFILE=s YSQL_OUTPUT=s YCQL_OUTPUT=s
+					   MAX_QUERY_LEN|MAXQL|MQL=i];
   my %flags_used;
   Getopt::Long::GetOptions (\%flags_used, @program_options)
       or die "ERROR: Bad Option\n";
@@ -178,14 +183,24 @@ sub Initialize{
   for(qw|API_TOKEN YBA_HOST CUST_UUID UNIV_UUID|){
      $opt{$_} or die "ERROR: Required parameter --$_ was not specified.\n";
   }
-  $curl_cmd = join " ", $opt{CURL}, 
+  my $curl_base_cmd = join " ", $opt{CURL}, 
              qq|-s --request GET --header 'Content-Type: application/json'|,
              qq|--header "X-AUTH-YW-API-TOKEN: $opt{API_TOKEN}"|,
-             qq|--url $opt{YBA_HOST}/api/customers/$opt{CUST_UUID}/universes/$opt{UNIV_UUID}/live_queries|;
+             qq|--url $opt{YBA_HOST}/api/customers/$opt{CUST_UUID}/universes/$opt{UNIV_UUID}|;
   if ($opt{DEBUG}){
-     print "DEBUG:CURL_CMD: $curl_cmd\n";
+     print "DEBUG:CURL base CMD: $curl_base_cmd\n";
   }
-
+  # Get universe name ..
+  my $json_string = qx|$curl_base_cmd |;
+  if ($?){
+	print "ERROR: curl base command failed: $?\n";
+	exit 1;
+  }
+  
+  my ($universe_name) =  $json_string =~m/,"name":"([^"]+)"/;
+  print "UNIVERSE: ", $universe_name,"\n";
+  
+  $curl_cmd = $curl_base_cmd . "/live_queries"; # Henceforth - this is used. 
   # Run iteration ONCE, to verify it works...
   return unless $opt{DAEMON} ;
   
