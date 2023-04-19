@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.05";
+our $VERSION = "0.06";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -35,7 +35,8 @@ my %opt=(
     DAEMON                        => 1,
     LOCKFILE                      => "/var/lock/querymonitor.lock",
     LOCK_FH                      => undef,
-	MAX_QUERY_LEN                => 100,
+	MAX_QUERY_LEN                => 2048,
+	SANITIZE					 => 0,   # Remove PII 
 );
 
 my $quit_daemon = 0;
@@ -83,6 +84,7 @@ sub Main_loop_Iteration{
     }
 	my $ts = time();
     $opt{DEBUG} and print "DEBUG:$loop_count:$json_string\n";
+	$json_string !~/{/ and die "ERROR: $json_string";
     $json_string =~s/":/"=>/g; # Convert to perl structure
     my $queries = eval $json_string;
     $@ and die "ERROR: Could not eval json:Eval err $@";
@@ -91,7 +93,7 @@ sub Main_loop_Iteration{
        for my $q (@{ $queries->{$type}{queries} }){
 		   for my $subquery (split /;/, $q->{query}){
 			 #Sanitize PII from each
-			 my $sanitized_query = SQL_Sanitize($subquery);
+			 my $sanitized_query = $opt{SANITIZE} ? SQL_Sanitize($subquery) : $subquery;
              #print join(",",$ts, $type,$q->{nodeName},$q->{id},$subquery),"\n";
 			 Output_Handler($ts, $type, $q, $sanitized_query);
 		   }
@@ -109,9 +111,6 @@ sub SQL_Sanitize{ # Remove PII
 	# For SELECT, remove WHERE clause
    $q=~s/ values .+//gi;
    $q=~s/( where\s+\S[^=<>!"'\s]+).*/$1/i; # Include Var name after WHERE, but not value 
-   if (length($q) > $opt{MAX_QUERY_LEN}){
-	   $q = substr($q,0,$opt{MAX_QUERY_LEN}/2 -2) . ".." . substr($q,-($opt{MAX_QUERY_LEN}/2));
-   }
    return $q;
 }
 #------------------------------------------------------------------------------
@@ -119,6 +118,10 @@ sub Output_Handler{
   my ($ts, $type, $q, $sanitized_query) = @_;
   
   $sanitized_query =~tr/"/~/; # Zap internal double quotes - which will mess CSV
+  if (length($sanitized_query) > $opt{MAX_QUERY_LEN}){
+	   $sanitized_query = substr($sanitized_query,0,$opt{MAX_QUERY_LEN}/2 -2) 
+	                     . ".." . substr($sanitized_query,-($opt{MAX_QUERY_LEN}/2));
+  }
   $q->{query} = qq|"$sanitized_query"|;
   if (! $outinfo{$type} ){
 	  $opt{DEBUG} and print "DEBUG: Opening ($type) output file=" , $opt{uc $type . "_OUTPUT"},"\n";
@@ -137,7 +140,7 @@ sub Initialize{
   chomp ($opt{HOSTNAME} = qx|hostname|);
   print $opt{STARTTIME}," Starting $0 version $VERSION  PID $$ on $opt{HOSTNAME}\n";
 
-  my @program_options = qw[ DEBUG! HELP! DAEMON!
+  my @program_options = qw[ DEBUG! HELP! DAEMON! SANITIZE!
                        API_TOKEN=s YBA_HOST=s CUST_UUID=s UNIV_UUID=s
                        INTERVAL_SEC=i RUN_FOR|RUNFOR=s CURL=s
                        FLAGFILE=s YSQL_OUTPUT=s YCQL_OUTPUT=s
@@ -197,8 +200,16 @@ sub Initialize{
 	exit 1;
   }
   
-  my ($universe_name) =  $json_string =~m/,"name":"([^"]+)"/;
-  print "UNIVERSE: ", $universe_name,"\n";
+  my %univ = $json_string=~m/"(\w[^"]+)":"([^"]+)/g;  # Grab all simple scalars
+  %univ = %univ, $json_string=~m/"(\w[^"]+)":\[([^\]]+)\]/g; # Append all arrays (not decoded)
+  $opt{DEBUG} and print "DEBUG: $_\t","=>",$univ{$_},"\n" for sort keys %univ;
+  #my ($universe_name) =  $json_string =~m/,"name":"([^"]+)"/;
+  if ($univ{universeName}){
+	 print "UNIVERSE: ", $univ{universeName}," on ", $univ{providerType}, " ver ",$univ{ybSoftwareVersion},"\n";
+  }else{
+     $opt{DEBUG} and  print "DEBUG: Universe not found in curl_base:\n $json_string\n";
+	 $json_string !~/{/ and print "ERROR?: $json_string\n";
+  }
   
   $curl_cmd = $curl_base_cmd . "/live_queries"; # Henceforth - this is used. 
   # Run iteration ONCE, to verify it works...
@@ -265,7 +276,7 @@ sub daemonize {
 	  $grandkid_pid or exit 0;
       warn "To terminate daemon process, enter:\n"
             ."     kill -s QUIT $grandkid_pid\n"
-            ."                              ('kill -s USR1 $pid'  toggles DEBUG)\n";
+            ."                              ('kill -s USR1 $grandkid_pid'  toggles DEBUG)\n";
 
       exit 0; # Exit the parent
     }
