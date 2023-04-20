@@ -50,5 +50,25 @@ the contents are automatically loaded unless the <code>--flagfile</code> option 
 A <code>--help</code> parameter provides a full list of available flags.
 
 <code>
-$ ./querymonitor.pl --help<br/>2023-04-17 13:45 Starting ./querymonitor.pl version 0.05  PID 6235 on LAPTOP-5976NRBG<br/>#    querymonitor.pl  Version 0.05<br/>#    ===============<br/># Monitor running queries<br/># collect gzipped JSON file for offline analysis<br/><br/>Program Options:<br/>        --API_TOKEN<br/>        --CURL<br/>        --CUST_UUID<br/>        --DAEMON<br/>        --DEBUG<br/>        --FLAGFILE<br/>        --HELP<br/>        --INTERVAL_SEC<br/>        --RUN_FOR<br/>        --UNIV_UUID<br/>        --YBA_HOST<br/>        --YCQL_OUTPUT<br/>        --YSQL_OUTPUT
+$ ./querymonitor.pl --help
+<br/>2023-04-17 13:45 Starting ./querymonitor.pl version 0.05  PID 6235 on LAPTOP-5976NRBG
+<br/>#    querymonitor.pl  Version 0.05
+<br/>#    ===============
+<br/># Monitor running queries
+<br/># collect gzipped JSON file for offline analysis
+<br/>
+<br/>Program Options:
+<br/>        --API_TOKEN
+<br/>        --CURL
+<br/>        --CUST_UUID
+<br/>        --DAEMON
+<br/>        --DEBUG
+<br/>        --FLAGFILE
+<br/>        --HELP
+<br/>        --INTERVAL_SEC
+<br/>        --RUN_FOR
+<br/>        --UNIV_UUID
+<br/>        --YBA_HOST
+<br/>        --YCQL_OUTPUT
+<br/>        --YSQL_OUTPUT
 </code>
