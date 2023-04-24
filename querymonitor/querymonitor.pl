@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.06";
+our $VERSION = "0.08";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -37,6 +37,9 @@ my %opt=(
     LOCK_FH                      => undef,
 	MAX_QUERY_LEN                => 2048,
 	SANITIZE					 => 0,   # Remove PII 
+	ANALYZE						 => undef,     # Input File-name ( "..csv.gz" ) to process through sqlite
+	DB                           => undef,     # output SQLITE database file name
+	SQLITE                       => "sqlite3", # path to Sqlite binary
 );
 
 my $quit_daemon = 0;
@@ -46,6 +49,11 @@ my $curl_cmd; # Populated in `Initialize`
 my %outinfo; # For handles, and headers 
 
 Initialize();
+
+if ($opt{ANALYZE}){
+   Process_the_CSV_through_Sqlite();
+   exit 0;
+}
 
 daemonize();
 
@@ -142,9 +150,9 @@ sub Initialize{
 
   my @program_options = qw[ DEBUG! HELP! DAEMON! SANITIZE!
                        API_TOKEN=s YBA_HOST=s CUST_UUID=s UNIV_UUID=s
-                       INTERVAL_SEC=i RUN_FOR|RUNFOR=s CURL=s
-                       FLAGFILE=s YSQL_OUTPUT=s YCQL_OUTPUT=s
-					   MAX_QUERY_LEN|MAXQL|MQL=i];
+                       INTERVAL_SEC=i RUN_FOR|RUNFOR=s CURL=s SQLITE=s
+                       FLAGFILE=s YSQL_OUTPUT=s YCQL_OUTPUT=s DB=s
+					   MAX_QUERY_LEN|MAXQL|MQL=i ANALYZE|PROCESS=s];
   my %flags_used;
   Getopt::Long::GetOptions (\%flags_used, @program_options)
       or die "ERROR: Bad Option\n";
@@ -183,6 +191,9 @@ sub Initialize{
   $unit_idx{uc $_} = $unit_idx{$_} for keys %unit_idx;
   $opt{ENDTIME_EPOCH} = time() + $run_digits * $unit_idx{$run_unit};
 
+  if ($opt{ANALYZE}){
+	  return; # no more initialization needed   
+  }
   for(qw|API_TOKEN YBA_HOST CUST_UUID UNIV_UUID|){
      $opt{$_} or die "ERROR: Required parameter --$_ was not specified.\n";
   }
@@ -320,6 +331,109 @@ sub unixtime_to_printable{
 		  return sprintf("%04d-%02d-%02d", $year+1900, $mon+1, $mday);
 	}
 	die "ERROR: Unsupported format:'$format' ";
+}
+#------------------------------------------------------------------------------
+sub Process_the_CSV_through_Sqlite{
+	if ( -f $opt{ANALYZE} ){
+		# File exists - fall through and process it
+	}else{
+	    die "ERROR: 'ANALYZE' file does not exist: No file '$opt{ANALYZE}'.";	
+	}
+	print "Analyzing $opt{ANALYZE} ...\n";
+	
+	my ($sqlite_version) = do {my $vv=qx|$opt{SQLITE} --version|;chomp $vv;$vv=~/([\d\.]+)/};
+	$! and die "ERROR: Cannot run $opt{SQLITE} :$!";
+	$sqlite_version or die "ERROR: could not get SQLITE version";
+	# We do several extra steps to allow for OLD sqlite (< 3.8):
+	# (a) It does not support instr(), so we use xx like yy
+	# (b) the .import command does not allow --skip, so we pre-skip on input file
+	
+	# Use Forking and fifo to de-compress, remove first line, 
+	# then feed via the fifo into the ".import" command in sqlite
+	my $fifo = "/tmp/querymonitor_fifo_$$";
+	print "Creating temporary fifo $fifo ...\n";
+	qx|mkfifo $fifo|;
+	$! and die "ERROR: Fifo failed: $!";
+	
+	#Fork to provide CSV stream to fifo
+	my $extract_cmd = 'gunzip -c'; # expecting a gzipped file
+	$opt{ANALYZE} !~/\.gz$/i and $extract_cmd = 'cat'; # It is NOT gzipped 
+    my $pid = fork ();
+    if ($pid < 0) {
+      die "ERROR: fork failed: $!";
+    } elsif ($pid) {
+	  # This is the parent --fall through 
+    }else{
+		# This is the CHILD 
+	    #close std fds inherited from parent
+		close STDIN;
+		close STDOUT;
+		close STDERR;		
+		qx{$extract_cmd $opt{ANALYZE} | sed 1d > $fifo};
+		exit 0; # Exit child process and close FIFO
+	}
+	
+	if (! $opt{DB}){
+	   # DB name was not specified .. generate it from ANALYZE file name
+	   $opt{DB} = $opt{ANALYZE};
+	   $opt{DB} =~s/\.gz$//i;  # drop .gz
+	   $opt{DB} =~s/\.csv$//i; # drop .csv
+	   $opt{DB} .= ".sqlite";  # append .sqlite 
+	}
+	print "Creating sqlite database $opt{DB} ...\n";
+	
+	open my $sqlfh ,  "|-" , $opt{SQLITE} , $opt{DB} or die "ERROR: Could not run SQLITE";
+	print $sqlfh <<"__SQL__";
+.version
+.header off
+CREATE TABLE q (ts integer,clientHost,clientPort,elapsedMillis integer,id,keyspace,nodeName,privateIp,query,type);
+CREATE VIEW summary as select datetime((ts/600)*600,'unixepoch','-4 Hours') as EDT,
+    sum(case when query LIKE '% system.%'  then 1 else 0 end) as systemq,
+        sum(case when query LIKE '% system.%' then 0 else 1 end) as cqlcount,
+        sum(case when query LIKE '% system.%' and elapsedmillis > 120 then 1 else 0 end) as sys_gt120,
+        sum(case when query NOT LIKE '% system.%' and elapsedmillis > 120 then 1 else 0 end) as cql_gt120,
+        sum(case when query LIKE '% system.%' and nodeName
+            in ('yb-prod-CAS-PROD-Primary-n2','yb-prod-CAS-PROD-Primary-n3','yb-prod-CAS-PROD-Primary-n1','yb-prod-CAS-PROD-Primary-n5',
+			    'yb-prod-CAS-PROD-Secondary-n1','yb-prod-CAS-PROD-Secondary-n5','yb-prod-CAS-PROD-Secondary-n6','yb-prod-CAS-PROD-Secondary-n7',
+				'yb-prod-CAS-PROD-Secondary-n9','yb-prod-CAS-PROD-Secondary-n10','yb-prod-CAS-PROD-Secondary-n11','yb-prod-CAS-PROD-Secondary-n12')
+          then 1 else 0 end) as sys_dc3,
+        sum(case when query NOT LIKE '% system.%' and nodeName
+            in ('yb-prod-CAS-PROD-Primary-n2','yb-prod-CAS-PROD-Primary-n3','yb-prod-CAS-PROD-Primary-n1','yb-prod-CAS-PROD-Primary-n5')
+          then 1 else 0 end) as cql_dc3 ,
+         round(sum(case when query NOT LIKE '% system.%' and elapsedmillis > 120 then 1 else 0 end) *100.0
+               / sum(case when query NOT LIKE '% system.%' then 1 else 0 end)
+                   ,2) as breach_pct
+FROM q group by EDT;
+
+CREATE VIEW query_perf as  select query, count(*) as nbr_querys, round(avg(elapsedmillis),1) as avg_milli ,
+      sum (CASE when elapsedmillis > 120 then 1 else 0 END)*100 / count(*) as pct_gt120,
+          sum ( CASE WHEN nodeName
+            in ('yb-prod-CAS-PROD-Primary-n2','yb-prod-CAS-PROD-Primary-n3','yb-prod-CAS-PROD-Primary-n1','yb-prod-CAS-PROD-Primary-n5',
+			    'yb-prod-CAS-PROD-Secondary-n1','yb-prod-CAS-PROD-Secondary-n5','yb-prod-CAS-PROD-Secondary-n6','yb-prod-CAS-PROD-Secondary-n7',
+				'yb-prod-CAS-PROD-Secondary-n9','yb-prod-CAS-PROD-Secondary-n10','yb-prod-CAS-PROD-Secondary-n11','yb-prod-CAS-PROD-Secondary-n12')
+                THEN 1 ELSE 0 END) as DC3_querys
+          FROM q
+          GROUP BY query
+          HAVING nbr_querys > 50 and avg_milli >30  ORDER by avg_milli  desc;
+.mode csv
+.import '$fifo' q
+.mode column
+SELECT 'Imported ' || count(*) ||' rows from $opt{ANALYZE}.' as Imported_count from q;
+SELECT ''; -- blank line
+SELECT '====== Summary Report ====';
+.header on
+SELECT * from summary;
+.header off
+SELECT '';
+SELECT '======= Slow Queries =======';
+.header on
+select * from query_perf;
+.q
+__SQL__
+
+   close $sqlfh;
+   unlink $fifo;
+   wait; # For kid 
 }
 #==============================================================================
 #==============================================================================
