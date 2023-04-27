@@ -3,7 +3,7 @@
 ## Synopsis
 Runs (as a daemon) and periodically collects live query info into csv (.gz) files.
 Personably Identifyable information (PII) can be removed from each query by truncating the WHERE clause.
-Built-in --ANALYSIS mode.
+Built-in --ANALYZE mode.
 
 These are suitable for offline analysis to obtain:
 * Statement level response times AKA slow queries

@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.08";
+our $VERSION = "0.10";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -33,13 +33,14 @@ my %opt=(
     DEBUG                         => 0,
     HELP                          => 0,
     DAEMON                        => 1,
-    LOCKFILE                      => "/var/lock/querymonitor.lock",
+    LOCKFILE                      => "/var/lock/querymonitor.lock", # UNIV_UUID will be appended
     LOCK_FH                      => undef,
 	MAX_QUERY_LEN                => 2048,
 	SANITIZE					 => 0,   # Remove PII 
 	ANALYZE						 => undef,     # Input File-name ( "..csv.gz" ) to process through sqlite
 	DB                           => undef,     # output SQLITE database file name
 	SQLITE                       => "sqlite3", # path to Sqlite binary
+	UNIVERSE                     => undef,     # Universe detail info (Populated in initialize)
 );
 
 my $quit_daemon = 0;
@@ -217,15 +218,18 @@ sub Initialize{
   #my ($universe_name) =  $json_string =~m/,"name":"([^"]+)"/;
   if ($univ{universeName}){
 	 print "UNIVERSE: ", $univ{universeName}," on ", $univ{providerType}, " ver ",$univ{ybSoftwareVersion},"\n";
+	 $opt{UNIVERSE} = {%univ}; # Shallow copy 
   }else{
      $opt{DEBUG} and  print "DEBUG: Universe not found in curl_base:\n $json_string\n";
 	 $json_string !~/{/ and print "ERROR?: $json_string\n";
+	 $opt{UNIVERSE} = {universeName => "UNKNOWN"};
   }
   
   $curl_cmd = $curl_base_cmd . "/live_queries"; # Henceforth - this is used. 
   # Run iteration ONCE, to verify it works...
   return unless $opt{DAEMON} ;
   
+  $opt{LOCKFILE} .= ".$opt{UNIV_UUID}"; # one lock per universe 
   print "Testing main loop before daemonizing...\n";
   if (Main_loop_Iteration()){
 	  print "ERROR in main loop iteration. quitting...\n";
@@ -381,44 +385,79 @@ sub Process_the_CSV_through_Sqlite{
 	   $opt{DB} .= ".sqlite";  # append .sqlite 
 	}
 	print "Creating sqlite database $opt{DB} ...\n";
+	my $populate_zone_map=""; # Need a better way to do this...
+	if ($opt{ANALYZE} =~/SECONDARY/i){
+		$populate_zone_map = <<"__SEC_ZONE__";
+		update zone_map set zone='DC3';
+		update zone_map set zone='DC1' where node like '%n2';
+		update zone_map set zone='DC1' where node like '%n3';
+		update zone_map set zone='DC1' where node like '%n4';
+		update zone_map set zone='DC1' where node like '%n9';
+__SEC_ZONE__
+    }elsif ( $opt{ANALYZE} =~/PRIMARY/i ){
+		$populate_zone_map = <<"__PRI_ZONE__";
+		update zone_map set zone='DC1';
+		update zone_map set zone='DC3' where node like '%n1';
+		update zone_map set zone='DC3' where node like '%n2';
+		update zone_map set zone='DC3' where node like '%n3';
+		update zone_map set zone='DC3' where node like '%n5';
+__PRI_ZONE__
+	}
+    
 	
 	open my $sqlfh ,  "|-" , $opt{SQLITE} , $opt{DB} or die "ERROR: Could not run SQLITE";
 	print $sqlfh <<"__SQL__";
 .version
 .header off
+CREATE TABLE IF NOT EXISTS run_info(key text, value text);
+INSERT INTO run_info VALUES ('data file','$opt{ANALYZE}')
+      ,('HOSTNAME','$ENV{HOSTNAME}')
+	  ,('import date',datetime('now','localtime'));
+CREATE TABLE zone_map (node,zone);	  
 CREATE TABLE q (ts integer,clientHost,clientPort,elapsedMillis integer,id,keyspace,nodeName,privateIp,query,type);
 CREATE VIEW summary as select datetime((ts/600)*600,'unixepoch','-4 Hours') as EDT,
-    sum(case when query LIKE '% system.%'  then 1 else 0 end) as systemq,
-        sum(case when query LIKE '% system.%' then 0 else 1 end) as cqlcount,
-        sum(case when query LIKE '% system.%' and elapsedmillis > 120 then 1 else 0 end) as sys_gt120,
-        sum(case when query NOT LIKE '% system.%' and elapsedmillis > 120 then 1 else 0 end) as cql_gt120,
-        sum(case when query LIKE '% system.%' and nodeName
-            in ('yb-prod-CAS-PROD-Primary-n2','yb-prod-CAS-PROD-Primary-n3','yb-prod-CAS-PROD-Primary-n1','yb-prod-CAS-PROD-Primary-n5',
-			    'yb-prod-CAS-PROD-Secondary-n1','yb-prod-CAS-PROD-Secondary-n5','yb-prod-CAS-PROD-Secondary-n6','yb-prod-CAS-PROD-Secondary-n7',
-				'yb-prod-CAS-PROD-Secondary-n9','yb-prod-CAS-PROD-Secondary-n10','yb-prod-CAS-PROD-Secondary-n11','yb-prod-CAS-PROD-Secondary-n12')
-          then 1 else 0 end) as sys_dc3,
-        sum(case when query NOT LIKE '% system.%' and nodeName
-            in ('yb-prod-CAS-PROD-Primary-n2','yb-prod-CAS-PROD-Primary-n3','yb-prod-CAS-PROD-Primary-n1','yb-prod-CAS-PROD-Primary-n5')
-          then 1 else 0 end) as cql_dc3 ,
-         round(sum(case when query NOT LIKE '% system.%' and elapsedmillis > 120 then 1 else 0 end) *100.0
-               / sum(case when query NOT LIKE '% system.%' then 1 else 0 end)
+    sum(case when instr(query,' system.')> 0 then 1 else 0 end) as systemq,
+        sum(case when instr(query,' system.')=0 then 1 else 0 end) as cqlcount,
+        sum(case when instr(query,' system.')>0 and elapsedmillis > 120 then 1 else 0 end) as sys_gt120,
+        sum(case when instr(query,' system.')=0 and elapsedmillis > 120 then 1 else 0 end) as cql_gt120,
+        sum(case when instr(query,' system.')>0 and zone='DC1' then 1 else 0 end) as sys_dc1,
+        sum(case when instr(query,' system.')=0 and zone='DC1' then 1 else 0 END) as cql_dc1,
+        sum(case when instr(query,' system.')>0 and zone='DC3' then 1 else 0 end) as sys_dc3,
+        sum(case when instr(query,' system.')=0 and zone='DC3' then 1 else 0 END) as cql_dc3,		
+         round(sum(case when instr(query,' system.')=0 and elapsedmillis > 120 then 1 else 0 end) *100.0
+               / sum(case when instr(query,' system.')=0 then 1 else 0 end)
                    ,2) as breach_pct
-FROM q group by EDT;
+FROM q,zone_map
+   where q.nodename=zone_map.node 
+ group by EDT;
 
-CREATE VIEW query_perf as  select query, count(*) as nbr_querys, round(avg(elapsedmillis),1) as avg_milli ,
+CREATE VIEW slow_queries  as  select query, count(*) as nbr_querys, round(avg(elapsedmillis),1) as avg_milli ,
       sum (CASE when elapsedmillis > 120 then 1 else 0 END)*100 / count(*) as pct_gt120,
-          sum ( CASE WHEN nodeName
-            in ('yb-prod-CAS-PROD-Primary-n2','yb-prod-CAS-PROD-Primary-n3','yb-prod-CAS-PROD-Primary-n1','yb-prod-CAS-PROD-Primary-n5',
-			    'yb-prod-CAS-PROD-Secondary-n1','yb-prod-CAS-PROD-Secondary-n5','yb-prod-CAS-PROD-Secondary-n6','yb-prod-CAS-PROD-Secondary-n7',
-				'yb-prod-CAS-PROD-Secondary-n9','yb-prod-CAS-PROD-Secondary-n10','yb-prod-CAS-PROD-Secondary-n11','yb-prod-CAS-PROD-Secondary-n12')
-                THEN 1 ELSE 0 END) as DC3_querys
-          FROM q
+          sum ( CASE WHEN zone = 'DC1' THEN 1 ELSE 0 END) as dc1_queries,
+		  sum ( CASE WHEN zone = 'DC3' THEN 1 ELSE 0 END) as dc3_queries
+          FROM q, zone_map
+		   where q.nodename=zone_map.node 
           GROUP BY query
           HAVING nbr_querys > 50 and avg_milli >30  ORDER by avg_milli  desc;
+		  
+CREATE VIEW NODE_Report AS  select nodename, round(avg(elapsedmillis),1) as avg_ms, 
+       count(*), sum(case when instr(query,' system.') > 0 then 1 else 0 end) as sys_count,  
+	   sum(case when instr(query,' system.')= 0 then 1 else 0 end) as cql_count,
+	   sum(case when instr(query,' system.')= 0 and elapsedmillis > 120 then 1 else 0 end) as cql_gt_120,
+	   sum(case when instr(query,' system.')> 0 and elapsedmillis > 120 then 1 else 0 end) as sys_gt_120,
+	   zone
+  from q,zone_map 
+  where nodename=node  
+  group by  nodename 
+  order by nodename;
+  
 .mode csv
 .import '$fifo' q
 .mode column
 SELECT 'Imported ' || count(*) ||' rows from $opt{ANALYZE}.' as Imported_count from q;
+
+insert into zone_map select distinct nodename,'UNKNOWN' from q;
+$populate_zone_map;
 SELECT ''; -- blank line
 SELECT '====== Summary Report ====';
 .header on
@@ -427,7 +466,7 @@ SELECT * from summary;
 SELECT '';
 SELECT '======= Slow Queries =======';
 .header on
-select * from query_perf;
+select * from slow_queries;
 .q
 __SQL__
 
