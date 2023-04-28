@@ -1,0 +1,4 @@
+server.host: "0.0.0.0"
+xpack.encryptedSavedObjects.encryptionKey:
+xpack.reporting.encryptionKey: 
+xpack.security.encryptionKey: 
