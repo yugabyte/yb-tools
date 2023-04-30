@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.10";
+our $VERSION = "0.11";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -13,6 +13,12 @@ use warnings;
 use Getopt::Long;
 use Fcntl qw(:DEFAULT :flock);
 use POSIX qw/setsid/;
+use HTTP::Tiny;
+{# Forward local-package declarations
+  package Web::Interface; # Handles communication with YBA API 
+  package MIME::Write::Simple;
+  package MIME::Multipart::ParseSimple;
+}
 
 my %opt=(
     API_TOKEN                      => $ENV{API_TOKEN},
@@ -36,16 +42,20 @@ my %opt=(
     LOCKFILE                      => "/var/lock/querymonitor.lock", # UNIV_UUID will be appended
     LOCK_FH                      => undef,
 	MAX_QUERY_LEN                => 2048,
+	MAX_ERRORS                   => 10,
 	SANITIZE					 => 0,   # Remove PII 
 	ANALYZE						 => undef,     # Input File-name ( "..csv.gz" ) to process through sqlite
 	DB                           => undef,     # output SQLITE database file name
 	SQLITE                       => "sqlite3", # path to Sqlite binary
 	UNIVERSE                     => undef,     # Universe detail info (Populated in initialize)
+	HTTPCONNECT                  => "curl",    # How to connect to the YBA : "curl", or "tiny" (HTTP::Tiny)
 );
 
 my $quit_daemon = 0;
 my $loop_count  = 0;
 my $error_counter=0;
+my $YBA_API;  # Populated in `Initialize` to a Web::Interface object
+my $output;   # Populated in `Initialize to a MIME::Write::Simple object
 my $curl_cmd; # Populated in `Initialize`
 my %outinfo; # For handles, and headers 
 
@@ -85,19 +95,12 @@ sub Main_loop_Iteration{
     if ($opt{DEBUG}){
         print "DEBUG: Start main loop iteration $loop_count\n";
     }
-    my $json_string = qx|$curl_cmd|;
-    if ($?){
-        print "ERROR: curl command failed: $?\n";
-        $error_counter++;
-        return 1;
-    }
-	my $ts = time();
-    $opt{DEBUG} and print "DEBUG:$loop_count:$json_string\n";
-	$json_string !~/{/ and die "ERROR: $json_string";
-    $json_string =~s/":/"=>/g; # Convert to perl structure
-    my $queries = eval $json_string;
-    $@ and die "ERROR: Could not eval json:Eval err $@";
-    
+    my $queries = $YBA_API->Get("/live_queries");
+    my $ts = time();
+	if ($queries->{error}){
+		$error_counter++ >= $opt{MAX_ERRORS} and $quit_daemon = 1;
+	    return $queries->{error};	
+	}
     for my $type (qw|ysql ycql|){
        for my $q (@{ $queries->{$type}{queries} }){
 		   for my $subquery (split /;/, $q->{query}){
@@ -153,7 +156,8 @@ sub Initialize{
                        API_TOKEN=s YBA_HOST=s CUST_UUID=s UNIV_UUID=s
                        INTERVAL_SEC=i RUN_FOR|RUNFOR=s CURL=s SQLITE=s
                        FLAGFILE=s YSQL_OUTPUT=s YCQL_OUTPUT=s DB=s
-					   MAX_QUERY_LEN|MAXQL|MQL=i ANALYZE|PROCESS=s];
+					   MAX_QUERY_LEN|MAXQL|MQL=i ANALYZE|PROCESS=s
+					   HTTPCONNECT=s];
   my %flags_used;
   Getopt::Long::GetOptions (\%flags_used, @program_options)
       or die "ERROR: Bad Option\n";
@@ -195,37 +199,23 @@ sub Initialize{
   if ($opt{ANALYZE}){
 	  return; # no more initialization needed   
   }
-  for(qw|API_TOKEN YBA_HOST CUST_UUID UNIV_UUID|){
-     $opt{$_} or die "ERROR: Required parameter --$_ was not specified.\n";
-  }
-  my $curl_base_cmd = join " ", $opt{CURL}, 
-             qq|-s --request GET --header 'Content-Type: application/json'|,
-             qq|--header "X-AUTH-YW-API-TOKEN: $opt{API_TOKEN}"|,
-             qq|--url $opt{YBA_HOST}/api/customers/$opt{CUST_UUID}/universes/$opt{UNIV_UUID}|;
-  if ($opt{DEBUG}){
-     print "DEBUG:CURL base CMD: $curl_base_cmd\n";
-  }
+
+  $YBA_API = Web::Interface::->new();
+
   # Get universe name ..
-  my $json_string = qx|$curl_base_cmd |;
-  if ($?){
-	print "ERROR: curl base command failed: $?\n";
-	exit 1;
-  }
-  
-  my %univ = $json_string=~m/"(\w[^"]+)":"([^"]+)/g;  # Grab all simple scalars
-  %univ = %univ, $json_string=~m/"(\w[^"]+)":\[([^\]]+)\]/g; # Append all arrays (not decoded)
-  $opt{DEBUG} and print "DEBUG: $_\t","=>",$univ{$_},"\n" for sort keys %univ;
+  $opt{UNIVERSE} = $YBA_API->Get("");
+
+  $opt{DEBUG} and print "DEBUG: $_\t","=>",$opt{UNIVERSE}{$_},"\n" for sort keys %{$opt{UNIVERSE}};
   #my ($universe_name) =  $json_string =~m/,"name":"([^"]+)"/;
-  if ($univ{universeName}){
-	 print "UNIVERSE: ", $univ{universeName}," on ", $univ{providerType}, " ver ",$univ{ybSoftwareVersion},"\n";
-	 $opt{UNIVERSE} = {%univ}; # Shallow copy 
+  if ($opt{UNIVERSE}{name}){
+	 print "UNIVERSE: ", $opt{UNIVERSE}{name}," on ", $opt{UNIVERSE}{universeDetails}{clusters}[0]{userIntent}{providerType}, " ver ",$opt{UNIVERSE}{universeDetails}{clusters}[0]{userIntent}{ybSoftwareVersion},"\n";
   }else{
-     $opt{DEBUG} and  print "DEBUG: Universe not found in curl_base:\n $json_string\n";
-	 $json_string !~/{/ and print "ERROR?: $json_string\n";
-	 $opt{UNIVERSE} = {universeName => "UNKNOWN"};
+     $opt{DEBUG} and  print "DEBUG: Universe info not found \n";
   }
-  
-  $curl_cmd = $curl_base_cmd . "/live_queries"; # Henceforth - this is used. 
+  $opt{NODEHASH} = {map{$_->{nodeName} => {%{$_->{cloudInfo}}, uuid=>$_->{nodeUuid} ,state=>$_->{state},isTserver=>$_->{isTserver}}} 
+						@{ $opt{UNIVERSE}->{universeDetails}{nodeDetailsSet} } };
+
+
   # Run iteration ONCE, to verify it works...
   return unless $opt{DAEMON} ;
   
@@ -411,7 +401,7 @@ __PRI_ZONE__
 .header off
 CREATE TABLE IF NOT EXISTS run_info(key text, value text);
 INSERT INTO run_info VALUES ('data file','$opt{ANALYZE}')
-      ,('HOSTNAME','$ENV{HOSTNAME}')
+      ,('HOSTNAME','$opt{HOSTNAME}')
 	  ,('import date',datetime('now','localtime'));
 CREATE TABLE zone_map (node,zone);	  
 CREATE TABLE q (ts integer,clientHost,clientPort,elapsedMillis integer,id,keyspace,nodeName,privateIp,query,type);
@@ -475,4 +465,226 @@ __SQL__
    wait; # For kid 
 }
 #==============================================================================
+#==============================================================================
+BEGIN{
+package Web::Interface; # Handles communication with YBA API 
+
+sub new{
+	my ($class) = @_;
+	for(qw|API_TOKEN YBA_HOST CUST_UUID UNIV_UUID|){
+        $opt{$_} or die "ERROR: Required parameter --$_ was not specified.\n";
+    }
+	my $self =bless {map {$_ => $opt{$_}} qw|HTTPCONNECT UNIV_UUID API_TOKEN YBA_HOST CUST_UUID| }, $class;
+	$self->{BASE_URL} = "$opt{YBA_HOST}/api/customers/$opt{CUST_UUID}/universes/$opt{UNIV_UUID}";
+	if ($self->{HTTPCONNECT} eq "curl"){
+		  $self->{curl_base_cmd} = join " ", $opt{CURL}, 
+					 qq|-s --request GET --header 'Content-Type: application/json'|,
+					 qq|--header "X-AUTH-YW-API-TOKEN: $opt{API_TOKEN}"|,
+					 qq|--url $self->{BASE_URL}|;
+		  if ($opt{DEBUG}){
+			 print "DEBUG:CURL base CMD: $self->{curl_base_cmd}\n";
+		  }
+		  return $self;
+    }
+    
+	$self->{HT} = HTTP::Tiny->new( default_headers => {
+                         'X-AUTH-YW-API-TOKEN' => $opt{API_TOKEN},
+						 'Content-Type'      => 'application/json',
+	                  });
+
+    return $self;
+}
+
+sub Get{
+	my ($self, $endpoint) = @_;
+	$self->{json_string}= "";
+	$self->{response} = undef;
+	if ($self->{HTTPCONNECT} eq "curl"){
+		$self->{json_string} = qx|$self->{curl_base_cmd}$endpoint|;
+		if ($?){
+		   print "ERROR: curl get '$endpoint' failed: $?\n";
+		   exit 1;
+		}
+    }else{ # HTTP::Tiny
+	   $self->{raw_response} = $self->{HT}->get( 'http://' . $self->{BASE_URL} . $endpoint );
+	   if (not $self->{raw_response}->{success}){
+		  print "ERROR: Get '$endpoint' failed with status=$self->{raw_response}->{status}: $self->{raw_response}->{reason}\n";
+		  exit 1;
+	   }
+	   $self->{json_string} = $self->{raw_response}{content};
+	}
+	$self->{json_string}=~s/:/=>/g;
+	$self->{json_string}=~s/(\W)true(\W)/${1}1$2/g;
+	$self->{json_string}=~s/(\W)false(\W)/${1}0$2/g;
+	if (length($endpoint) == 0){
+	    # Special case for UNIVERSE .. clean unparsable...
+        $self->{json_string}=~s/"sampleAppCommandTxt"=>.+",//;
+	}
+    $@="";
+    $self->{response} = eval $self->{json_string};
+	$@ and die "EVAL ERROR getting $endpoint:$@";
+    #my %univ = $json_string=~m/"(\w[^"]+)":"([^"]+)/g;  # Grab all simple scalars
+    #%univ = %univ, $json_string=~m/"(\w[^"]+)":\[([^\]]+)\]/g; # Append all arrays (not decoded)
+	return $self->{response};
+}
+
+} # End of  package Web::Interface;  
+#==============================================================================
+BEGIN{
+package MIME::Write::Simple;
+
+sub new{
+	my ($class,%att) = @_;
+	
+	$att{boundary} ||= "--" . time() . $$;
+	$att{MIME_VERSION_SENT} = 0;
+	return bless {%att},$class;
+}
+
+sub header{
+	my ($self,$content_type,$header_msg) = @_;
+	$header_msg ||= "";
+	chomp $header_msg;
+	$header_msg and $header_msg .= "\n";
+	my $mime_ver = $self->{MIME_VERSION_SENT} ? "" 
+                   : "MIME-Version: 1.0\n";
+    $self->{MIME_VERSION_SENT} = 1;
+	return  $mime_ver
+	        . "Content-Type: $content_type;\n"
+          . qq|  boundary="$self->{boundary}"\n\n|
+		  . $header_msg ;
+}
+
+sub boundary{ # getter/setter
+   my ($self,$b, $final) = @_;
+   $b and $self->{boundary} = $b;
+   return $self->{boundary} . ($final ? "--" : "");
+}
+1;
+} # End of MIME::Write::Simple
+#==============================================================================
+BEGIN{
+package MIME::Multipart::ParseSimple;
+
+use strict;
+use warnings FATAL => 'all';
+use Carp;
+
+our $VERSION = '0.02';
+
+
+=head1 SYNOPSIS
+
+This is a really basic MIME multipart parser, 
+and the only reason for its existence is that
+I could not find an existing parser that would
+give me the parts directly (not on fs) and also
+give me the order.
+
+	my $mmps = MIME::Multipart::ParseSimple->new();
+	my $listref = $mmps->parse($my_file_handle);
+	print $listref->[0]->{"Preamble"};
+	print $listref->[0]->{"Content-Type.params"}->{"boundary"};
+	foreach (@$listref){
+		print $_->{"Body"} 
+		  if $_->{"Content-Type"} eq 'text/plain';
+	}
+=cut
+
+sub new {
+  my $p = shift;
+  my $c = ref($p) || $p;
+  my $o = {};
+  bless $o, $c;
+  return $o;
+}
+
+=head2 parse
+
+takes one argument: a file handle.
+
+returns a listref, each item corresponding to a MIME header in
+the document.  The first is the multipart file header itself.
+Each header item is stored as key/value.  Additional parameters
+are stored $key.params.  e.g. the boundary is at
+
+    $o->[0]->{"Content-Type.params"}->{"boundary"}
+
+The first item may also have {"Preamble"} and {"Epilog"} if these
+existed in the file.
+
+The content of each part is stored as {"Body"}.
+
+=cut
+
+sub parse {
+  # load a MIME-multipart-style file containing at least one application/x-ptk.markdown
+  my ($o,$fh) = @_;
+  $o->{fh} = $fh;
+
+  my $mp1 = <$fh>;
+  my $mp1e = 'MIME Version: 1.0';
+  die "Multipart header line 1 must begin ``$mp1e'' " unless $mp1 =~ /^$mp1e/;
+ 
+  my $general_header = $o->parseHeader();
+  croak "no boundary defined" unless $general_header->{"Content-Type.params"}->{"boundary"};
+  $o->{boundary} = $general_header->{"Content-Type.params"}->{"boundary"};
+  
+  $general_header->{Preamble} = $o->parseBody();
+
+  my @parts = ($general_header);
+
+  while(! (eof($fh) || $o->{eof})){
+    my $header = $o->parseHeader();
+    $header->{Body} = $o->parseBody();
+    push @parts, $header;
+  }
+
+  $general_header->{Epilog} = $o->parseBody();
+
+  return \@parts;
+
+}
+
+sub parseBody {
+  my ($o) = @_;
+  my $fh = $o->{fh};
+  my $body = '';
+  my $boundary = $o->{boundary};
+  while(<$fh>){
+    $o->{eof} = 1 if /^--$boundary--/;
+    last if /^--$boundary/;
+    $body .= $_;
+  }
+  return $body;
+}
+
+sub parseHeader {
+  my ($o) = @_;
+  my $fh = $o->{fh};
+  my %header = ();
+  my ($k,$v,$e,$p);
+  while(<$fh>){
+    last if /^\s*$/; # break on a blank line...
+    my @parts = split /;/;
+    if(/^\S/){ # non space at start means a new header item
+      my $header = shift @parts;
+      ($k,$v) = split(/\:/, $header, 2);
+      $k =~ s/(?:^\s+|\s+$)//g;
+      $v =~ s/(?:^\s+|\s+$)//g;
+      $header{$k} = $v;
+      $p = $k.'.params';
+      $header{$p} = {};
+    }
+    foreach my $part(@parts){
+      my ($l,$w) = split(/=/, $part, 2);
+      $l =~ s/(?:^\s+|\s+$)//g;
+      $w =~ s/(?:^\s+|\s+$)//g;
+      $header{$p}->{$l} = $w;
+    }
+  }
+  return \%header;
+}
+1;
+} # End of  MIME::Multipart::ParseSimple
 #==============================================================================
