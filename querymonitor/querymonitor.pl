@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.11";
+our $VERSION = "0.12";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -33,8 +33,7 @@ my %opt=(
     ENDTIME_EPOCH                 => 0, # Calculated after options are processed
     CURL                          => "curl",
     FLAGFILE                      => "querymonitor.defaultflags",
-	YSQL_OUTPUT                   => "queries.ysql." . unixtime_to_printable(time(),"YYYY-MM-DD") . ".csv.gz",
-	YCQL_OUTPUT                   => "queries.ycql." . unixtime_to_printable(time(),"YYYY-MM-DD") . ".csv.gz",
+	OUTPUT                        => "queries." . unixtime_to_printable(time(),"YYYY-MM-DD") . ".mime.gz",
     # Misc
     DEBUG                         => 0,
     HELP                          => 0,
@@ -48,7 +47,7 @@ my %opt=(
 	DB                           => undef,     # output SQLITE database file name
 	SQLITE                       => "sqlite3", # path to Sqlite binary
 	UNIVERSE                     => undef,     # Universe detail info (Populated in initialize)
-	HTTPCONNECT                  => "curl",    # How to connect to the YBA : "curl", or "tiny" (HTTP::Tiny)
+	HTTPCONNECT                  => "tiny",    # How to connect to the YBA : "curl", or "tiny" (HTTP::Tiny)
 );
 
 my $quit_daemon = 0;
@@ -57,7 +56,6 @@ my $error_counter=0;
 my $YBA_API;  # Populated in `Initialize` to a Web::Interface object
 my $output;   # Populated in `Initialize to a MIME::Write::Simple object
 my $curl_cmd; # Populated in `Initialize`
-my %outinfo; # For handles, and headers 
 
 Initialize();
 
@@ -80,9 +78,7 @@ warn(unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS") ." Program $$ Completed
 
 $opt{LOCK_FH} and close $opt{LOCK_FH} ;  # Should already be closed and removed by sig handler
 unlink $opt{LOCKFILE};
-for (keys %outinfo){
-	close $outinfo{$_}{FH};
-}
+$output->Close();
 
 exit 0;
 #------------------------------------------------------------------------------
@@ -107,7 +103,7 @@ sub Main_loop_Iteration{
 			 #Sanitize PII from each
 			 my $sanitized_query = $opt{SANITIZE} ? SQL_Sanitize($subquery) : $subquery;
              #print join(",",$ts, $type,$q->{nodeName},$q->{id},$subquery),"\n";
-			 Output_Handler($ts, $type, $q, $sanitized_query);
+			 $output->WriteQuery($ts, $type, $q, $sanitized_query);
 		   }
        }
     }
@@ -126,26 +122,7 @@ sub SQL_Sanitize{ # Remove PII
    return $q;
 }
 #------------------------------------------------------------------------------
-sub Output_Handler{
-  my ($ts, $type, $q, $sanitized_query) = @_;
-  
-  $sanitized_query =~tr/"/~/; # Zap internal double quotes - which will mess CSV
-  if (length($sanitized_query) > $opt{MAX_QUERY_LEN}){
-	   $sanitized_query = substr($sanitized_query,0,$opt{MAX_QUERY_LEN}/2 -2) 
-	                     . ".." . substr($sanitized_query,-($opt{MAX_QUERY_LEN}/2));
-  }
-  $q->{query} = qq|"$sanitized_query"|;
-  if (! $outinfo{$type} ){
-	  $opt{DEBUG} and print "DEBUG: Opening ($type) output file=" , $opt{uc $type . "_OUTPUT"},"\n";
-	  my $output_already_exists = -f $opt{uc $type . "_OUTPUT"};
-	  open $outinfo{$type}{FH} , "|-", "gzip -c >> " . $opt{uc $type . "_OUTPUT"}
-     	  or die "ERROR: Cannot fork for $type output zip:$!";
-	  if (! $output_already_exists){
-		  print { $outinfo{$type}{FH} } join(",","ts",sort keys %$q),"\n";
-	  }
-  }
-  print { $outinfo{$type}{FH} } join(",", $ts, map( {$q->{$_}} sort keys %$q)),"\n";
-}
+
 
 #------------------------------------------------------------------------------
 sub Initialize{
@@ -155,7 +132,7 @@ sub Initialize{
   my @program_options = qw[ DEBUG! HELP! DAEMON! SANITIZE!
                        API_TOKEN=s YBA_HOST=s CUST_UUID=s UNIV_UUID=s
                        INTERVAL_SEC=i RUN_FOR|RUNFOR=s CURL=s SQLITE=s
-                       FLAGFILE=s YSQL_OUTPUT=s YCQL_OUTPUT=s DB=s
+                       FLAGFILE=s OUTPUT=s DB=s
 					   MAX_QUERY_LEN|MAXQL|MQL=i ANALYZE|PROCESS=s
 					   HTTPCONNECT=s];
   my %flags_used;
@@ -167,6 +144,9 @@ sub Initialize{
     print "Program Options:\n",
          map {my $x=$_; $x=~s/\W.*//g; "\t--$x\n"} sort @program_options;
     exit 1;
+  }
+  if (@ARGV){
+    die "ERROR: Unknown argument (flag expected) : @ARGV";	  
   }
   if (-f $opt{FLAGFILE}){
     $opt{DEBUG} and print "DEBUG: Reading Flagfile $opt{FLAGFILE}\n";
@@ -215,7 +195,7 @@ sub Initialize{
   $opt{NODEHASH} = {map{$_->{nodeName} => {%{$_->{cloudInfo}}, uuid=>$_->{nodeUuid} ,state=>$_->{state},isTserver=>$_->{isTserver}}} 
 						@{ $opt{UNIVERSE}->{universeDetails}{nodeDetailsSet} } };
 
-
+  $output = MIME::Write::Simple::->new(); # No I/O so far 
   # Run iteration ONCE, to verify it works...
   return unless $opt{DAEMON} ;
   
@@ -226,11 +206,7 @@ sub Initialize{
      exit 2;
   }
   # Close open file handles that may be leftover from main loop outputs
-  for (keys %outinfo){ # Key is "type" - ycql or ysql
-     next unless $outinfo{$_}{FH};
-	 close $outinfo{$_}{FH};
-	 delete $outinfo{$_}; # Force it to re-open 
-  }
+  $output->Close();
   print "End main loop test.\n";  
 }
 #------------------------------------------------------------------------------
@@ -549,7 +525,7 @@ sub header{
 	my $mime_ver = $self->{MIME_VERSION_SENT} ? "" 
                    : "MIME-Version: 1.0\n";
     $self->{MIME_VERSION_SENT} = 1;
-	return  $mime_ver
+	print { $self->{FH} }   $mime_ver
 	        . "Content-Type: $content_type;\n"
           . qq|  boundary="$self->{boundary}"\n\n|
 		  . $header_msg ;
@@ -558,8 +534,74 @@ sub header{
 sub boundary{ # getter/setter
    my ($self,$b, $final) = @_;
    $b and $self->{boundary} = $b;
-   return $self->{boundary} . ($final ? "--" : "");
+   print { $self->{FH} }  $self->{boundary} . ($final ? "--\n" : "\n");
 }
+
+sub Open_and_Initialize{
+	my ($self) = @_;
+	$opt{DEBUG} and print "DEBUG: Opening output file=" , $opt{OUTPUT},"\n";
+	my $output_already_exists = -f $opt{OUTPUT};
+	open $self->{FH} , "|-", "gzip -c >> " . $opt{OUTPUT}
+	  or die "ERROR: Cannot fork output zip:$!";
+	if (! $output_already_exists){
+	   # Heed MIME headers etc...
+	   $self->header("multipart/mixed",
+	      join ("\n",
+			  "Querymonitor_version: $VERSION",
+			  "UNIVERSE: $opt{UNIVERSE}{name}",
+			  "UNIV_UUID: $opt{UNIV_UUID}",
+			  "STARTTIME: $opt{STARTTIME}",
+			  "Run_host: $opt{HOSTNAME}"
+		  ));
+	    boundary();  
+        # Insert NODE/ZONE info
+ 
+	}
+}
+
+sub Initialize_query_type{
+	my ($self,$type,$q) = @_;
+    if ($self->{IN_CSV_SECTION}){
+	   $self->boundary(); # Close the CSV section
+	}
+	$self->header("text/csvheader",
+	      join("\n",
+		     "TYPE: $type",
+			 "FIELDS: " . join(",","ts",sort keys %$q)
+			 ));
+	$self->boundary();
+	$self->{TYPE_INITIALIZED}{$type} = 1;
+	$self->header("text/csv");
+	$self->{IN_CSV_SECTION} = 1;
+}
+
+sub WriteQuery{
+  my ($self,$ts, $type, $q, $sanitized_query) = @_;
+  
+  if (! $self->{FH} ){
+	  # Need to initialize output
+      $self->Open_and_Initialize();
+  }
+  if ( ! $self->{TYPE_INITIALIZED}{$type} ){
+	  $self->Initialize_query_type($type, $q);  
+  }
+  $sanitized_query =~tr/"/~/; # Zap internal double quotes - which will mess CSV
+  if (length($sanitized_query) > $opt{MAX_QUERY_LEN}){
+	   $sanitized_query = substr($sanitized_query,0,$opt{MAX_QUERY_LEN}/2 -2) 
+	                     . ".." . substr($sanitized_query,-($opt{MAX_QUERY_LEN}/2));
+  }
+  $q->{query} = qq|"$sanitized_query"|;
+  print { $self->{FH} } join(",", $type, $ts, map( {$q->{$_}} sort keys %$q)),"\n";
+}
+
+sub Close{
+	my ($self) = @_;
+    return unless $self->{FH};
+	$self->boundary(undef,"FINAL");
+	$self->{IN_CSV_SECTION} = 0;
+    close $self->{FH};
+    $self->{FH} = undef;	
+}	
 1;
 } # End of MIME::Write::Simple
 #==============================================================================
