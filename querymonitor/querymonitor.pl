@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.12";
+our $VERSION = "0.13";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -15,6 +15,7 @@ use Fcntl qw(:DEFAULT :flock);
 use POSIX qw/setsid/;
 use HTTP::Tiny;
 {# Forward local-package declarations
+  package Analysis::Mode;
   package Web::Interface; # Handles communication with YBA API 
   package MIME::Write::Simple;
   package MIME::Multipart::ParseSimple;
@@ -60,7 +61,7 @@ my $curl_cmd; # Populated in `Initialize`
 Initialize();
 
 if ($opt{ANALYZE}){
-   Process_the_CSV_through_Sqlite();
+   Analysis::Mode::->Process_the_CSV_through_Sqlite();
    exit 0;
 }
 
@@ -303,6 +304,16 @@ sub unixtime_to_printable{
 	die "ERROR: Unsupported format:'$format' ";
 }
 #------------------------------------------------------------------------------
+
+#==============================================================================
+BEGIN{
+package Analysis::Mode; 
+
+sub new{ # Unused
+    my ($class) = @_;
+    return bless {}, $class;	
+}
+
 sub Process_the_CSV_through_Sqlite{
 	if ( -f $opt{ANALYZE} ){
 		# File exists - fall through and process it
@@ -440,7 +451,8 @@ __SQL__
    unlink $fifo;
    wait; # For kid 
 }
-#==============================================================================
+1;
+} # End of Analysis::Mode
 #==============================================================================
 BEGIN{
 package Web::Interface; # Handles communication with YBA API 
