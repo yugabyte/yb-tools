@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.13";
+our $VERSION = "0.14";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -19,6 +19,7 @@ use HTTP::Tiny;
   package Web::Interface; # Handles communication with YBA API 
   package MIME::Write::Simple;
   package MIME::Multipart::ParseSimple;
+  package JSON::Tiny;
 }
 
 my %opt=(
@@ -49,8 +50,11 @@ my %opt=(
 	SQLITE                       => "sqlite3", # path to Sqlite binary
 	UNIVERSE                     => undef,     # Universe detail info (Populated in initialize)
 	HTTPCONNECT                  => "tiny",    # How to connect to the YBA : "curl", or "tiny" (HTTP::Tiny)
+	USETESTDATA                  => undef,     # TESTING only !!
+	TZOFFSET                     => do{my $tz = (localtime time)[8] * 60 - POSIX::mktime(gmtime 0) / 60;
+                                      	sprintf "%+03d:%02d", $tz / 60, abs($tz) % 60},
 );
-
+$opt{STARTTIME_TZ} = unixtime_to_printable(time(),"YYYY-MM-DD HH:MM","Include tz offset");
 my $quit_daemon = 0;
 my $loop_count  = 0;
 my $error_counter=0;
@@ -61,7 +65,8 @@ my $curl_cmd; # Populated in `Initialize`
 Initialize();
 
 if ($opt{ANALYZE}){
-   Analysis::Mode::->Process_the_CSV_through_Sqlite();
+   my $anl = Analysis::Mode::->new();
+   $anl->Process_the_CSV_through_Sqlite();
    exit 0;
 }
 
@@ -135,7 +140,7 @@ sub Initialize{
                        INTERVAL_SEC=i RUN_FOR|RUNFOR=s CURL=s SQLITE=s
                        FLAGFILE=s OUTPUT=s DB=s
 					   MAX_QUERY_LEN|MAXQL|MQL=i ANALYZE|PROCESS=s
-					   HTTPCONNECT=s];
+					   HTTPCONNECT=s USETESTDATA!];
   my %flags_used;
   Getopt::Long::GetOptions (\%flags_used, @program_options)
       or die "ERROR: Bad Option\n";
@@ -191,17 +196,24 @@ sub Initialize{
   if ($opt{UNIVERSE}{name}){
 	 print "UNIVERSE: ", $opt{UNIVERSE}{name}," on ", $opt{UNIVERSE}{universeDetails}{clusters}[0]{userIntent}{providerType}, " ver ",$opt{UNIVERSE}{universeDetails}{clusters}[0]{userIntent}{ybSoftwareVersion},"\n";
   }else{
-     $opt{DEBUG} and  print "DEBUG: Universe info not found \n";
+     print "WARNING: Universe info not found \n";
   }
   $opt{NODEHASH} = {map{$_->{nodeName} => {%{$_->{cloudInfo}}, uuid=>$_->{nodeUuid} ,state=>$_->{state},isTserver=>$_->{isTserver}}} 
 						@{ $opt{UNIVERSE}->{universeDetails}{nodeDetailsSet} } };
 
-  $output = MIME::Write::Simple::->new(); # No I/O so far 
+  $output = MIME::Write::Simple::->new(UNIVERSE_JSON=>$YBA_API->{json_string}); # No I/O so far 
+  if ($opt{USETESTDATA}){
+	 print "Writing ONE record of test data, then exiting...\n";
+	 $output->WriteQuery(time(), "ycql", {FIVE=>5,SIX=>6,COW=>"Moo"},"SELECT some_junk FROM made_up");
+	 $output->Close();
+	 exit 2;
+  }  
   # Run iteration ONCE, to verify it works...
   return unless $opt{DAEMON} ;
   
   $opt{LOCKFILE} .= ".$opt{UNIV_UUID}"; # one lock per universe 
   print "Testing main loop before daemonizing...\n";
+
   if (Main_loop_Iteration()){
 	  print "ERROR in main loop iteration. quitting...\n";
      exit 2;
@@ -290,16 +302,19 @@ sub daemonize {
  }
 #------------------------------------------------------------------------------
 sub unixtime_to_printable{
-	my ($unixtime,$format) = @_;
+	my ($unixtime,$format, $showTZ) = @_;
 	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($unixtime);
 	if (not defined $format  or  $format eq "YYYY-MM-DD HH:MM:SS"){
-       return sprintf("%04d-%02d-%02d %02d:%02d:%02d", $year+1900, $mon+1, $mday, $hour, $min, $sec);
+       return sprintf("%04d-%02d-%02d %02d:%02d:%02d", $year+1900, $mon+1, $mday, $hour, $min, $sec)
+	        . ($showTZ? " " . $opt{TZOFFSET} : "");
 	}
 	if ($format eq "YYYY-MM-DD HH:MM"){
-       return sprintf("%04d-%02d-%02d %02d:%02d", $year+1900, $mon+1, $mday, $hour, $min);
+       return sprintf("%04d-%02d-%02d %02d:%02d", $year+1900, $mon+1, $mday, $hour, $min)
+	          . ($showTZ? " " . $opt{TZOFFSET} : "");
 	}	
 	if ($format eq "YYYY-MM-DD"){
-		  return sprintf("%04d-%02d-%02d", $year+1900, $mon+1, $mday);
+		  return sprintf("%04d-%02d-%02d", $year+1900, $mon+1, $mday)
+		         . ($showTZ? " " . $opt{TZOFFSET} : "");
 	}
 	die "ERROR: Unsupported format:'$format' ";
 }
@@ -311,10 +326,34 @@ package Analysis::Mode;
 
 sub new{ # Unused
     my ($class) = @_;
-    return bless {}, $class;	
+    my $self = bless {}, $class;	
+	$self->{INPUT}  = MIME::Multipart::ParseSimple::->new();
+	$self->{PIECENBR} = 0;
+	$self->{HEADER_PRINTED} =[0,0,0,0]; # Index by piece number 
+	return $self;
+}
+
+
+
+sub Parse_Body_Record{
+   my ($self, $rec) = @_;
+
+   if ( ! $self->{HEADER_PRINTED}[$self->{PIECENBR}]){
+      print "HDR $self->{PIECENBR}:",map({"$_=>" . $self->{INPUT}{general_header}{$_} . "; "} 
+	     grep {!/params$/} sort keys %{$self->{INPUT}{general_header}}),"\n";
+	  $self->{HEADER_PRINTED}[$self->{PIECENBR}] = 1;
+   }
+   if (! $rec) {
+      print "---- PIECE COMPLETE --\n" ;
+	  $self->{PIECENBR}++;
+	  return;
+   }   
+   print "GOT Piece:$rec\n";   
 }
 
 sub Process_the_CSV_through_Sqlite{
+	my ($self) = @_;
+	
 	if ( -f $opt{ANALYZE} ){
 		# File exists - fall through and process it
 	}else{
@@ -322,6 +361,20 @@ sub Process_the_CSV_through_Sqlite{
 	}
 	print "Analyzing $opt{ANALYZE} ...\n";
 	
+	if ($opt{ANALYZE} =~/\.gz$/i){
+		open($self->{FH}, "-|", "gunzip -c $opt{ANALYZE}") or die "ERROR: Cannot fork gunzip to open $opt{ANALYZE}";
+	}else{
+		open($self->{FH},"<",$opt{ANALYZE}) or die "ERROR opening $opt{ANALYZE}:$!";
+	}
+	$self->{INPUT}->parse($self, \&Parse_Body_Record);
+	close $self->{FH};
+	#if ($opt{DEBUG}){
+	#    print "DEBUG: $_\n" for sort keys %{$content->[0]};
+	#}
+	1;
+	1;
+	1;
+	return;### << Fix here
 	my ($sqlite_version) = do {my $vv=qx|$opt{SQLITE} --version|;chomp $vv;$vv=~/([\d\.]+)/};
 	$! and die "ERROR: Cannot run $opt{SQLITE} :$!";
 	$sqlite_version or die "ERROR: could not get SQLITE version";
@@ -337,8 +390,7 @@ sub Process_the_CSV_through_Sqlite{
 	$! and die "ERROR: Fifo failed: $!";
 	
 	#Fork to provide CSV stream to fifo
-	my $extract_cmd = 'gunzip -c'; # expecting a gzipped file
-	$opt{ANALYZE} !~/\.gz$/i and $extract_cmd = 'cat'; # It is NOT gzipped 
+
     my $pid = fork ();
     if ($pid < 0) {
       die "ERROR: fork failed: $!";
@@ -350,7 +402,7 @@ sub Process_the_CSV_through_Sqlite{
 		close STDIN;
 		close STDOUT;
 		close STDERR;		
-		qx{$extract_cmd $opt{ANALYZE} | sed 1d > $fifo};
+	####	qx{$extract_cmd $opt{ANALYZE} | sed 1d > $fifo};
 		exit 0; # Exit child process and close FIFO
 	}
 	
@@ -486,7 +538,6 @@ sub new{
 sub Get{
 	my ($self, $endpoint) = @_;
 	$self->{json_string}= "";
-	$self->{response} = undef;
 	if ($self->{HTTPCONNECT} eq "curl"){
 		$self->{json_string} = qx|$self->{curl_base_cmd}$endpoint|;
 		if ($?){
@@ -501,18 +552,19 @@ sub Get{
 	   }
 	   $self->{json_string} = $self->{raw_response}{content};
 	}
-	$self->{json_string}=~s/:/=>/g;
-	$self->{json_string}=~s/(\W)true(\W)/${1}1$2/g;
-	$self->{json_string}=~s/(\W)false(\W)/${1}0$2/g;
-	if (length($endpoint) == 0){
-	    # Special case for UNIVERSE .. clean unparsable...
-        $self->{json_string}=~s/"sampleAppCommandTxt"=>.+",//;
-	}
-    $@="";
-    $self->{response} = eval $self->{json_string};
-	$@ and die "EVAL ERROR getting $endpoint:$@";
-    #my %univ = $json_string=~m/"(\w[^"]+)":"([^"]+)/g;  # Grab all simple scalars
-    #%univ = %univ, $json_string=~m/"(\w[^"]+)":\[([^\]]+)\]/g; # Append all arrays (not decoded)
+	#### $self->{json_string}=~s/:/=>/g;
+	#### $self->{json_string}=~s/(\W)true(\W)/${1}1$2/g;
+	#### $self->{json_string}=~s/(\W)false(\W)/${1}0$2/g;
+	#### if (length($endpoint) == 0){
+	####     # Special case for UNIVERSE .. clean unparsable...
+    ####     $self->{json_string}=~s/"sampleAppCommandTxt"=>.+",//;
+	#### }
+    #### $@="";
+    #### $self->{response} = eval $self->{json_string};
+	#### $@ and die "EVAL ERROR getting $endpoint:$@";
+    #### #my %univ = $json_string=~m/"(\w[^"]+)":"([^"]+)/g;  # Grab all simple scalars
+    #### #%univ = %univ, $json_string=~m/"(\w[^"]+)":\[([^\]]+)\]/g; # Append all arrays (not decoded)
+	$self->{response} = JSON::Tiny::decode_json( $self->{json_string} );
 	return $self->{response};
 }
 
@@ -524,7 +576,7 @@ package MIME::Write::Simple;
 sub new{
 	my ($class,%att) = @_;
 	
-	$att{boundary} ||= "--" . time() . $$;
+	$att{boundary} ||= time() . $$;
 	$att{MIME_VERSION_SENT} = 0;
 	return bless {%att},$class;
 }
@@ -533,20 +585,19 @@ sub header{
 	my ($self,$content_type,$header_msg) = @_;
 	$header_msg ||= "";
 	chomp $header_msg;
-	$header_msg and $header_msg .= "\n";
+	$header_msg .= "\n\n";
 	my $mime_ver = $self->{MIME_VERSION_SENT} ? "" 
-                   : "MIME-Version: 1.0\n";
+                   : "MIME Version: 1.0\n";
     $self->{MIME_VERSION_SENT} = 1;
 	print { $self->{FH} }   $mime_ver
-	        . "Content-Type: $content_type;\n"
-          . qq|  boundary="$self->{boundary}"\n\n|
+	      . qq|Content-Type: $content_type; boundary="$self->{boundary}"\n|
 		  . $header_msg ;
 }
 
 sub boundary{ # getter/setter
    my ($self,$b, $final) = @_;
    $b and $self->{boundary} = $b;
-   print { $self->{FH} }  $self->{boundary} . ($final ? "--\n" : "\n");
+   print { $self->{FH} }  "--" . $self->{boundary} . ($final ? "--\n" : "\n");
 }
 
 sub Open_and_Initialize{
@@ -562,24 +613,32 @@ sub Open_and_Initialize{
 			  "Querymonitor_version: $VERSION",
 			  "UNIVERSE: $opt{UNIVERSE}{name}",
 			  "UNIV_UUID: $opt{UNIV_UUID}",
-			  "STARTTIME: $opt{STARTTIME}",
+			  "STARTTIME: $opt{STARTTIME_TZ}",
 			  "Run_host: $opt{HOSTNAME}"
 		  ));
-	    boundary();  
+	    $self->boundary();  
         # Insert NODE/ZONE info
- 
+        $self->header("application/json", 
+                      "Description: Universe detail JSON\nName: universe_info");
+		print { $self->{FH} } $self->{UNIVERSE_JSON},"\n";
+		$self->boundary();
 	}
 }
 
 sub Initialize_query_type{
 	my ($self,$type,$q) = @_;
+	
+    if (! $self->{FH} ){
+	  # Need to initialize output
+      $self->Open_and_Initialize();
+    }
     if ($self->{IN_CSV_SECTION}){
 	   $self->boundary(); # Close the CSV section
 	}
 	$self->header("text/csvheader",
 	      join("\n",
 		     "TYPE: $type",
-			 "FIELDS: " . join(",","ts",sort keys %$q)
+			 "FIELDS: " . join(",","type","ts",sort(keys %$q),"query")
 			 ));
 	$self->boundary();
 	$self->{TYPE_INITIALIZED}{$type} = 1;
@@ -590,10 +649,6 @@ sub Initialize_query_type{
 sub WriteQuery{
   my ($self,$ts, $type, $q, $sanitized_query) = @_;
   
-  if (! $self->{FH} ){
-	  # Need to initialize output
-      $self->Open_and_Initialize();
-  }
   if ( ! $self->{TYPE_INITIALIZED}{$type} ){
 	  $self->Initialize_query_type($type, $q);  
   }
@@ -627,24 +682,6 @@ use Carp;
 our $VERSION = '0.02';
 
 
-=head1 SYNOPSIS
-
-This is a really basic MIME multipart parser, 
-and the only reason for its existence is that
-I could not find an existing parser that would
-give me the parts directly (not on fs) and also
-give me the order.
-
-	my $mmps = MIME::Multipart::ParseSimple->new();
-	my $listref = $mmps->parse($my_file_handle);
-	print $listref->[0]->{"Preamble"};
-	print $listref->[0]->{"Content-Type.params"}->{"boundary"};
-	foreach (@$listref){
-		print $_->{"Body"} 
-		  if $_->{"Content-Type"} eq 'text/plain';
-	}
-=cut
-
 sub new {
   my $p = shift;
   my $c = ref($p) || $p;
@@ -673,44 +710,58 @@ The content of each part is stored as {"Body"}.
 
 sub parse {
   # load a MIME-multipart-style file containing at least one application/x-ptk.markdown
-  my ($o,$fh) = @_;
-  $o->{fh} = $fh;
+  my ($o,$caller, $callback) = @_;
+  $o->{fh}       = $caller->{FH};
+  $o->{CALLER}   = $caller;
+  $o->{callback} = $callback;
 
-  my $mp1 = <$fh>;
+  my $mp1 = readline($o->{fh});
   my $mp1e = 'MIME Version: 1.0';
   die "Multipart header line 1 must begin ``$mp1e'' " unless $mp1 =~ /^$mp1e/;
  
-  my $general_header = $o->parseHeader();
-  croak "no boundary defined" unless $general_header->{"Content-Type.params"}->{"boundary"};
-  $o->{boundary} = $general_header->{"Content-Type.params"}->{"boundary"};
+  $o->{general_header} = $o->parseHeader();
+  croak "no boundary defined" unless $o->{general_header}->{"Content-Type.params"}->{"boundary"};
+  my $b = $o->{general_header}->{"Content-Type.params"}->{"boundary"};
+  if (length($b)>2 and (my $quote=substr($b,0,1)) eq substr($b,-1,1)){
+      if ($quote eq '"'  or $quote eq "'"){
+		  $b=substr($b,1,length($b)-2);
+	  }
+  }
+  $o->{boundary} = $b;
   
-  $general_header->{Preamble} = $o->parseBody();
+  $o->parseBody();
 
-  my @parts = ($general_header);
+  #my @parts = ($general_header);
 
-  while(! (eof($fh) || $o->{eof})){
-    my $header = $o->parseHeader();
-    $header->{Body} = $o->parseBody();
-    push @parts, $header;
+  while(! (eof($o->{fh}) || $o->{eof})){
+    $o->{general_header} = $o->parseHeader();
+    $o->parseBody();
+    #push @parts, $header;
   }
 
-  $general_header->{Epilog} = $o->parseBody();
+  #$general_header->{Epilog} = $o->parseBody();
 
-  return \@parts;
+  #return \@parts;
 
 }
 
 sub parseBody {
   my ($o) = @_;
   my $fh = $o->{fh};
-  my $body = '';
   my $boundary = $o->{boundary};
+  $o->{recordnumber} = 0;
   while(<$fh>){
     $o->{eof} = 1 if /^--$boundary--/;
-    last if /^--$boundary/;
-    $body .= $_;
+    if (/^--$boundary/){
+		$o->{callback}->($o->{CALLER},undef);
+		$o->{general_header} = undef;
+		return;
+	}
+	$o->{recordnumber}++;
+	chomp;
+    $o->{callback}->($o->{CALLER},$_);
   }
-  return $body;
+  return undef;
 }
 
 sub parseHeader {
@@ -724,6 +775,7 @@ sub parseHeader {
     if(/^\S/){ # non space at start means a new header item
       my $header = shift @parts;
       ($k,$v) = split(/\:/, $header, 2);
+	  next unless $v;
       $k =~ s/(?:^\s+|\s+$)//g;
       $v =~ s/(?:^\s+|\s+$)//g;
       $header{$k} = $v;
@@ -732,6 +784,7 @@ sub parseHeader {
     }
     foreach my $part(@parts){
       my ($l,$w) = split(/=/, $part, 2);
+	  next unless $w;
       $l =~ s/(?:^\s+|\s+$)//g;
       $w =~ s/(?:^\s+|\s+$)//g;
       $header{$p}->{$l} = $w;
@@ -741,4 +794,307 @@ sub parseHeader {
 }
 1;
 } # End of  MIME::Multipart::ParseSimple
+#==============================================================================
+BEGIN{
+package JSON::Tiny;
+
+# Minimalistic JSON. Adapted from Mojo::JSON. (c)2012-2015 David Oswald
+# License: Artistic 2.0 license.
+# http://www.perlfoundation.org/artistic_license_2_0
+
+use strict;
+use warnings;
+use Carp 'croak';
+use Exporter 'import';
+use Scalar::Util 'blessed';
+use Encode ();
+use B;
+
+our $VERSION = '0.58';
+our @EXPORT_OK = qw(decode_json encode_json false from_json j to_json true);
+
+# Literal names
+# Users may override Booleans with literal 0 or 1 if desired.
+our($FALSE, $TRUE) = map { bless \(my $dummy = $_), 'JSON::Tiny::_Bool' } 0, 1;
+
+# Escaped special character map with u2028 and u2029
+my %ESCAPE = (
+  '"'     => '"',
+  '\\'    => '\\',
+  '/'     => '/',
+  'b'     => "\x08",
+  'f'     => "\x0c",
+  'n'     => "\x0a",
+  'r'     => "\x0d",
+  't'     => "\x09",
+  'u2028' => "\x{2028}",
+  'u2029' => "\x{2029}"
+);
+my %REVERSE = map { $ESCAPE{$_} => "\\$_" } keys %ESCAPE;
+
+for(0x00 .. 0x1f) {
+  my $packed = pack 'C', $_;
+  $REVERSE{$packed} = sprintf '\u%.4X', $_ unless defined $REVERSE{$packed};
+}
+
+sub decode_json {
+  my $err = _decode(\my $value, shift);
+  return defined $err ? croak $err : $value;
+}
+
+sub encode_json { Encode::encode 'UTF-8', _encode_value(shift) }
+
+sub false () {$FALSE}  ## no critic (prototypes)
+
+sub from_json {
+  my $err = _decode(\my $value, shift, 1);
+  return defined $err ? croak $err : $value;
+}
+
+sub j {
+  return encode_json $_[0] if ref $_[0] eq 'ARRAY' || ref $_[0] eq 'HASH';
+  return decode_json $_[0];
+}
+
+sub to_json { _encode_value(shift) }
+
+sub true () {$TRUE} ## no critic (prototypes)
+
+sub _decode {
+  my $valueref = shift;
+
+  eval {
+
+    # Missing input
+    die "Missing or empty input\n" unless length( local $_ = shift );
+
+    # UTF-8
+    $_ = eval { Encode::decode('UTF-8', $_, 1) } unless shift;
+    die "Input is not UTF-8 encoded\n" unless defined $_;
+
+    # Value
+    $$valueref = _decode_value();
+
+    # Leftover data
+    return m/\G[\x20\x09\x0a\x0d]*\z/gc || _throw('Unexpected data');
+  } ? return undef : chomp $@;
+
+  return $@;
+}
+
+sub _decode_array {
+  my @array;
+  until (m/\G[\x20\x09\x0a\x0d]*\]/gc) {
+
+    # Value
+    push @array, _decode_value();
+
+    # Separator
+    redo if m/\G[\x20\x09\x0a\x0d]*,/gc;
+
+    # End
+    last if m/\G[\x20\x09\x0a\x0d]*\]/gc;
+
+    # Invalid character
+    _throw('Expected comma or right square bracket while parsing array');
+  }
+
+  return \@array;
+}
+
+sub _decode_object {
+  my %hash;
+  until (m/\G[\x20\x09\x0a\x0d]*\}/gc) {
+
+    # Quote
+    m/\G[\x20\x09\x0a\x0d]*"/gc
+      or _throw('Expected string while parsing object');
+
+    # Key
+    my $key = _decode_string();
+
+    # Colon
+    m/\G[\x20\x09\x0a\x0d]*:/gc
+      or _throw('Expected colon while parsing object');
+
+    # Value
+    $hash{$key} = _decode_value();
+
+    # Separator
+    redo if m/\G[\x20\x09\x0a\x0d]*,/gc;
+
+    # End
+    last if m/\G[\x20\x09\x0a\x0d]*\}/gc;
+
+    # Invalid character
+    _throw('Expected comma or right curly bracket while parsing object');
+  }
+
+  return \%hash;
+}
+
+sub _decode_string {
+  my $pos = pos;
+  
+  # Extract string with escaped characters
+  m!\G((?:(?:[^\x00-\x1f\\"]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4})){0,32766})*)!gc; # segfault on 5.8.x in t/20-mojo-json.t
+  my $str = $1;
+
+  # Invalid character
+  unless (m/\G"/gc) {
+    _throw('Unexpected character or invalid escape while parsing string')
+      if m/\G[\x00-\x1f\\]/;
+    _throw('Unterminated string');
+  }
+
+  # Unescape popular characters
+  if (index($str, '\\u') < 0) {
+    $str =~ s!\\(["\\/bfnrt])!$ESCAPE{$1}!gs;
+    return $str;
+  }
+
+  # Unescape everything else
+  my $buffer = '';
+  while ($str =~ m/\G([^\\]*)\\(?:([^u])|u(.{4}))/gc) {
+    $buffer .= $1;
+
+    # Popular character
+    if ($2) { $buffer .= $ESCAPE{$2} }
+
+    # Escaped
+    else {
+      my $ord = hex $3;
+
+      # Surrogate pair
+      if (($ord & 0xf800) == 0xd800) {
+
+        # High surrogate
+        ($ord & 0xfc00) == 0xd800
+          or pos($_) = $pos + pos($str), _throw('Missing high-surrogate');
+
+        # Low surrogate
+        $str =~ m/\G\\u([Dd][C-Fc-f]..)/gc
+          or pos($_) = $pos + pos($str), _throw('Missing low-surrogate');
+
+        $ord = 0x10000 + ($ord - 0xd800) * 0x400 + (hex($1) - 0xdc00);
+      }
+
+      # Character
+      $buffer .= pack 'U', $ord;
+    }
+  }
+
+  # The rest
+  return $buffer . substr $str, pos $str, length $str;
+}
+
+sub _decode_value {
+
+  # Leading whitespace
+  m/\G[\x20\x09\x0a\x0d]*/gc;
+
+  # String
+  return _decode_string() if m/\G"/gc;
+
+  # Object
+  return _decode_object() if m/\G\{/gc;
+
+  # Array
+  return _decode_array() if m/\G\[/gc;
+
+  # Number
+  my ($i) = /\G([-]?(?:0|[1-9][0-9]*)(?:\.[0-9]*)?(?:[eE][+-]?[0-9]+)?)/gc;
+  return 0 + $i if defined $i;
+
+  # True
+  return $TRUE if m/\Gtrue/gc;
+
+  # False
+  return $FALSE if m/\Gfalse/gc;
+
+  # Null
+  return undef if m/\Gnull/gc;  ## no critic (return)
+
+  # Invalid character
+  _throw('Expected string, array, object, number, boolean or null');
+}
+
+sub _encode_array {
+  '[' . join(',', map { _encode_value($_) } @{$_[0]}) . ']';
+}
+
+sub _encode_object {
+  my $object = shift;
+  my @pairs = map { _encode_string($_) . ':' . _encode_value($object->{$_}) }
+    sort keys %$object;
+  return '{' . join(',', @pairs) . '}';
+}
+
+sub _encode_string {
+  my $str = shift;
+  $str =~ s!([\x00-\x1f\x{2028}\x{2029}\\"/])!$REVERSE{$1}!gs;
+  return "\"$str\"";
+}
+
+sub _encode_value {
+  my $value = shift;
+
+  # Reference
+  if (my $ref = ref $value) {
+
+    # Object
+    return _encode_object($value) if $ref eq 'HASH';
+
+    # Array
+    return _encode_array($value) if $ref eq 'ARRAY';
+
+    # True or false
+    return $$value ? 'true' : 'false' if $ref eq 'SCALAR';
+    return $value  ? 'true' : 'false' if $ref eq 'JSON::Tiny::_Bool';
+
+    # Blessed reference with TO_JSON method
+    if (blessed $value && (my $sub = $value->can('TO_JSON'))) {
+      return _encode_value($value->$sub);
+    }
+  }
+
+  # Null
+  return 'null' unless defined $value;
+
+
+  # Number (bitwise operators change behavior based on the internal value type)
+
+  return $value
+    if B::svref_2object(\$value)->FLAGS & (B::SVp_IOK | B::SVp_NOK)
+    # filter out "upgraded" strings whose numeric form doesn't strictly match
+    && 0 + $value eq $value
+    # filter out inf and nan
+    && $value * 0 == 0;
+
+  # String
+  return _encode_string($value);
+}
+
+sub _throw {
+
+  # Leading whitespace
+  m/\G[\x20\x09\x0a\x0d]*/gc;
+
+  # Context
+  my $context = 'Malformed JSON: ' . shift;
+  if (m/\G\z/gc) { $context .= ' before end of data' }
+  else {
+    my @lines = split "\n", substr($_, 0, pos);
+    $context .= ' at line ' . @lines . ', offset ' . length(pop @lines || '');
+  }
+
+  die "$context\n";
+}
+
+# Emulate boolean type
+package JSON::Tiny::_Bool;
+use overload '""' => sub { ${$_[0]} }, fallback => 1;
+1;	
+
+}; #End of JSON::Tiny
 #==============================================================================
