@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.01";
+our $VERSION = "1.02";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -52,8 +52,7 @@ my %opt=(
 	UNIVERSE                     => undef,     # Universe detail info (Populated in initialize)
 	HTTPCONNECT                  => "tiny",    # How to connect to the YBA : "curl", or "tiny" (HTTP::Tiny)
 	USETESTDATA                  => undef,     # TESTING only !!
-	TZOFFSET                     => do{my $tz = (localtime time)[8] * 60 - POSIX::mktime(gmtime 0) / 60;
-                                      	sprintf "%+03d:%02d", $tz / 60, abs($tz) % 60},
+	TZOFFSET                     => undef, # This is set inside 'unixtime_to_printable', on first use 
 );
 my $quit_daemon = 0;
 my $loop_count  = 0;
@@ -303,6 +302,8 @@ sub daemonize {
 sub unixtime_to_printable{
 	my ($unixtime,$format, $showTZ) = @_;
 	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($unixtime);
+	$opt{TZOFFSET} ||= do{my $tz = (localtime time)[8] * 60 - POSIX::mktime(gmtime 0) / 60;
+                                      	sprintf "%+03d:%02d", $tz / 60, abs($tz) % 60};
 	if (not defined $format  or  $format eq "YYYY-MM-DD HH:MM:SS"){
        return sprintf("%04d-%02d-%02d %02d:%02d:%02d", $year+1900, $mon+1, $mday, $hour, $min, $sec)
 	        . ($showTZ? " " . $opt{TZOFFSET} : "");
@@ -596,7 +597,7 @@ sub Initialize_SQLITE_Output{
 	print {$self->{OUTPUT_FH}} <<"__SQL1__";
 CREATE TABLE IF NOT EXISTS kv_store(type text,key text, value text);
 INSERT INTO kv_store VALUES ('GENERAL','data file','$opt{ANALYZE}')
-      ,('GENERAL','HOSTNAME','$opt{HOSTNAME}')
+      ,('GENERAL','Analysis_host','$opt{HOSTNAME}')
 	  ,('GENERAL','import date','$opt{STARTTIME_TZ}')
 	  ,('GENERAL','processing file','$opt{ANALYZE}')
 	  ,('GENERAL','Analysis version','$main::VERSION');
@@ -716,7 +717,7 @@ sub Open_and_Initialize{
 			  "UNIVERSE: $opt{UNIVERSE}{name}",
 			  "UNIV_UUID: $opt{UNIV_UUID}",
 			  "STARTTIME: $opt{STARTTIME_TZ}",
-			  "Run_host: $opt{HOSTNAME}",
+			  "Collection_host: $opt{HOSTNAME}",
 			  "_SECTION_: MIME_HEADER",
 			  "SANITIZED: $opt{SANITIZE}"
 		  ));
