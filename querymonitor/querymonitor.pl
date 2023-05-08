@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.14";
+our $VERSION = "1.01";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -30,6 +30,7 @@ my %opt=(
 
     # Operating variables
     STARTTIME	                  => unixtime_to_printable(time(),"YYYY-MM-DD HH:MM"),
+	STARTTIME_TZ                  => unixtime_to_printable(time(),"YYYY-MM-DD HH:MM","Include tz offset"),
     INTERVAL_SEC                  => 5,             # You can put fractions of a second here
     RUN_FOR                       => "4h",  # 4 hours
     ENDTIME_EPOCH                 => 0, # Calculated after options are processed
@@ -54,19 +55,17 @@ my %opt=(
 	TZOFFSET                     => do{my $tz = (localtime time)[8] * 60 - POSIX::mktime(gmtime 0) / 60;
                                       	sprintf "%+03d:%02d", $tz / 60, abs($tz) % 60},
 );
-$opt{STARTTIME_TZ} = unixtime_to_printable(time(),"YYYY-MM-DD HH:MM","Include tz offset");
 my $quit_daemon = 0;
 my $loop_count  = 0;
 my $error_counter=0;
 my $YBA_API;  # Populated in `Initialize` to a Web::Interface object
 my $output;   # Populated in `Initialize to a MIME::Write::Simple object
-my $curl_cmd; # Populated in `Initialize`
 
 Initialize();
 
 if ($opt{ANALYZE}){
    my $anl = Analysis::Mode::->new();
-   $anl->Process_the_CSV_through_Sqlite();
+   $anl->Process_file_and_create_Sqlite();
    exit 0;
 }
 
@@ -133,7 +132,7 @@ sub SQL_Sanitize{ # Remove PII
 #------------------------------------------------------------------------------
 sub Initialize{
   chomp ($opt{HOSTNAME} = qx|hostname|);
-  print $opt{STARTTIME}," Starting $0 version $VERSION  PID $$ on $opt{HOSTNAME}\n";
+  print $opt{STARTTIME_TZ}," Starting $0 version $VERSION  PID $$ on $opt{HOSTNAME}\n";
 
   my @program_options = qw[ DEBUG! HELP! DAEMON! SANITIZE!
                        API_TOKEN=s YBA_HOST=s CUST_UUID=s UNIV_UUID=s
@@ -333,25 +332,97 @@ sub new{ # Unused
 	return $self;
 }
 
+sub Handle_MIME_HEADER  {
+	my ($self,$dispatch_type) = @_;
+	
+	return unless $dispatch_type eq "Header"; # Only expecting a Header 
 
+    for ( grep {!/_SECTION_|Content-Type|params$/} sort keys %{$self->{INPUT}{general_header}} ){
+		   print {$self->{OUTPUT_FH}} "INSERT INTO kv_store VALUES ('MIMEHDR','$_','$self->{INPUT}{general_header}{$_}');\n";
+	}
+		
+}
+
+sub Handle_UNIVERSE_JSON{
+	my ($self,$dispatch_type, $body) = @_;
+	$opt{DEBUG} and print "DEBUG: IN: UNIV JSON handler type $dispatch_type\n";
+    return unless $dispatch_type eq "Body"; # Only Interested in Body 
+    if (length($body) < 10){
+       print "ERROR: UNIVERSE Info was not found in '$body'\n";
+       return;
+    }
+    my $bj = JSON::Tiny::decode_json($body);
+
+	my $count=0;
+	for my $n (@{  $bj->{universeDetails}{nodeDetailsSet} }){
+       $self->{node}[$count] ={map({$_=>$n->{$_}} qw|nodeIdx nodeName nodeUuid azUuid isMaster isTserver ysqlServerHttpPort yqlServerHttpPort |),
+	                              map({$_=>$n->{cloudInfo}{$_}} qw|private_ip public_ip az region |) };
+	   if ($count== 0){
+		     $opt{DEBUG} and print "DEBUG:","CREATE TABLE NODE (",
+			      join(",", sort keys %{ $self->{node}[$count]} ), ");\n";
+		     print {$self->{OUTPUT_FH}} "CREATE TABLE NODE (",
+			      join(",", sort keys %{ $self->{node}[$count]} ), ");\n";
+	   }
+	   $opt{DEBUG} and print "DEBUG:","INSERT INTO NODE VALUES('",
+			      join("','", map{$self->{node}[$count]{$_}} sort keys %{ $self->{node}[$count]} ), "');\n";
+	   print {$self->{OUTPUT_FH}} "INSERT INTO NODE VALUES('",
+			      join("','", map{$self->{node}[$count]{$_}} sort keys %{ $self->{node}[$count]} ), "');\n";
+       $count++;
+    }
+     print {$self->{OUTPUT_FH}} "----- End of nodes -----\n";    
+}
+
+sub Handle_CSVHEADER	{
+	my ($self,$dispatch_type) = @_;
+	$opt{DEBUG} and print "DEBUG:IN:CSVHEADER handler type $dispatch_type\n";
+	return unless $dispatch_type eq "Header";
+	my $type = $self->{INPUT}{general_header}{TYPE};
+	((my $Ignore_type_field_in_fieldnames),@{$self->{FIELDS}{$type}}) = split /,/, $self->{INPUT}{general_header}{FIELDS};
+	$opt{DEBUG} and print "DEBUG:","CREATE TABLE $type (",
+                    join(",",@{$self->{FIELDS}{$type}}), ");\n";
+	print {$self->{OUTPUT_FH}} "CREATE TABLE $type (",
+	                 join(",",@{$self->{FIELDS}{$type}}), ");\n";    
+}
+sub Handle_MONITOR_DATA {
+	my ($self,$dispatch_type,$body ) = @_;
+	$opt{DEBUG} and print "DEBUG:IN: MonitorData handler type $dispatch_type\n";
+	return unless $dispatch_type eq "Body" and length($body) > 2;
+	my ($type,@values) = split /,/,$body;
+	s/'/~/g for @values;
+	print {$self->{OUTPUT_FH}} "INSERT INTO $type VALUES('",
+	        join("','",@values),      "');\n"; 
+};
+
+my %Section_Handler =( # Defines Handler subroutines for each Mime piect (_SECTION_) received
+	MIME_HEADER		=> \&Handle_MIME_HEADER	,
+	UNIVERSE_JSON	=> \&Handle_UNIVERSE_JSON ,
+	CSVHEADER		=> \&Handle_CSVHEADER	,
+	MONITOR_DATA	=> \&Handle_MONITOR_DATA,
+);
 
 sub Parse_Body_Record{
    my ($self, $rec) = @_;
 
+   my $dispatch = $Section_Handler{ $self->{INPUT}{general_header}{_SECTION_} };
    if ( ! $self->{HEADER_PRINTED}[$self->{PIECENBR}]){
       print "HDR $self->{PIECENBR}:",map({"$_=>" . $self->{INPUT}{general_header}{$_} . "; "} 
 	     grep {!/params$/} sort keys %{$self->{INPUT}{general_header}}),"\n";
+	  $dispatch and $dispatch->($self,"Header"); # Handler is called here 
 	  $self->{HEADER_PRINTED}[$self->{PIECENBR}] = 1;
    }
-   if (! $rec) {
+
+   if (! defined $rec) {
       print "---- PIECE COMPLETE --\n" ;
+
+	  $dispatch and $dispatch->($self,"EOF"); # Handler is called here 
 	  $self->{PIECENBR}++;
 	  return;
    }   
-   print "GOT Piece:$rec\n";   
+   $opt{DEBUG} and print "DEBUG:GOT Piece:",substr($rec,0,200),"..\n";
+   $dispatch and $dispatch->($self,"Body", $rec); # Handler is called here    
 }
 
-sub Process_the_CSV_through_Sqlite{
+sub Process_file_and_create_Sqlite{
 	my ($self) = @_;
 	
 	if ( -f $opt{ANALYZE} ){
@@ -360,21 +431,26 @@ sub Process_the_CSV_through_Sqlite{
 	    die "ERROR: 'ANALYZE' file does not exist: No file '$opt{ANALYZE}'.";	
 	}
 	print "Analyzing $opt{ANALYZE} ...\n";
-	
+	# Create INPUT handle to read (possibly gzipped) MIME file ---
 	if ($opt{ANALYZE} =~/\.gz$/i){
-		open($self->{FH}, "-|", "gunzip -c $opt{ANALYZE}") or die "ERROR: Cannot fork gunzip to open $opt{ANALYZE}";
+		open($self->{INPUT_FH}, "-|", "gunzip -c $opt{ANALYZE}") or die "ERROR: Cannot fork gunzip to open $opt{ANALYZE}";
 	}else{
-		open($self->{FH},"<",$opt{ANALYZE}) or die "ERROR opening $opt{ANALYZE}:$!";
+		open($self->{INPUT_FH},"<",$opt{ANALYZE}) or die "ERROR opening $opt{ANALYZE}:$!";
 	}
+	
+    $self->Initialize_SQLITE_Output();
+	
 	$self->{INPUT}->parse($self, \&Parse_Body_Record);
-	close $self->{FH};
-	#if ($opt{DEBUG}){
-	#    print "DEBUG: $_\n" for sort keys %{$content->[0]};
-	#}
-	1;
-	1;
-	1;
-	return;### << Fix here
+	close $self->{INPUT_FH};
+	print {$self->{OUTPUT_FH}} "SELECT 'All input records processed.'";
+	# Should create and run VIEWs here ....
+	close $self->{OUTPUT_FH};
+
+	return;
+}
+
+sub OLD_DEAD_CODE{
+	
 	my ($sqlite_version) = do {my $vv=qx|$opt{SQLITE} --version|;chomp $vv;$vv=~/([\d\.]+)/};
 	$! and die "ERROR: Cannot run $opt{SQLITE} :$!";
 	$sqlite_version or die "ERROR: could not get SQLITE version";
@@ -503,6 +579,32 @@ __SQL__
    unlink $fifo;
    wait; # For kid 
 }
+
+sub Initialize_SQLITE_Output{
+    my ($self) = @_;
+	my ($sqlite_version) = do {my $vv=qx|$opt{SQLITE} --version|;chomp $vv;$vv=~/([\d\.]+)/};
+	$! and die "ERROR: Cannot run $opt{SQLITE} :$!";
+	# Create output handle to SQLITE ----
+	($self->{SQLITE_FILENAME}) = $opt{ANALYZE} =~m/(.+)\.\w+$/;
+	$self->{SQLITE_FILENAME}   =~s/\.mime$//i; # Zap the mime
+	$self->{SQLITE_FILENAME}   .= ".sqlite"; # Add sqlite suffix
+	$opt{DB}  and    $self->{SQLITE_FILENAME} = $opt{DB}; # DB wins, if specified.
+	print "Populating Sqlite($sqlite_version) database '$self->{SQLITE_FILENAME}'...\n";
+	
+	open($self->{OUTPUT_FH}, "|-", "$opt{SQLITE} $self->{SQLITE_FILENAME}") 
+	     or die "ERROR: Cannot fork sqlite to open $self->{SQLITE_FILENAME}";
+	print {$self->{OUTPUT_FH}} <<"__SQL1__";
+CREATE TABLE IF NOT EXISTS kv_store(type text,key text, value text);
+INSERT INTO kv_store VALUES ('GENERAL','data file','$opt{ANALYZE}')
+      ,('GENERAL','HOSTNAME','$opt{HOSTNAME}')
+	  ,('GENERAL','import date','$opt{STARTTIME_TZ}')
+	  ,('GENERAL','processing file','$opt{ANALYZE}')
+	  ,('GENERAL','Analysis version','$main::VERSION');
+	
+__SQL1__
+
+}
+
 1;
 } # End of Analysis::Mode
 #==============================================================================
@@ -589,7 +691,7 @@ sub header{
 	my $mime_ver = $self->{MIME_VERSION_SENT} ? "" 
                    : "MIME Version: 1.0\n";
     $self->{MIME_VERSION_SENT} = 1;
-	print { $self->{FH} }   $mime_ver
+	print { $self->{OUTPUT_FH} }   $mime_ver
 	      . qq|Content-Type: $content_type; boundary="$self->{boundary}"\n|
 		  . $header_msg ;
 }
@@ -597,30 +699,33 @@ sub header{
 sub boundary{ # getter/setter
    my ($self,$b, $final) = @_;
    $b and $self->{boundary} = $b;
-   print { $self->{FH} }  "--" . $self->{boundary} . ($final ? "--\n" : "\n");
+   print { $self->{OUTPUT_FH} }  "--" . $self->{boundary} . ($final ? "--\n" : "\n");
 }
 
 sub Open_and_Initialize{
 	my ($self) = @_;
 	$opt{DEBUG} and print "DEBUG: Opening output file=" , $opt{OUTPUT},"\n";
 	my $output_already_exists = -f $opt{OUTPUT};
-	open $self->{FH} , "|-", "gzip -c >> " . $opt{OUTPUT}
+	open $self->{OUTPUT_FH} , "|-", "gzip -c >> " . $opt{OUTPUT}
 	  or die "ERROR: Cannot fork output zip:$!";
 	if (! $output_already_exists){
-	   # Heed MIME headers etc...
+	   # Need MIME headers etc...
 	   $self->header("multipart/mixed",
 	      join ("\n",
 			  "Querymonitor_version: $VERSION",
 			  "UNIVERSE: $opt{UNIVERSE}{name}",
 			  "UNIV_UUID: $opt{UNIV_UUID}",
 			  "STARTTIME: $opt{STARTTIME_TZ}",
-			  "Run_host: $opt{HOSTNAME}"
+			  "Run_host: $opt{HOSTNAME}",
+			  "_SECTION_: MIME_HEADER",
+			  "SANITIZED: $opt{SANITIZE}"
 		  ));
 	    $self->boundary();  
         # Insert NODE/ZONE info
         $self->header("application/json", 
-                      "Description: Universe detail JSON\nName: universe_info");
-		print { $self->{FH} } $self->{UNIVERSE_JSON},"\n";
+                      "Description: Universe detail JSON\nName: universe_info\n"
+					  ."_SECTION_: UNIVERSE_JSON");
+		print { $self->{OUTPUT_FH} } $self->{UNIVERSE_JSON},"\n";
 		$self->boundary();
 	}
 }
@@ -628,7 +733,7 @@ sub Open_and_Initialize{
 sub Initialize_query_type{
 	my ($self,$type,$q) = @_;
 	
-    if (! $self->{FH} ){
+    if (! $self->{OUTPUT_FH} ){
 	  # Need to initialize output
       $self->Open_and_Initialize();
     }
@@ -638,11 +743,12 @@ sub Initialize_query_type{
 	$self->header("text/csvheader",
 	      join("\n",
 		     "TYPE: $type",
+			 "_SECTION_: CSVHEADER",
 			 "FIELDS: " . join(",","type","ts",sort(keys %$q),"query")
 			 ));
 	$self->boundary();
 	$self->{TYPE_INITIALIZED}{$type} = 1;
-	$self->header("text/csv");
+	$self->header("text/csv","_SECTION_: MONITOR_DATA");
 	$self->{IN_CSV_SECTION} = 1;
 }
 
@@ -658,16 +764,16 @@ sub WriteQuery{
 	                     . ".." . substr($sanitized_query,-($opt{MAX_QUERY_LEN}/2));
   }
   $q->{query} = qq|"$sanitized_query"|;
-  print { $self->{FH} } join(",", $type, $ts, map( {$q->{$_}} sort keys %$q)),"\n";
+  print { $self->{OUTPUT_FH} } join(",", $type, $ts, map( {$q->{$_}} sort keys %$q)),"\n";
 }
 
 sub Close{
 	my ($self) = @_;
-    return unless $self->{FH};
+    return unless $self->{OUTPUT_FH};
 	$self->boundary(undef,"FINAL");
 	$self->{IN_CSV_SECTION} = 0;
-    close $self->{FH};
-    $self->{FH} = undef;	
+    close $self->{OUTPUT_FH};
+    $self->{OUTPUT_FH} = undef;	
 }	
 1;
 } # End of MIME::Write::Simple
@@ -711,7 +817,7 @@ The content of each part is stored as {"Body"}.
 sub parse {
   # load a MIME-multipart-style file containing at least one application/x-ptk.markdown
   my ($o,$caller, $callback) = @_;
-  $o->{fh}       = $caller->{FH};
+  $o->{fh}       = $caller->{INPUT_FH};
   $o->{CALLER}   = $caller;
   $o->{callback} = $callback;
 
@@ -753,7 +859,7 @@ sub parseBody {
   while(<$fh>){
     $o->{eof} = 1 if /^--$boundary--/;
     if (/^--$boundary/){
-		$o->{callback}->($o->{CALLER},undef);
+		$o->{callback}->($o->{CALLER},undef); # Indiates Piece completed.
 		$o->{general_header} = undef;
 		return;
 	}
