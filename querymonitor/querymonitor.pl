@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.03";
+our $VERSION = "1.04";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -36,10 +36,11 @@ my %opt=(
     ENDTIME_EPOCH                 => 0, # Calculated after options are processed
     CURL                          => "curl",
     FLAGFILE                      => "querymonitor.defaultflags",
-	OUTPUT                        => "queries." . unixtime_to_printable(time(),"YYYY-MM-DD") . ".mime.gz",
+	OUTPUT                        => undef, # Output File name - Set in `Initialize()`
     # Misc
     DEBUG                         => 0,
     HELP                          => 0,
+	VERSION                       => 0,
     DAEMON                        => 1,
     LOCKFILE                      => "/var/lock/querymonitor.lock", # UNIV_UUID will be appended
     LOCK_FH                      => undef,
@@ -134,7 +135,7 @@ sub Initialize{
   chomp ($opt{HOSTNAME} = qx|hostname|);
   print $opt{STARTTIME_TZ}," Starting $0 version $VERSION  PID $$ on $opt{HOSTNAME}\n";
 
-  my @program_options = qw[ DEBUG! HELP! DAEMON! SANITIZE!
+  my @program_options = qw[ DEBUG! HELP! DAEMON! SANITIZE! VERSION!
                        API_TOKEN=s YBA_HOST=s CUST_UUID=s UNIV_UUID=s
                        INTERVAL_SEC=i RUN_FOR|RUNFOR=s CURL=s SQLITE=s
                        FLAGFILE=s OUTPUT=s DB=s
@@ -144,6 +145,7 @@ sub Initialize{
   Getopt::Long::GetOptions (\%flags_used, @program_options)
       or die "ERROR: Bad Option\n";
   $opt{$_} = $flags_used{$_} for keys %flags_used; # Apply cmd-line flags immediately
+  exit 1   if $opt{VERSION} ; # Already showed version info  
   if ($opt{HELP}){
     print $HELP_TEXT;
     print "Program Options:\n",
@@ -190,15 +192,16 @@ sub Initialize{
   # Get universe name ..
   $opt{UNIVERSE} = $YBA_API->Get("");
 
-  $opt{DEBUG} and print "DEBUG: $_\t","=>",$opt{UNIVERSE}{$_},"\n" for sort keys %{$opt{UNIVERSE}};
+  $opt{DEBUG} and print "DEBUG:UNIV: $_\t","=>",$opt{UNIVERSE}{$_},"\n" for qw|name creationDate universeUUID version |;
   #my ($universe_name) =  $json_string =~m/,"name":"([^"]+)"/;
   if ($opt{UNIVERSE}{name}){
 	 print "UNIVERSE: ", $opt{UNIVERSE}{name}," on ", $opt{UNIVERSE}{universeDetails}{clusters}[0]{userIntent}{providerType}, " ver ",$opt{UNIVERSE}{universeDetails}{clusters}[0]{userIntent}{ybSoftwareVersion},"\n";
   }else{
-     print "WARNING: Universe info not found \n";
+     die "ERROR: Universe info not found \n";
   }
   $opt{NODEHASH} = {map{$_->{nodeName} => {%{$_->{cloudInfo}}, uuid=>$_->{nodeUuid} ,state=>$_->{state},isTserver=>$_->{isTserver}}} 
 						@{ $opt{UNIVERSE}->{universeDetails}{nodeDetailsSet} } };
+  $opt{OUTPUT} ||= "queries." . unixtime_to_printable(time(),"YYYY-MM-DD") . ".$opt{UNIVERSE}{name}.mime.gz",
   $output = MIME::Write::Simple::->new(UNIVERSE_JSON=>$YBA_API->{json_string}); # No I/O so far 
   
   my $nodestatus = $YBA_API->Get("/status");
@@ -668,6 +671,7 @@ sub new{
 	$self->{HT} = HTTP::Tiny->new( default_headers => {
                          'X-AUTH-YW-API-TOKEN' => $opt{API_TOKEN},
 						 'Content-Type'      => 'application/json',
+						 # 'max_size'        => 5*1024*1024, # 5MB 
 	                  });
 
     return $self;
@@ -686,6 +690,7 @@ sub Get{
 	   $self->{raw_response} = $self->{HT}->get( 'http://' . $self->{BASE_URL} . $endpoint );
 	   if (not $self->{raw_response}->{success}){
 		  print "ERROR: Get '$endpoint' failed with status=$self->{raw_response}->{status}: $self->{raw_response}->{reason}\n";
+		  $self->{raw_response}->{status} == 599 and print "\t(599)Content:$self->{raw_response}{content};\n";
 		  exit 1;
 	   }
 	   $self->{json_string} = $self->{raw_response}{content};
