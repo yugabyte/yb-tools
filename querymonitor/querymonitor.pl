@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.02";
+our $VERSION = "1.03";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -106,6 +106,7 @@ sub Main_loop_Iteration{
 		   for my $subquery (split /;/, $q->{query}){
 			 #Sanitize PII from each
 			 my $sanitized_query = $opt{SANITIZE} ? SQL_Sanitize($subquery) : $subquery;
+			 $sanitized_query=~s/^\s+//; # Zap leading spaces 
              #print join(",",$ts, $type,$q->{nodeName},$q->{id},$subquery),"\n";
 			 $output->WriteQuery($ts, $type, $q, $sanitized_query);
 		   }
@@ -198,8 +199,16 @@ sub Initialize{
   }
   $opt{NODEHASH} = {map{$_->{nodeName} => {%{$_->{cloudInfo}}, uuid=>$_->{nodeUuid} ,state=>$_->{state},isTserver=>$_->{isTserver}}} 
 						@{ $opt{UNIVERSE}->{universeDetails}{nodeDetailsSet} } };
-
   $output = MIME::Write::Simple::->new(UNIVERSE_JSON=>$YBA_API->{json_string}); # No I/O so far 
+  
+  my $nodestatus = $YBA_API->Get("/status");
+  for my $nodename(keys %$nodestatus){
+	next unless ref($nodestatus->{$nodename}) eq "HASH";
+	next if $nodestatus->{$nodename}{node_status} eq "Live" 
+	      and ($nodestatus->{$nodename}{master_alive} or $nodestatus->{$nodename}{tserver_alive});
+	print "WARNING: NODE $nodename Status:$nodestatus->{$nodename}{node_status}; ",
+	       "Master-alive:$nodestatus->{$nodename}{master_alive}, Tserver-alive:$nodestatus->{$nodename}{tserver_alive}\n";
+  }
   if ($opt{USETESTDATA}){
 	 print "Writing ONE record of test data, then exiting...\n";
 	 $output->WriteQuery(time(), "ycql", {FIVE=>5,SIX=>6,COW=>"Moo"},"SELECT some_junk FROM made_up");
@@ -356,7 +365,7 @@ sub Handle_UNIVERSE_JSON{
 
 	my $count=0;
 	for my $n (@{  $bj->{universeDetails}{nodeDetailsSet} }){
-       $self->{node}[$count] ={map({$_=>$n->{$_}} qw|nodeIdx nodeName nodeUuid azUuid isMaster isTserver ysqlServerHttpPort yqlServerHttpPort |),
+       $self->{node}[$count] ={map({$_=>$n->{$_}||''} qw|nodeIdx nodeName nodeUuid azUuid isMaster isTserver ysqlServerHttpPort yqlServerHttpPort state|),
 	                              map({$_=>$n->{cloudInfo}{$_}} qw|private_ip public_ip az region |) };
 	   if ($count== 0){
 		     $opt{DEBUG} and print "DEBUG:","CREATE TABLE NODE (",
@@ -370,7 +379,19 @@ sub Handle_UNIVERSE_JSON{
 			      join("','", map{$self->{node}[$count]{$_}} sort keys %{ $self->{node}[$count]} ), "');\n";
        $count++;
     }
-     print {$self->{OUTPUT_FH}} "----- End of nodes -----\n";    
+    print {$self->{OUTPUT_FH}} "----- End of nodes -----\n";
+	for my $k (qw|universeName provider providerType replicationFactor numNodes ybSoftwareVersion enableYCQL
+             	enableYSQL enableYEDIS nodePrefix |){
+	   next unless my $v= $bj->{universeDetails}{clusters}[0]{userIntent}{$k};
+	   print {$self->{OUTPUT_FH}} "INSERT INTO kv_store VALUES ('CLUSTER','$k','$v');\n";
+	}
+	for my $flagtype (qw|masterGFlags tserverGFlags |){
+	   next unless my $flag = $bj->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
+	   for my $k(sort keys %$flag){
+		  my $v = $flag->{$k}; 
+	      print {$self->{OUTPUT_FH}} "INSERT INTO kv_store VALUES ('$flagtype','$k','$v');\n";
+	   }
+	}	 
 }
 
 sub Handle_CSVHEADER	{
@@ -378,18 +399,30 @@ sub Handle_CSVHEADER	{
 	$opt{DEBUG} and print "DEBUG:IN:CSVHEADER handler type $dispatch_type\n";
 	return unless $dispatch_type eq "Header";
 	my $type = $self->{INPUT}{general_header}{TYPE};
-	((my $Ignore_type_field_in_fieldnames),@{$self->{FIELDS}{$type}}) = split /,/, $self->{INPUT}{general_header}{FIELDS};
-	$opt{DEBUG} and print "DEBUG:","CREATE TABLE $type (",
-                    join(",",@{$self->{FIELDS}{$type}}), ");\n";
-	print {$self->{OUTPUT_FH}} "CREATE TABLE $type (",
-	                 join(",",@{$self->{FIELDS}{$type}}), ");\n";    
+	my ($Ignore_type_field_in_fieldnames,$timestamp_field,@field_names) 
+	           = split /,/, $self->{INPUT}{general_header}{FIELDS};
+    $self->{FIELDS}{$type} = [@field_names];
+	$_ = "$_ INTEGER" for grep {/millis/i} @field_names; # Make MILLISECONDS an integer 
+	$opt{DEBUG} and print "DEBUG:","CREATE TABLE $type ($timestamp_field INTEGER,",
+                    join(",",@field_names), ");\n";
+	print {$self->{OUTPUT_FH}} "CREATE TABLE $type ($timestamp_field INTEGER,",
+	                 join(",",@field_names), ");\n";    
 }
 sub Handle_MONITOR_DATA {
 	my ($self,$dispatch_type,$body ) = @_;
 	$opt{DEBUG} and print "DEBUG:IN: MonitorData handler type $dispatch_type\n";
 	return unless $dispatch_type eq "Body" and length($body) > 2;
-	my ($type,@values) = split /,/,$body;
-	s/'/~/g for @values;
+	my @values = ();  # Poor man's Text::CSV, from Perl FAQ. no embedded " allowed.
+    push(@values, $+) while $body =~ m{
+			"([^\"\\]*(?:\\.[^\"\\]*)*)",? # groups the phrase inside the quotes
+		   | ([^,]+),?
+		   | ,
+		}gx;
+	for (@values){
+		$_ ||= '';
+	    s/'/~/g ;
+	}
+	my $type = shift @values;
 	print {$self->{OUTPUT_FH}} "INSERT INTO $type VALUES('",
 	        join("','",@values),      "');\n"; 
 };
@@ -583,11 +616,13 @@ __SQL__
 
 sub Initialize_SQLITE_Output{
     my ($self) = @_;
-	my ($sqlite_version) = do {my $vv=qx|$opt{SQLITE} --version|;chomp $vv;$vv=~/([\d\.]+)/};
+	$!=undef;
+	my ($sqlite_version) = $opt{SQLITE} ? do {my $vv=qx|$opt{SQLITE} --version|;chomp $vv;$vv=~/([\d\.]+)/}
+	                       : ("N/A");
 	$! and die "ERROR: Cannot run $opt{SQLITE} :$!";
 	# Create output handle to SQLITE ----
 	($self->{SQLITE_FILENAME}) = $opt{ANALYZE} =~m/(.+)\.\w+$/;
-	$self->{SQLITE_FILENAME}   =~s/\.mime$//i; # Zap the mime
+	$self->{SQLITE_FILENAME}   =~s/\.(?:csv|mime)$//i; # Zap the mime or csv 
 	$self->{SQLITE_FILENAME}   .= ".sqlite"; # Add sqlite suffix
 	$opt{DB}  and    $self->{SQLITE_FILENAME} = $opt{DB}; # DB wins, if specified.
 	print "Populating Sqlite($sqlite_version) database '$self->{SQLITE_FILENAME}'...\n";
@@ -655,18 +690,6 @@ sub Get{
 	   }
 	   $self->{json_string} = $self->{raw_response}{content};
 	}
-	#### $self->{json_string}=~s/:/=>/g;
-	#### $self->{json_string}=~s/(\W)true(\W)/${1}1$2/g;
-	#### $self->{json_string}=~s/(\W)false(\W)/${1}0$2/g;
-	#### if (length($endpoint) == 0){
-	####     # Special case for UNIVERSE .. clean unparsable...
-    ####     $self->{json_string}=~s/"sampleAppCommandTxt"=>.+",//;
-	#### }
-    #### $@="";
-    #### $self->{response} = eval $self->{json_string};
-	#### $@ and die "EVAL ERROR getting $endpoint:$@";
-    #### #my %univ = $json_string=~m/"(\w[^"]+)":"([^"]+)/g;  # Grab all simple scalars
-    #### #%univ = %univ, $json_string=~m/"(\w[^"]+)":\[([^\]]+)\]/g; # Append all arrays (not decoded)
 	$self->{response} = JSON::Tiny::decode_json( $self->{json_string} );
 	return $self->{response};
 }
@@ -745,7 +768,7 @@ sub Initialize_query_type{
 	      join("\n",
 		     "TYPE: $type",
 			 "_SECTION_: CSVHEADER",
-			 "FIELDS: " . join(",","type","ts",sort(keys %$q),"query")
+			 "FIELDS: " . join(",","type","ts",sort(keys %$q))
 			 ));
 	$self->boundary();
 	$self->{TYPE_INITIALIZED}{$type} = 1;
