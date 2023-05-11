@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.04";
+our $VERSION = "1.05";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -83,7 +83,7 @@ warn(unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS") ." Program $$ Completed
 
 $opt{LOCK_FH} and close $opt{LOCK_FH} ;  # Should already be closed and removed by sig handler
 unlink $opt{LOCKFILE};
-$output->Close();
+$output->Close("FINAL");
 
 exit 0;
 #------------------------------------------------------------------------------
@@ -94,7 +94,7 @@ sub Main_loop_Iteration{
     my $query_type = "Unknown";
 
     if ($opt{DEBUG}){
-        print "DEBUG: Start main loop iteration $loop_count\n";
+        print "DEBUG: ",unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS")," Start main loop iteration $loop_count\n";
     }
     my $queries = $YBA_API->Get("/live_queries");
     my $ts = time();
@@ -215,7 +215,7 @@ sub Initialize{
   if ($opt{USETESTDATA}){
 	 print "Writing ONE record of test data, then exiting...\n";
 	 $output->WriteQuery(time(), "ycql", {FIVE=>5,SIX=>6,COW=>"Moo"},"SELECT some_junk FROM made_up");
-	 $output->Close();
+	 $output->Close("FINAL");
 	 exit 2;
   }  
   # Run iteration ONCE, to verify it works...
@@ -229,7 +229,7 @@ sub Initialize{
      exit 2;
   }
   # Close open file handles that may be leftover from main loop outputs
-  $output->Close();
+  $output->Close(0); # Not the "Final" close 
   print "End main loop test.\n";  
 }
 #------------------------------------------------------------------------------
@@ -373,19 +373,20 @@ sub Handle_UNIVERSE_JSON{
 	   if ($count== 0){
 		     $opt{DEBUG} and print "DEBUG:","CREATE TABLE NODE (",
 			      join(",", sort keys %{ $self->{node}[$count]} ), ");\n";
-		     print {$self->{OUTPUT_FH}} "CREATE TABLE NODE (",
+		     print {$self->{OUTPUT_FH}} "CREATE TABLE IF NOT EXISTS NODE (",
 			      join(",", sort keys %{ $self->{node}[$count]} ), ");\n";
 	   }
 	   $opt{DEBUG} and print "DEBUG:","INSERT INTO NODE VALUES('",
 			      join("','", map{$self->{node}[$count]{$_}} sort keys %{ $self->{node}[$count]} ), "');\n";
 	   print {$self->{OUTPUT_FH}} "INSERT INTO NODE VALUES('",
 			      join("','", map{$self->{node}[$count]{$_}} sort keys %{ $self->{node}[$count]} ), "');\n";
+	   $self->{REGION}{ $self->{node}[$count]{region} }++; # Track available regions 
        $count++;
     }
     print {$self->{OUTPUT_FH}} "----- End of nodes -----\n";
 	for my $k (qw|universeName provider providerType replicationFactor numNodes ybSoftwareVersion enableYCQL
              	enableYSQL enableYEDIS nodePrefix |){
-	   next unless my $v= $bj->{universeDetails}{clusters}[0]{userIntent}{$k};
+	   next unless defined ( my $v= $bj->{universeDetails}{clusters}[0]{userIntent}{$k} );
 	   print {$self->{OUTPUT_FH}} "INSERT INTO kv_store VALUES ('CLUSTER','$k','$v');\n";
 	}
 	for my $flagtype (qw|masterGFlags tserverGFlags |){
@@ -406,9 +407,9 @@ sub Handle_CSVHEADER	{
 	           = split /,/, $self->{INPUT}{general_header}{FIELDS};
     $self->{FIELDS}{$type} = [@field_names];
 	$_ = "$_ INTEGER" for grep {/millis/i} @field_names; # Make MILLISECONDS an integer 
-	$opt{DEBUG} and print "DEBUG:","CREATE TABLE $type ($timestamp_field INTEGER,",
+	$opt{DEBUG} and print "DEBUG:","CREATE TABLE IF NOT EXISTS $type ($timestamp_field INTEGER,",
                     join(",",@field_names), ");\n";
-	print {$self->{OUTPUT_FH}} "CREATE TABLE $type ($timestamp_field INTEGER,",
+	print {$self->{OUTPUT_FH}} "CREATE TABLE IF NOT EXISTS $type ($timestamp_field INTEGER,",
 	                 join(",",@field_names), ");\n";    
 }
 sub Handle_MONITOR_DATA {
@@ -422,7 +423,7 @@ sub Handle_MONITOR_DATA {
 		   | ,
 		}gx;
 	for (@values){
-		$_ ||= '';
+		$_ = '' unless defined $_;
 	    s/'/~/g ;
 	}
 	my $type = shift @values;
@@ -442,14 +443,14 @@ sub Parse_Body_Record{
 
    my $dispatch = $Section_Handler{ $self->{INPUT}{general_header}{_SECTION_} };
    if ( ! $self->{HEADER_PRINTED}[$self->{PIECENBR}]){
-      print "HDR $self->{PIECENBR}:",map({"$_=>" . $self->{INPUT}{general_header}{$_} . "; "} 
+      $opt{DEBUG} and print "DEBUG:HDR $self->{PIECENBR}:",map({"$_=>" . $self->{INPUT}{general_header}{$_} . "; "} 
 	     grep {!/params$/} sort keys %{$self->{INPUT}{general_header}}),"\n";
 	  $dispatch and $dispatch->($self,"Header"); # Handler is called here 
 	  $self->{HEADER_PRINTED}[$self->{PIECENBR}] = 1;
    }
 
-   if (! defined $rec) {
-      print "---- PIECE COMPLETE --\n" ;
+   if ( ! defined $rec) {
+      $opt{DEBUG} and print "DEBUG:---- PIECE COMPLETE --\n" ;
 
 	  $dispatch and $dispatch->($self,"EOF"); # Handler is called here 
 	  $self->{PIECENBR}++;
@@ -479,128 +480,53 @@ sub Process_file_and_create_Sqlite{
 	
 	$self->{INPUT}->parse($self, \&Parse_Body_Record);
 	close $self->{INPUT_FH};
-	print {$self->{OUTPUT_FH}} "SELECT 'All input records processed.'";
+	print {$self->{OUTPUT_FH}} "SELECT 'All input records processed.';\n";
 	# Should create and run VIEWs here ....
-	close $self->{OUTPUT_FH};
-
-	return;
-}
-
-sub OLD_DEAD_CODE{
-	
-	my ($sqlite_version) = do {my $vv=qx|$opt{SQLITE} --version|;chomp $vv;$vv=~/([\d\.]+)/};
-	$! and die "ERROR: Cannot run $opt{SQLITE} :$!";
-	$sqlite_version or die "ERROR: could not get SQLITE version";
-	# We do several extra steps to allow for OLD sqlite (< 3.8):
-	# (a) It does not support instr(), so we use xx like yy
-	# (b) the .import command does not allow --skip, so we pre-skip on input file
-	
-	# Use Forking and fifo to de-compress, remove first line, 
-	# then feed via the fifo into the ".import" command in sqlite
-	my $fifo = "/tmp/querymonitor_fifo_$$";
-	print "Creating temporary fifo $fifo ...\n";
-	qx|mkfifo $fifo|;
-	$! and die "ERROR: Fifo failed: $!";
-	
-	#Fork to provide CSV stream to fifo
-
-    my $pid = fork ();
-    if ($pid < 0) {
-      die "ERROR: fork failed: $!";
-    } elsif ($pid) {
-	  # This is the parent --fall through 
-    }else{
-		# This is the CHILD 
-	    #close std fds inherited from parent
-		close STDIN;
-		close STDOUT;
-		close STDERR;		
-	####	qx{$extract_cmd $opt{ANALYZE} | sed 1d > $fifo};
-		exit 0; # Exit child process and close FIFO
+	my ($region_fields_summary,$region_fields_slow) = ("","");
+	for my $r (sort keys %{ $self->{REGION} }){
+	   $region_fields_summary .= "sum(case when instr(query,' system.')>0 and region='$r' then 1 else 0 end) as [sys_$r],\n";	;
+	   $region_fields_summary .= "sum(case when instr(query,' system.')=0 and region='$r' then 1 else 0 end) as [cql_$r],\n";	;
+	   $region_fields_slow    .= "sum ( CASE WHEN region = '$r' THEN 1 ELSE 0 END) as [${r}_queries],\n";
 	}
-	
-	if (! $opt{DB}){
-	   # DB name was not specified .. generate it from ANALYZE file name
-	   $opt{DB} = $opt{ANALYZE};
-	   $opt{DB} =~s/\.gz$//i;  # drop .gz
-	   $opt{DB} =~s/\.csv$//i; # drop .csv
-	   $opt{DB} .= ".sqlite";  # append .sqlite 
-	}
-	print "Creating sqlite database $opt{DB} ...\n";
-	my $populate_zone_map=""; # Need a better way to do this...
-	if ($opt{ANALYZE} =~/SECONDARY/i){
-		$populate_zone_map = <<"__SEC_ZONE__";
-		update zone_map set zone='DC3';
-		update zone_map set zone='DC1' where node like '%n2';
-		update zone_map set zone='DC1' where node like '%n3';
-		update zone_map set zone='DC1' where node like '%n4';
-		update zone_map set zone='DC1' where node like '%n9';
-__SEC_ZONE__
-    }elsif ( $opt{ANALYZE} =~/PRIMARY/i ){
-		$populate_zone_map = <<"__PRI_ZONE__";
-		update zone_map set zone='DC1';
-		update zone_map set zone='DC3' where node like '%n1';
-		update zone_map set zone='DC3' where node like '%n2';
-		update zone_map set zone='DC3' where node like '%n3';
-		update zone_map set zone='DC3' where node like '%n5';
-__PRI_ZONE__
-	}
-    
-	
-	open my $sqlfh ,  "|-" , $opt{SQLITE} , $opt{DB} or die "ERROR: Could not run SQLITE";
-	print $sqlfh <<"__SQL__";
-.version
-.header off
-CREATE TABLE IF NOT EXISTS run_info(key text, value text);
-INSERT INTO run_info VALUES ('data file','$opt{ANALYZE}')
-      ,('HOSTNAME','$opt{HOSTNAME}')
-	  ,('import date',datetime('now','localtime'));
-CREATE TABLE zone_map (node,zone);	  
-CREATE TABLE q (ts integer,clientHost,clientPort,elapsedMillis integer,id,keyspace,nodeName,privateIp,query,type);
-CREATE VIEW summary as select datetime((ts/600)*600,'unixepoch','-4 Hours') as EDT,
+	$region_fields_slow=~s/,$//; # Zap trailing comma 
+	print {$self->{OUTPUT_FH}} <<"__Summary_SQL__";
+CREATE VIEW IF NOT EXISTS summary as
+SELECT datetime((ts/600)*600,'unixepoch') as UCT,
     sum(case when instr(query,' system.')> 0 then 1 else 0 end) as systemq,
         sum(case when instr(query,' system.')=0 then 1 else 0 end) as cqlcount,
         sum(case when instr(query,' system.')>0 and elapsedmillis > 120 then 1 else 0 end) as sys_gt120,
         sum(case when instr(query,' system.')=0 and elapsedmillis > 120 then 1 else 0 end) as cql_gt120,
-        sum(case when instr(query,' system.')>0 and zone='DC1' then 1 else 0 end) as sys_dc1,
-        sum(case when instr(query,' system.')=0 and zone='DC1' then 1 else 0 END) as cql_dc1,
-        sum(case when instr(query,' system.')>0 and zone='DC3' then 1 else 0 end) as sys_dc3,
-        sum(case when instr(query,' system.')=0 and zone='DC3' then 1 else 0 END) as cql_dc3,		
-         round(sum(case when instr(query,' system.')=0 and elapsedmillis > 120 then 1 else 0 end) *100.0
+        $region_fields_summary	
+        round(sum(case when instr(query,' system.')=0 and elapsedmillis > 120 then 1 else 0 end) *100.0
                / sum(case when instr(query,' system.')=0 then 1 else 0 end)
                    ,2) as breach_pct
-FROM q,zone_map
-   where q.nodename=zone_map.node 
- group by EDT;
+FROM ycql,node 
+WHERE ycql.nodename=node.nodename  
+GROUP BY UCT;
 
-CREATE VIEW slow_queries  as  select query, count(*) as nbr_querys, round(avg(elapsedmillis),1) as avg_milli ,
+CREATE VIEW IF NOT EXISTS slow_queries AS
+SELECT query, count(*) as nbr_querys, round(avg(elapsedmillis),1) as avg_milli ,
       sum (CASE when elapsedmillis > 120 then 1 else 0 END)*100 / count(*) as pct_gt120,
-          sum ( CASE WHEN zone = 'DC1' THEN 1 ELSE 0 END) as dc1_queries,
-		  sum ( CASE WHEN zone = 'DC3' THEN 1 ELSE 0 END) as dc3_queries
-          FROM q, zone_map
-		   where q.nodename=zone_map.node 
-          GROUP BY query
-          HAVING nbr_querys > 50 and avg_milli >30  ORDER by avg_milli  desc;
-		  
-CREATE VIEW NODE_Report AS  select nodename, round(avg(elapsedmillis),1) as avg_ms, 
+      $region_fields_slow
+FROM ycql, node
+WHERE ycql.nodename=node.nodename
+GROUP BY query
+HAVING nbr_querys > 50 and avg_milli >10  ORDER by avg_milli  desc;
+
+CREATE VIEW IF NOT EXISTS node_summary AS 
+SELECT ycql.nodename, round(avg(elapsedmillis),1) as avg_ms, 
        count(*), sum(case when instr(query,' system.') > 0 then 1 else 0 end) as sys_count,  
 	   sum(case when instr(query,' system.')= 0 then 1 else 0 end) as cql_count,
 	   sum(case when instr(query,' system.')= 0 and elapsedmillis > 120 then 1 else 0 end) as cql_gt_120,
 	   sum(case when instr(query,' system.')> 0 and elapsedmillis > 120 then 1 else 0 end) as sys_gt_120,
-	   zone
-  from q,zone_map 
-  where nodename=node  
-  group by  nodename 
-  order by nodename;
-  
-.mode csv
-.import '$fifo' q
+	   region
+FROM ycql,node 
+WHERE ycql.nodename=node.nodename   
+GROUP by  ycql.nodename 
+ORDER by ycql.nodename;         
+.header off
 .mode column
-SELECT 'Imported ' || count(*) ||' rows from $opt{ANALYZE}.' as Imported_count from q;
-
-insert into zone_map select distinct nodename,'UNKNOWN' from q;
-$populate_zone_map;
-SELECT ''; -- blank line
+SELECT 'Imported ' || count(*) ||' ycql rows from $opt{ANALYZE}.' as Imported_count from ycql;
 SELECT '====== Summary Report ====';
 .header on
 SELECT * from summary;
@@ -610,11 +536,11 @@ SELECT '======= Slow Queries =======';
 .header on
 select * from slow_queries;
 .q
-__SQL__
+__Summary_SQL__
 
-   close $sqlfh;
-   unlink $fifo;
-   wait; # For kid 
+	close $self->{OUTPUT_FH};
+
+	return;
 }
 
 sub Initialize_SQLITE_Output{
@@ -634,8 +560,8 @@ sub Initialize_SQLITE_Output{
 	     or die "ERROR: Cannot fork sqlite to open $self->{SQLITE_FILENAME}";
 	print {$self->{OUTPUT_FH}} <<"__SQL1__";
 CREATE TABLE IF NOT EXISTS kv_store(type text,key text, value text);
-INSERT INTO kv_store VALUES ('GENERAL','data file','$opt{ANALYZE}')
-      ,('GENERAL','Analysis_host','$opt{HOSTNAME}')
+INSERT INTO kv_store VALUES 
+       ('GENERAL','Analysis_host','$opt{HOSTNAME}')
 	  ,('GENERAL','import date','$opt{STARTTIME_TZ}')
 	  ,('GENERAL','processing file','$opt{ANALYZE}')
 	  ,('GENERAL','Analysis version','$main::VERSION');
@@ -656,7 +582,9 @@ sub new{
         $opt{$_} or die "ERROR: Required parameter --$_ was not specified.\n";
     }
 	my $self =bless {map {$_ => $opt{$_}} qw|HTTPCONNECT UNIV_UUID API_TOKEN YBA_HOST CUST_UUID| }, $class;
-	$self->{BASE_URL} = "$opt{YBA_HOST}/api/customers/$opt{CUST_UUID}/universes/$opt{UNIV_UUID}";
+	my $http_prefix = $opt{YBA_HOST} =~m/^http/i ? "" : "HTTP://";
+    $self->{BASE_URL} = "${http_prefix}$opt{YBA_HOST}/api/customers/$opt{CUST_UUID}/universes/$opt{UNIV_UUID}";
+	$http_prefix ||= substr($opt{YBA_HOST},0,5); # HTTP: or HTTPS
 	if ($self->{HTTPCONNECT} eq "curl"){
 		  $self->{curl_base_cmd} = join " ", $opt{CURL}, 
 					 qq|-s --request GET --header 'Content-Type: application/json'|,
@@ -667,7 +595,14 @@ sub new{
 		  }
 		  return $self;
     }
-    
+    if ($http_prefix =~/^https/i){
+	   my ($ok, $why) = HTTP::Tiny->can_ssl();
+       if (not $ok){
+          print "ERROR: HTTPS requested , but perl modules are insufficient:\n$why\n";
+		  print "You can avoid this error, if you use the (less efficient) '--HTTPCONNECT=curl' option\n";
+		  die "ERROR: HTTP::Tiny module dependencies not satisfied for HTTPS.";
+       }		   
+	}
 	$self->{HT} = HTTP::Tiny->new( default_headers => {
                          'X-AUTH-YW-API-TOKEN' => $opt{API_TOKEN},
 						 'Content-Type'      => 'application/json',
@@ -687,7 +622,7 @@ sub Get{
 		   exit 1;
 		}
     }else{ # HTTP::Tiny
-	   $self->{raw_response} = $self->{HT}->get( 'http://' . $self->{BASE_URL} . $endpoint );
+	   $self->{raw_response} = $self->{HT}->get(  $self->{BASE_URL} . $endpoint );
 	   if (not $self->{raw_response}->{success}){
 		  print "ERROR: Get '$endpoint' failed with status=$self->{raw_response}->{status}: $self->{raw_response}->{reason}\n";
 		  $self->{raw_response}->{status} == 599 and print "\t(599)Content:$self->{raw_response}{content};\n";
@@ -797,12 +732,13 @@ sub WriteQuery{
 }
 
 sub Close{
-	my ($self) = @_;
+	my ($self, $final) = @_;
     return unless $self->{OUTPUT_FH};
-	$self->boundary(undef,"FINAL");
+	$self->boundary(undef,$final);
 	$self->{IN_CSV_SECTION} = 0;
     close $self->{OUTPUT_FH};
-    $self->{OUTPUT_FH} = undef;	
+    $self->{OUTPUT_FH} = undef;
+	$self->{TYPE_INITIALIZED} ={};
 }	
 1;
 } # End of MIME::Write::Simple
