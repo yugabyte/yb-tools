@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.05";
+our $VERSION = "1.06";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -51,7 +51,7 @@ my %opt=(
 	DB                           => undef,     # output SQLITE database file name
 	SQLITE                       => "sqlite3", # path to Sqlite binary
 	UNIVERSE                     => undef,     # Universe detail info (Populated in initialize)
-	HTTPCONNECT                  => "tiny",    # How to connect to the YBA : "curl", or "tiny" (HTTP::Tiny)
+	HTTPCONNECT                  => "curl",    # How to connect to the YBA : "curl", or "tiny" (HTTP::Tiny)
 	USETESTDATA                  => undef,     # TESTING only !!
 	TZOFFSET                     => undef, # This is set inside 'unixtime_to_printable', on first use 
 );
@@ -94,7 +94,7 @@ sub Main_loop_Iteration{
     my $query_type = "Unknown";
 
     if ($opt{DEBUG}){
-        print "DEBUG: ",unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS")," Start main loop iteration $loop_count\n";
+        print "--DEBUG: ",unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS")," Start main loop iteration $loop_count\n";
     }
     my $queries = $YBA_API->Get("/live_queries");
     my $ts = time();
@@ -133,7 +133,7 @@ sub SQL_Sanitize{ # Remove PII
 #------------------------------------------------------------------------------
 sub Initialize{
   chomp ($opt{HOSTNAME} = qx|hostname|);
-  print $opt{STARTTIME_TZ}," Starting $0 version $VERSION  PID $$ on $opt{HOSTNAME}\n";
+  print "-- ",$opt{STARTTIME_TZ}," Starting $0 version $VERSION  PID $$ on $opt{HOSTNAME}\n";
 
   my @program_options = qw[ DEBUG! HELP! DAEMON! SANITIZE! VERSION!
                        API_TOKEN=s YBA_HOST=s CUST_UUID=s UNIV_UUID=s
@@ -156,21 +156,21 @@ sub Initialize{
     die "ERROR: Unknown argument (flag expected) : @ARGV";	  
   }
   if (-f $opt{FLAGFILE}){
-    $opt{DEBUG} and print "DEBUG: Reading Flagfile $opt{FLAGFILE}\n";
+    $opt{DEBUG} and print "--DEBUG: Reading Flagfile $opt{FLAGFILE}\n";
     open my $ff, "<", $opt{FLAGFILE} or die "ERROR: Could not open $opt{FLAGFILE}:$!";
     chomp (my @flag_options = grep !m/^\s*#/, <$ff>);
     close $ff;
-    $opt{DEBUG} and print "DEBUG: Flagfile option:'$_'\n;" for @flag_options;
+    $opt{DEBUG} and print "--DEBUG: Flagfile option:'$_'\n;" for @flag_options;
     my %flagfile_option_value;
     Getopt::Long::GetOptionsFromArray(\@flag_options,\%flagfile_option_value, @program_options)
         or die "ERROR: Bad FlagFile $opt{FLAGFILE} Option\n";
     for my $k (keys %flagfile_option_value){
         if (exists $flags_used{$k}){  # Cmd line overrides flagfile
-            $opt{DEBUG} and print "DEBUG: Flagfile option $k=$flagfile_option_value{$k} IGNORED.. overridden by cmd line.\n";
+            $opt{DEBUG} and print "--DEBUG: Flagfile option $k=$flagfile_option_value{$k} IGNORED.. overridden by cmd line.\n";
         }elsif ($k eq "FLAGFILE"){
             die "ERROR: Nested flag files are not allowed."; 
         }else{
-            $opt{DEBUG} and print "DEBUG: Flagfile option $k=$flagfile_option_value{$k} set.\n";
+            $opt{DEBUG} and print "--DEBUG: Flagfile option $k=$flagfile_option_value{$k} set.\n";
             $opt{$k} = $flagfile_option_value{$k};
         }
     }
@@ -192,10 +192,10 @@ sub Initialize{
   # Get universe name ..
   $opt{UNIVERSE} = $YBA_API->Get("");
 
-  $opt{DEBUG} and print "DEBUG:UNIV: $_\t","=>",$opt{UNIVERSE}{$_},"\n" for qw|name creationDate universeUUID version |;
+  $opt{DEBUG} and print "--DEBUG:UNIV: $_\t","=>",$opt{UNIVERSE}{$_},"\n" for qw|name creationDate universeUUID version |;
   #my ($universe_name) =  $json_string =~m/,"name":"([^"]+)"/;
   if ($opt{UNIVERSE}{name}){
-	 print "UNIVERSE: ", $opt{UNIVERSE}{name}," on ", $opt{UNIVERSE}{universeDetails}{clusters}[0]{userIntent}{providerType}, " ver ",$opt{UNIVERSE}{universeDetails}{clusters}[0]{userIntent}{ybSoftwareVersion},"\n";
+	 print "--UNIVERSE: ", $opt{UNIVERSE}{name}," on ", $opt{UNIVERSE}{universeDetails}{clusters}[0]{userIntent}{providerType}, " ver ",$opt{UNIVERSE}{universeDetails}{clusters}[0]{userIntent}{ybSoftwareVersion},"\n";
   }else{
      die "ERROR: Universe info not found \n";
   }
@@ -209,11 +209,11 @@ sub Initialize{
 	next unless ref($nodestatus->{$nodename}) eq "HASH";
 	next if $nodestatus->{$nodename}{node_status} eq "Live" 
 	      and ($nodestatus->{$nodename}{master_alive} or $nodestatus->{$nodename}{tserver_alive});
-	print "WARNING: NODE $nodename Status:$nodestatus->{$nodename}{node_status}; ",
+	print "--WARNING: NODE $nodename Status:$nodestatus->{$nodename}{node_status}; ",
 	       "Master-alive:$nodestatus->{$nodename}{master_alive}, Tserver-alive:$nodestatus->{$nodename}{tserver_alive}\n";
   }
   if ($opt{USETESTDATA}){
-	 print "Writing ONE record of test data, then exiting...\n";
+	 print "--Writing ONE record of test data, then exiting...\n";
 	 $output->WriteQuery(time(), "ycql", {FIVE=>5,SIX=>6,COW=>"Moo"},"SELECT some_junk FROM made_up");
 	 $output->Close("FINAL");
 	 exit 2;
@@ -222,7 +222,7 @@ sub Initialize{
   return unless $opt{DAEMON} ;
   
   $opt{LOCKFILE} .= ".$opt{UNIV_UUID}"; # one lock per universe 
-  print "Testing main loop before daemonizing...\n";
+  print "--Testing main loop before daemonizing...\n";
 
   if (Main_loop_Iteration()){
 	  print "ERROR in main loop iteration. quitting...\n";
@@ -230,7 +230,7 @@ sub Initialize{
   }
   # Close open file handles that may be leftover from main loop outputs
   $output->Close(0); # Not the "Final" close 
-  print "End main loop test.\n";  
+  print "--End main loop test.\n";  
 }
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
@@ -299,7 +299,7 @@ sub daemonize {
     } elsif ($grandchild) {
 	    #print "Running as Daemon PID=$$\n";
 		$| = 1;   # set autoflush on
-	    print unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS")," querymonitor child process $grandchild started(from $grandpop_pid). exiting parent(s)\n";
+	    print "-- ",unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS")," querymonitor child process $grandchild started(from $grandpop_pid). exiting parent(s)\n";
         exit 0; # Exit child, leaving grandkid running 		
     }
    ## chdir "/"; 
@@ -358,10 +358,10 @@ sub Handle_MIME_HEADER  {
 
 sub Handle_UNIVERSE_JSON{
 	my ($self,$dispatch_type, $body) = @_;
-	$opt{DEBUG} and print "DEBUG: IN: UNIV JSON handler type $dispatch_type\n";
+	$opt{DEBUG} and print "--DEBUG: IN: UNIV JSON handler type $dispatch_type\n";
     return unless $dispatch_type eq "Body"; # Only Interested in Body 
     if (length($body) < 10){
-       print "ERROR: UNIVERSE Info was not found in '$body'\n";
+       print "--ERROR: UNIVERSE Info was not found in '$body'\n";
        return;
     }
     my $bj = JSON::Tiny::decode_json($body);
@@ -371,12 +371,12 @@ sub Handle_UNIVERSE_JSON{
        $self->{node}[$count] ={map({$_=>$n->{$_}||''} qw|nodeIdx nodeName nodeUuid azUuid isMaster isTserver ysqlServerHttpPort yqlServerHttpPort state|),
 	                              map({$_=>$n->{cloudInfo}{$_}} qw|private_ip public_ip az region |) };
 	   if ($count== 0){
-		     $opt{DEBUG} and print "DEBUG:","CREATE TABLE NODE (",
+		     $opt{DEBUG} and print "--DEBUG:","CREATE TABLE NODE (",
 			      join(",", sort keys %{ $self->{node}[$count]} ), ");\n";
 		     print {$self->{OUTPUT_FH}} "CREATE TABLE IF NOT EXISTS NODE (",
 			      join(",", sort keys %{ $self->{node}[$count]} ), ");\n";
 	   }
-	   $opt{DEBUG} and print "DEBUG:","INSERT INTO NODE VALUES('",
+	   $opt{DEBUG} and print "--DEBUG:","INSERT INTO NODE VALUES('",
 			      join("','", map{$self->{node}[$count]{$_}} sort keys %{ $self->{node}[$count]} ), "');\n";
 	   print {$self->{OUTPUT_FH}} "INSERT INTO NODE VALUES('",
 			      join("','", map{$self->{node}[$count]{$_}} sort keys %{ $self->{node}[$count]} ), "');\n";
@@ -400,21 +400,22 @@ sub Handle_UNIVERSE_JSON{
 
 sub Handle_CSVHEADER	{
 	my ($self,$dispatch_type) = @_;
-	$opt{DEBUG} and print "DEBUG:IN:CSVHEADER handler type $dispatch_type\n";
+	$opt{DEBUG} and print "--DEBUG:IN:CSVHEADER handler type $dispatch_type\n";
 	return unless $dispatch_type eq "Header";
 	my $type = $self->{INPUT}{general_header}{TYPE};
 	my ($Ignore_type_field_in_fieldnames,$timestamp_field,@field_names) 
 	           = split /,/, $self->{INPUT}{general_header}{FIELDS};
     $self->{FIELDS}{$type} = [@field_names];
 	$_ = "$_ INTEGER" for grep {/millis/i} @field_names; # Make MILLISECONDS an integer 
-	$opt{DEBUG} and print "DEBUG:","CREATE TABLE IF NOT EXISTS $type ($timestamp_field INTEGER,",
+	$opt{DEBUG} and print "--DEBUG:","CREATE TABLE IF NOT EXISTS $type ($timestamp_field INTEGER,",
                     join(",",@field_names), ");\n";
 	print {$self->{OUTPUT_FH}} "CREATE TABLE IF NOT EXISTS $type ($timestamp_field INTEGER,",
-	                 join(",",@field_names), ");\n";    
+	                 join(",",@field_names), ");\n";
+	$self->{TYPE_EXISTS}{$type}++;
 }
 sub Handle_MONITOR_DATA {
 	my ($self,$dispatch_type,$body ) = @_;
-	$opt{DEBUG} and print "DEBUG:IN: MonitorData handler type $dispatch_type\n";
+	$opt{DEBUG} and print "--DEBUG:IN: MonitorData handler type $dispatch_type\n";
 	return unless $dispatch_type eq "Body" and length($body) > 2;
 	my @values = ();  # Poor man's Text::CSV, from Perl FAQ. no embedded " allowed.
     push(@values, $+) while $body =~ m{
@@ -443,20 +444,20 @@ sub Parse_Body_Record{
 
    my $dispatch = $Section_Handler{ $self->{INPUT}{general_header}{_SECTION_} };
    if ( ! $self->{HEADER_PRINTED}[$self->{PIECENBR}]){
-      $opt{DEBUG} and print "DEBUG:HDR $self->{PIECENBR}:",map({"$_=>" . $self->{INPUT}{general_header}{$_} . "; "} 
+      $opt{DEBUG} and print "--DEBUG:HDR $self->{PIECENBR}:",map({"$_=>" . $self->{INPUT}{general_header}{$_} . "; "} 
 	     grep {!/params$/} sort keys %{$self->{INPUT}{general_header}}),"\n";
 	  $dispatch and $dispatch->($self,"Header"); # Handler is called here 
 	  $self->{HEADER_PRINTED}[$self->{PIECENBR}] = 1;
    }
 
    if ( ! defined $rec) {
-      $opt{DEBUG} and print "DEBUG:---- PIECE COMPLETE --\n" ;
+      $opt{DEBUG} and print "--DEBUG:---- PIECE COMPLETE --\n" ;
 
 	  $dispatch and $dispatch->($self,"EOF"); # Handler is called here 
 	  $self->{PIECENBR}++;
 	  return;
    }   
-   $opt{DEBUG} and print "DEBUG:GOT Piece:",substr($rec,0,200),"..\n";
+   $opt{DEBUG} and print "--DEBUG:GOT Piece:",substr($rec,0,200),"..\n";
    $dispatch and $dispatch->($self,"Body", $rec); # Handler is called here    
 }
 
@@ -468,7 +469,7 @@ sub Process_file_and_create_Sqlite{
 	}else{
 	    die "ERROR: 'ANALYZE' file does not exist: No file '$opt{ANALYZE}'.";	
 	}
-	print "Analyzing $opt{ANALYZE} ...\n";
+	print "--Analyzing $opt{ANALYZE} ...\n";
 	# Create INPUT handle to read (possibly gzipped) MIME file ---
 	if ($opt{ANALYZE} =~/\.gz$/i){
 		open($self->{INPUT_FH}, "-|", "gunzip -c $opt{ANALYZE}") or die "ERROR: Cannot fork gunzip to open $opt{ANALYZE}";
@@ -482,6 +483,16 @@ sub Process_file_and_create_Sqlite{
 	close $self->{INPUT_FH};
 	print {$self->{OUTPUT_FH}} "SELECT 'All input records processed.';\n";
 	# Should create and run VIEWs here ....
+
+	$self->{TYPE_EXISTS}{ycql} and $self->Create_and_run_views_for_ycql();
+	close $self->{OUTPUT_FH};
+
+	return;
+}
+
+sub Create_and_run_views_for_ycql{
+    my ($self) = @_;
+	
 	my ($region_fields_summary,$region_fields_slow) = ("","");
 	for my $r (sort keys %{ $self->{REGION} }){
 	   $region_fields_summary .= "sum(case when instr(query,' system.')>0 and region='$r' then 1 else 0 end) as [sys_$r],\n";	;
@@ -489,8 +500,9 @@ sub Process_file_and_create_Sqlite{
 	   $region_fields_slow    .= "sum ( CASE WHEN region = '$r' THEN 1 ELSE 0 END) as [${r}_queries],\n";
 	}
 	$region_fields_slow=~s/,$//; # Zap trailing comma 
-	print {$self->{OUTPUT_FH}} <<"__Summary_SQL__";
-CREATE VIEW IF NOT EXISTS summary as
+	
+   print {$self->{OUTPUT_FH}} <<"__Summary_SQL__";
+CREATE VIEW IF NOT EXISTS summary_cql as
 SELECT datetime((ts/600)*600,'unixepoch') as UCT,
     sum(case when instr(query,' system.')> 0 then 1 else 0 end) as systemq,
         sum(case when instr(query,' system.')=0 then 1 else 0 end) as cqlcount,
@@ -513,7 +525,7 @@ WHERE ycql.nodename=node.nodename
 GROUP BY query
 HAVING nbr_querys > 50 and avg_milli >10  ORDER by avg_milli  desc;
 
-CREATE VIEW IF NOT EXISTS node_summary AS 
+CREATE VIEW IF NOT EXISTS node_summary_cql AS 
 SELECT ycql.nodename, round(avg(elapsedmillis),1) as avg_ms, 
        count(*), sum(case when instr(query,' system.') > 0 then 1 else 0 end) as sys_count,  
 	   sum(case when instr(query,' system.')= 0 then 1 else 0 end) as cql_count,
@@ -527,20 +539,15 @@ ORDER by ycql.nodename;
 .header off
 .mode column
 SELECT 'Imported ' || count(*) ||' ycql rows from $opt{ANALYZE}.' as Imported_count from ycql;
-SELECT '====== Summary Report ====';
+SELECT '====== summary_cql Report ====';
 .header on
-SELECT * from summary;
+SELECT * from summary_cql;
 .header off
 SELECT '';
 SELECT '======= Slow Queries =======';
 .header on
 select * from slow_queries;
-.q
 __Summary_SQL__
-
-	close $self->{OUTPUT_FH};
-
-	return;
 }
 
 sub Initialize_SQLITE_Output{
@@ -554,7 +561,7 @@ sub Initialize_SQLITE_Output{
 	$self->{SQLITE_FILENAME}   =~s/\.(?:csv|mime)$//i; # Zap the mime or csv 
 	$self->{SQLITE_FILENAME}   .= ".sqlite"; # Add sqlite suffix
 	$opt{DB}  and    $self->{SQLITE_FILENAME} = $opt{DB}; # DB wins, if specified.
-	print "Populating Sqlite($sqlite_version) database '$self->{SQLITE_FILENAME}'...\n";
+	print "--Populating Sqlite($sqlite_version) database '$self->{SQLITE_FILENAME}'...\n";
 	
 	open($self->{OUTPUT_FH}, "|-", "$opt{SQLITE} $self->{SQLITE_FILENAME}") 
 	     or die "ERROR: Cannot fork sqlite to open $self->{SQLITE_FILENAME}";
@@ -591,7 +598,7 @@ sub new{
 					 qq|--header "X-AUTH-YW-API-TOKEN: $opt{API_TOKEN}"|,
 					 qq|--url $self->{BASE_URL}|;
 		  if ($opt{DEBUG}){
-			 print "DEBUG:CURL base CMD: $self->{curl_base_cmd}\n";
+			 print "--DEBUG:CURL base CMD: $self->{curl_base_cmd}\n";
 		  }
 		  return $self;
     }
@@ -668,7 +675,7 @@ sub boundary{ # getter/setter
 
 sub Open_and_Initialize{
 	my ($self) = @_;
-	$opt{DEBUG} and print "DEBUG: Opening output file=" , $opt{OUTPUT},"\n";
+	$opt{DEBUG} and print "--DEBUG: Opening output file=" , $opt{OUTPUT},"\n";
 	my $output_already_exists = -f $opt{OUTPUT};
 	open $self->{OUTPUT_FH} , "|-", "gzip -c >> " . $opt{OUTPUT}
 	  or die "ERROR: Cannot fork output zip:$!";
