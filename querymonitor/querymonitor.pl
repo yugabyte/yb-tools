@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.06";
+our $VERSION = "1.07";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -54,6 +54,7 @@ my %opt=(
 	HTTPCONNECT                  => "curl",    # How to connect to the YBA : "curl", or "tiny" (HTTP::Tiny)
 	USETESTDATA                  => undef,     # TESTING only !!
 	TZOFFSET                     => undef, # This is set inside 'unixtime_to_printable', on first use 
+	RPCZ						 => 0,     # If set, get query from each node, instead of /live_queries 
 );
 my $quit_daemon = 0;
 my $loop_count  = 0;
@@ -96,7 +97,12 @@ sub Main_loop_Iteration{
     if ($opt{DEBUG}){
         print "--DEBUG: ",unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS")," Start main loop iteration $loop_count\n";
     }
-    my $queries = $YBA_API->Get("/live_queries");
+    my $queries;
+    if ($opt{RPCZ}){
+		Get_RPCZ_from_nodes(); # Write output directly 
+	}else{
+	    $queries = $YBA_API->Get("/live_queries");
+	}
     my $ts = time();
 	if ($queries->{error}){
 		$error_counter++ >= $opt{MAX_ERRORS} and $quit_daemon = 1;
@@ -117,6 +123,67 @@ sub Main_loop_Iteration{
   return 0;
 }
 #------------------------------------------------------------------------------
+sub PrintDeep{
+  my ($v, $txt, $level) = @_;
+  $level ||= 0;
+  $level >0 and print ", ";
+  $txt and print "$txt";
+        if (not ref $v){ #SCALAR
+           print "$v";
+        }elsif (ref $v eq "HASH"){
+           print " \{";
+           $level=0;
+           PrintDeep($v->{$_},"$_=>",$level++)for sort keys %$v;
+           print "\}";
+        }elsif (ref $v eq "ARRAY"){
+           print " \[";
+           $level=0;
+           PrintDeep($_,"",$level++) for  @$v;
+           print "\] ";
+        }else{
+           die "ERROR: Invalid type:",ref($v),"\n";
+        }
+}
+#-----
+sub Get_RPCZ_from_nodes{
+
+   for my $n (@{ $opt{NODES} }){
+       if ($opt{UNIVERSE}{universeDetails}{clusters}[0]{userIntent}{enableYCQL}){
+		    my $q =  $YBA_API->Get("/proxy/$n->{private_ip}:$n->{yqlServerHttpPort}/rpcz","BASE_URL_UNIVERSE");
+			my $ts = time();
+			$opt{DEBUG} and keys %$q and $loop_count<50 and  PrintDeep($q,"DEBUG:got ycql\@$ts:",0), print "\n";
+			next unless my $conn_array=$q->{inbound_connections};
+
+			for my $c (@$conn_array){
+			   	next unless my $item_array = $c->{calls_in_flight};
+				for my $item(@$item_array){
+					my $info= {query => join(";",map{$_->{sql_string}}
+					                              @{$item->{cql_details}{call_details}}),
+					           type=>$item->{cql_details}{type},
+					           elapsed_millis => $item->{elapsed_millis},
+							   nodeName=>$n->{nodeName}};
+					next unless length($info->{query}) > 1;
+					$info->{remote_ip} = $c->{remote_ip};
+					$output->WriteQuery($ts, "ycql", $info, $info->{query});
+				}
+			}
+			#PrintHash($q,"Unfinished YCQL code\@$ts:");
+	   }
+	   if ($opt{UNIVERSE}{universeDetails}{clusters}[0]{userIntent}{enableYSQL}){
+		    my $q = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{ysqlServerHttpPort}/rpcz","BASE_URL_UNIVERSE");
+            my $ts = time();
+	        for my $c (@{$q->{connections}}){
+		        next unless $c->{query};
+				$c->{host} = $n->{nodeName};
+				$opt{DEBUG} and $loop_count<50 and PrintDeep($c,"DEBUG:got ysql \@$ts:"), print "\n";
+				$output->WriteQuery($ts, "ysql", $c, $c->{query});
+	        }
+	   }
+   }
+
+   return ;   
+}	
+#------------------------------------------------------------------------------
 sub SQL_Sanitize{ # Remove PII 
    my ($q) = @_;
     # Remove leading spaces
@@ -135,7 +202,7 @@ sub Initialize{
   chomp ($opt{HOSTNAME} = qx|hostname|);
   print "-- ",$opt{STARTTIME_TZ}," Starting $0 version $VERSION  PID $$ on $opt{HOSTNAME}\n";
 
-  my @program_options = qw[ DEBUG! HELP! DAEMON! SANITIZE! VERSION!
+  my @program_options = qw[ DEBUG! HELP! DAEMON! SANITIZE! VERSION! RPCZ!
                        API_TOKEN=s YBA_HOST=s CUST_UUID=s UNIV_UUID=s
                        INTERVAL_SEC=i RUN_FOR|RUNFOR=s CURL=s SQLITE=s
                        FLAGFILE=s OUTPUT=s DB=s
@@ -199,8 +266,7 @@ sub Initialize{
   }else{
      die "ERROR: Universe info not found \n";
   }
-  $opt{NODEHASH} = {map{$_->{nodeName} => {%{$_->{cloudInfo}}, uuid=>$_->{nodeUuid} ,state=>$_->{state},isTserver=>$_->{isTserver}}} 
-						@{ $opt{UNIVERSE}->{universeDetails}{nodeDetailsSet} } };
+  $opt{NODES} = Analysis::Mode::Extract_nodes_From_Universe($opt{UNIVERSE}); 
   $opt{OUTPUT} ||= "queries." . unixtime_to_printable(time(),"YYYY-MM-DD") . ".$opt{UNIVERSE}{name}.mime.gz",
   $output = MIME::Write::Simple::->new(UNIVERSE_JSON=>$YBA_API->{json_string}); # No I/O so far 
   
@@ -345,6 +411,21 @@ sub new{ # Unused
 	return $self;
 }
 
+sub Extract_nodes_From_Universe{ # CLASS method 
+    my ($univ_hash, $callback) = @_;
+	
+	my @node;
+	my $count=0;
+	for my $n (@{  $univ_hash->{universeDetails}{nodeDetailsSet} }){
+       push @node, my $thisnode = {map({$_=>$n->{$_}||''} qw|nodeIdx nodeName nodeUuid azUuid isMaster
+                                  	   isTserver ysqlServerHttpPort yqlServerHttpPort state|),
+	                              map({$_=>$n->{cloudInfo}{$_}} qw|private_ip public_ip az region |) };
+       $callback and $callback->($thisnode, $count);
+       $count++;
+    }
+    return [@node];	
+}
+
 sub Handle_MIME_HEADER  {
 	my ($self,$dispatch_type) = @_;
 	
@@ -366,23 +447,20 @@ sub Handle_UNIVERSE_JSON{
     }
     my $bj = JSON::Tiny::decode_json($body);
 
-	my $count=0;
-	for my $n (@{  $bj->{universeDetails}{nodeDetailsSet} }){
-       $self->{node}[$count] ={map({$_=>$n->{$_}||''} qw|nodeIdx nodeName nodeUuid azUuid isMaster isTserver ysqlServerHttpPort yqlServerHttpPort state|),
-	                              map({$_=>$n->{cloudInfo}{$_}} qw|private_ip public_ip az region |) };
-	   if ($count== 0){
+	$self->{node} = Extract_nodes_From_Universe($bj,
+	   sub{my ($n,$count) = @_;
+		  if ($count== 0){
 		     $opt{DEBUG} and print "--DEBUG:","CREATE TABLE NODE (",
-			      join(",", sort keys %{ $self->{node}[$count]} ), ");\n";
+			      join(",", sort keys %$n ), ");\n";
 		     print {$self->{OUTPUT_FH}} "CREATE TABLE IF NOT EXISTS NODE (",
-			      join(",", sort keys %{ $self->{node}[$count]} ), ");\n";
-	   }
-	   $opt{DEBUG} and print "--DEBUG:","INSERT INTO NODE VALUES('",
-			      join("','", map{$self->{node}[$count]{$_}} sort keys %{ $self->{node}[$count]} ), "');\n";
-	   print {$self->{OUTPUT_FH}} "INSERT INTO NODE VALUES('",
-			      join("','", map{$self->{node}[$count]{$_}} sort keys %{ $self->{node}[$count]} ), "');\n";
-	   $self->{REGION}{ $self->{node}[$count]{region} }++; # Track available regions 
-       $count++;
-    }
+			      join(",", sort keys %$n ), ");\n";
+		  }
+		  $opt{DEBUG} and print "--DEBUG:","INSERT INTO NODE VALUES('",
+			      join("','", map{$n->{$_}} sort keys %$n ), "');\n";
+		  print {$self->{OUTPUT_FH}} "INSERT INTO NODE VALUES('",
+			      join("','", map{$n->{$_}} sort keys %$n ), "');\n";
+		  $self->{REGION}{ $n->{region} }++; # Track available regions 	   
+	   });
     print {$self->{OUTPUT_FH}} "----- End of nodes -----\n";
 	for my $k (qw|universeName provider providerType replicationFactor numNodes ybSoftwareVersion enableYCQL
              	enableYSQL enableYEDIS nodePrefix |){
@@ -406,7 +484,7 @@ sub Handle_CSVHEADER	{
 	my ($Ignore_type_field_in_fieldnames,$timestamp_field,@field_names) 
 	           = split /,/, $self->{INPUT}{general_header}{FIELDS};
     $self->{FIELDS}{$type} = [@field_names];
-	$_ = "$_ INTEGER" for grep {/millis/i} @field_names; # Make MILLISECONDS an integer 
+	$_ = "$_ INTEGER" for grep {/milli|_ms/i} @field_names; # Make MILLISECONDS an integer 
 	$opt{DEBUG} and print "--DEBUG:","CREATE TABLE IF NOT EXISTS $type ($timestamp_field INTEGER,",
                     join(",",@field_names), ");\n";
 	print {$self->{OUTPUT_FH}} "CREATE TABLE IF NOT EXISTS $type ($timestamp_field INTEGER,",
@@ -485,6 +563,7 @@ sub Process_file_and_create_Sqlite{
 	# Should create and run VIEWs here ....
 
 	$self->{TYPE_EXISTS}{ycql} and $self->Create_and_run_views_for_ycql();
+	$self->{TYPE_EXISTS}{ysql} and $self->Create_and_run_views_for_ysql();
 	close $self->{OUTPUT_FH};
 
 	return;
@@ -500,16 +579,16 @@ sub Create_and_run_views_for_ycql{
 	   $region_fields_slow    .= "sum ( CASE WHEN region = '$r' THEN 1 ELSE 0 END) as [${r}_queries],\n";
 	}
 	$region_fields_slow=~s/,$//; # Zap trailing comma 
-	
+   my ($elapsed_ms) = grep {m/milli/} @{ $self->{FIELDS}{ycql} }; 	
    print {$self->{OUTPUT_FH}} <<"__Summary_SQL__";
 CREATE VIEW IF NOT EXISTS summary_cql as
 SELECT datetime((ts/600)*600,'unixepoch') as UCT,
     sum(case when instr(query,' system.')> 0 then 1 else 0 end) as systemq,
         sum(case when instr(query,' system.')=0 then 1 else 0 end) as cqlcount,
-        sum(case when instr(query,' system.')>0 and elapsedmillis > 120 then 1 else 0 end) as sys_gt120,
-        sum(case when instr(query,' system.')=0 and elapsedmillis > 120 then 1 else 0 end) as cql_gt120,
+        sum(case when instr(query,' system.')>0 and $elapsed_ms > 120 then 1 else 0 end) as sys_gt120,
+        sum(case when instr(query,' system.')=0 and $elapsed_ms > 120 then 1 else 0 end) as cql_gt120,
         $region_fields_summary	
-        round(sum(case when instr(query,' system.')=0 and elapsedmillis > 120 then 1 else 0 end) *100.0
+        round(sum(case when instr(query,' system.')=0 and $elapsed_ms > 120 then 1 else 0 end) *100.0
                / sum(case when instr(query,' system.')=0 then 1 else 0 end)
                    ,2) as breach_pct
 FROM ycql,node 
@@ -517,8 +596,8 @@ WHERE ycql.nodename=node.nodename
 GROUP BY UCT;
 
 CREATE VIEW IF NOT EXISTS slow_queries AS
-SELECT query, count(*) as nbr_querys, round(avg(elapsedmillis),1) as avg_milli ,
-      sum (CASE when elapsedmillis > 120 then 1 else 0 END)*100 / count(*) as pct_gt120,
+SELECT query, count(*) as nbr_querys, round(avg($elapsed_ms),1) as avg_milli ,
+      sum (CASE when $elapsed_ms > 120 then 1 else 0 END)*100 / count(*) as pct_gt120,
       $region_fields_slow
 FROM ycql, node
 WHERE ycql.nodename=node.nodename
@@ -526,11 +605,11 @@ GROUP BY query
 HAVING nbr_querys > 50 and avg_milli >10  ORDER by avg_milli  desc;
 
 CREATE VIEW IF NOT EXISTS node_summary_cql AS 
-SELECT ycql.nodename, round(avg(elapsedmillis),1) as avg_ms, 
+SELECT ycql.nodename, round(avg($elapsed_ms),1) as avg_ms, 
        count(*), sum(case when instr(query,' system.') > 0 then 1 else 0 end) as sys_count,  
 	   sum(case when instr(query,' system.')= 0 then 1 else 0 end) as cql_count,
-	   sum(case when instr(query,' system.')= 0 and elapsedmillis > 120 then 1 else 0 end) as cql_gt_120,
-	   sum(case when instr(query,' system.')> 0 and elapsedmillis > 120 then 1 else 0 end) as sys_gt_120,
+	   sum(case when instr(query,' system.')= 0 and $elapsed_ms > 120 then 1 else 0 end) as cql_gt_120,
+	   sum(case when instr(query,' system.')> 0 and $elapsed_ms > 120 then 1 else 0 end) as sys_gt_120,
 	   region
 FROM ycql,node 
 WHERE ycql.nodename=node.nodename   
@@ -550,6 +629,11 @@ select * from slow_queries;
 __Summary_SQL__
 }
 
+sub Create_and_run_views_for_ysql{
+    my ($self) = @_;
+	print {$self->{OUTPUT_FH}} 
+	  "SELECT 'Imported ' || count(*) ||' ysql rows from $opt{ANALYZE}.' as Imported_count from ysql;\n";
+}
 sub Initialize_SQLITE_Output{
     my ($self) = @_;
 	$!=undef;
@@ -590,13 +674,13 @@ sub new{
     }
 	my $self =bless {map {$_ => $opt{$_}} qw|HTTPCONNECT UNIV_UUID API_TOKEN YBA_HOST CUST_UUID| }, $class;
 	my $http_prefix = $opt{YBA_HOST} =~m/^http/i ? "" : "HTTP://";
-    $self->{BASE_URL} = "${http_prefix}$opt{YBA_HOST}/api/customers/$opt{CUST_UUID}/universes/$opt{UNIV_UUID}";
+    $self->{BASE_URL_API_CUSTOMER} = "${http_prefix}$opt{YBA_HOST}/api/customers/$opt{CUST_UUID}/universes/$opt{UNIV_UUID}";
+	$self->{BASE_URL_UNIVERSE}     = "${http_prefix}$opt{YBA_HOST}/universes/$opt{UNIV_UUID}";
 	$http_prefix ||= substr($opt{YBA_HOST},0,5); # HTTP: or HTTPS
 	if ($self->{HTTPCONNECT} eq "curl"){
 		  $self->{curl_base_cmd} = join " ", $opt{CURL}, 
-					 qq|-s --request GET --header 'Content-Type: application/json'|,
-					 qq|--header "X-AUTH-YW-API-TOKEN: $opt{API_TOKEN}"|,
-					 qq|--url $self->{BASE_URL}|;
+					 qq|-ks --request GET --header 'Content-Type: application/json'|,
+					 qq|--header "X-AUTH-YW-API-TOKEN: $opt{API_TOKEN}"|;
 		  if ($opt{DEBUG}){
 			 print "--DEBUG:CURL base CMD: $self->{curl_base_cmd}\n";
 		  }
@@ -620,16 +704,17 @@ sub new{
 }
 
 sub Get{
-	my ($self, $endpoint) = @_;
+	my ($self, $endpoint, $base) = @_;
 	$self->{json_string}= "";
+	my $url = $base ? $self->{$base} : $self->{BASE_URL_API_CUSTOMER};
 	if ($self->{HTTPCONNECT} eq "curl"){
-		$self->{json_string} = qx|$self->{curl_base_cmd}$endpoint|;
+		$self->{json_string} = qx|$self->{curl_base_cmd} --url $url$endpoint|;
 		if ($?){
 		   print "ERROR: curl get '$endpoint' failed: $?\n";
 		   exit 1;
 		}
     }else{ # HTTP::Tiny
-	   $self->{raw_response} = $self->{HT}->get(  $self->{BASE_URL} . $endpoint );
+	   $self->{raw_response} = $self->{HT}->get(  $url . $endpoint );
 	   if (not $self->{raw_response}->{success}){
 		  print "ERROR: Get '$endpoint' failed with status=$self->{raw_response}->{status}: $self->{raw_response}->{reason}\n";
 		  $self->{raw_response}->{status} == 599 and print "\t(599)Content:$self->{raw_response}{content};\n";
