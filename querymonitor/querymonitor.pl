@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.07";
+our $VERSION = "1.08";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -54,7 +54,7 @@ my %opt=(
 	HTTPCONNECT                  => "curl",    # How to connect to the YBA : "curl", or "tiny" (HTTP::Tiny)
 	USETESTDATA                  => undef,     # TESTING only !!
 	TZOFFSET                     => undef, # This is set inside 'unixtime_to_printable', on first use 
-	RPCZ						 => 0,     # If set, get query from each node, instead of /live_queries 
+	RPCZ						 => 1,     # If set, get query from each node, instead of /live_queries 
 );
 my $quit_daemon = 0;
 my $loop_count  = 0;
@@ -97,12 +97,13 @@ sub Main_loop_Iteration{
     if ($opt{DEBUG}){
         print "--DEBUG: ",unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS")," Start main loop iteration $loop_count\n";
     }
-    my $queries;
+
     if ($opt{RPCZ}){
 		Get_RPCZ_from_nodes(); # Write output directly 
-	}else{
-	    $queries = $YBA_API->Get("/live_queries");
+		return 0;
 	}
+	my $queries = $YBA_API->Get("/live_queries");
+	
     my $ts = time();
 	if ($queries->{error}){
 		$error_counter++ >= $opt{MAX_ERRORS} and $quit_daemon = 1;
@@ -167,8 +168,8 @@ sub Get_RPCZ_from_nodes{
 					$output->WriteQuery($ts, "ycql", $info, $info->{query});
 				}
 			}
-			#PrintHash($q,"Unfinished YCQL code\@$ts:");
 	   }
+
 	   if ($opt{UNIVERSE}{universeDetails}{clusters}[0]{userIntent}{enableYSQL}){
 		    my $q = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{ysqlServerHttpPort}/rpcz","BASE_URL_UNIVERSE");
             my $ts = time();
@@ -579,10 +580,10 @@ sub Create_and_run_views_for_ycql{
 	   $region_fields_slow    .= "sum ( CASE WHEN region = '$r' THEN 1 ELSE 0 END) as [${r}_queries],\n";
 	}
 	$region_fields_slow=~s/,$//; # Zap trailing comma 
-   my ($elapsed_ms) = grep {m/milli/} @{ $self->{FIELDS}{ycql} }; 	
+   my ($elapsed_ms) = grep {m/milli/i} @{ $self->{FIELDS}{ycql} }; 	
    print {$self->{OUTPUT_FH}} <<"__Summary_SQL__";
 CREATE VIEW IF NOT EXISTS summary_cql as
-SELECT datetime((ts/600)*600,'unixepoch') as UCT,
+SELECT datetime((ts/600)*600,'unixepoch') as UTC,
     sum(case when instr(query,' system.')> 0 then 1 else 0 end) as systemq,
         sum(case when instr(query,' system.')=0 then 1 else 0 end) as cqlcount,
         sum(case when instr(query,' system.')>0 and $elapsed_ms > 120 then 1 else 0 end) as sys_gt120,
@@ -770,11 +771,11 @@ sub Open_and_Initialize{
 	      join ("\n",
 			  "Querymonitor_version: $VERSION",
 			  "UNIVERSE: $opt{UNIVERSE}{name}",
-			  "UNIV_UUID: $opt{UNIV_UUID}",
-			  "STARTTIME: $opt{STARTTIME_TZ}",
+			  #"UNIV_UUID: $opt{UNIV_UUID}",
+			  #"STARTTIME: $opt{STARTTIME_TZ}",
 			  "Collection_host: $opt{HOSTNAME}",
 			  "_SECTION_: MIME_HEADER",
-			  "SANITIZED: $opt{SANITIZE}"
+			  map({"$_: $opt{$_}"} grep{defined $opt{$_} and ref $opt{$_} eq "" } sort keys %opt)
 		  ));
 	    $self->boundary();  
         # Insert NODE/ZONE info
@@ -814,7 +815,7 @@ sub WriteQuery{
   if ( ! $self->{TYPE_INITIALIZED}{$type} ){
 	  $self->Initialize_query_type($type, $q);  
   }
-  $sanitized_query =~tr/"/~/; # Zap internal double quotes - which will mess CSV
+  $sanitized_query =~tr/"\n/~ /; # Zap internal double quotes and \n - which will mess CSV
   if (length($sanitized_query) > $opt{MAX_QUERY_LEN}){
 	   $sanitized_query = substr($sanitized_query,0,$opt{MAX_QUERY_LEN}/2 -2) 
 	                     . ".." . substr($sanitized_query,-($opt{MAX_QUERY_LEN}/2));
