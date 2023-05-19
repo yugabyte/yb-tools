@@ -1,11 +1,11 @@
 # querymonitor
 
 ## Synopsis
-Runs (as a daemon) and periodically collects live query info into csv (.gz) files.
+Runs (as a daemon) and periodically collects live query info into mime-encoded csv (.gz) files.
 Personably Identifyable information (PII) can be removed from each query by truncating the WHERE clause.
-Built-in --ANALYZE mode.
+Built-in --ANALYZE mode will analyze the generated file.
 
-These are suitable for offline analysis to obtain:
+The data collected is suitable for offline analysis to obtain:
 * Statement level response times AKA slow queries
 * Node response times & volumes
 * system behaviour by time
@@ -21,7 +21,7 @@ It obtains live query info from YBA, and requires parameters and connectivity :
 
 These can be supplied via environment variables, the command line, or a flag file.
 
-By default, the program runs in the background, collecting query samples every 5 seconds,  for 4 hours, then exits.
+By default, the program runs in the background, collecting query samples every 5 seconds, for 4 hours, then exits.
 
 ## Run instructions
 
@@ -58,31 +58,34 @@ $ ./querymonitor.pl --help
 <br/># Monitor running queries
 <br/># collect gzipped JSON file for offline analysis
 <br/>
-Program Options:
-<br/>        --ANALYZE
-<br/>        --API_TOKEN
-<br/>        --CURL
-<br/>        --CUST_UUID
-<br/>        --DAEMON
-<br/>        --DB
-<br/>        --DEBUG
-<br/>        --FLAGFILE
-<br/>        --HELP
-<br/>        --INTERVAL_SEC
-<br/>        --MAX_QUERY_LEN
-<br/>        --RUN_FOR
-<br/>        --SANITIZE
-<br/>        --SQLITE
-<br/>        --UNIV_UUID
-<br/>        --YBA_HOST
-<br/>        --YCQL_OUTPUT
-<br/>        --YSQL_OUTPUT
+Program Options:     Parameter(if-any)     Description
+<br/>  --ANALYZE     <file-name>           Analyzes the file and creates a Sqlite DB + reports
+<br/>  --API_TOKEN   <token-UUID>          From "User Profile"
+<br/>  --CURL        <path-to-curl-binary> 
+<br/>  --CUST_UUID   <UUID>                 From "User Profile" 
+<br/>  --DAEMON                             Run as Daemon (ON by default. use --NODAEMON for test)
+<br/>  --DB        <Path to sqlite DB t be created> In --ANALYZE mode only
+<br/>  --DEBUG                              Prints verbose messages      
+<br/>  --FLAGFILE   <Path-to-flag-file>     Reads runtime flags from disk. Default is querymonitor.defaultflags     
+<br/>  --HELP                               Shows these flags 
+<br/>  --HTTPCONNECT  <connect-method>      Defaults to "curl". Other option is 'http' (HTTP::Tiny)           
+<br/>  --INTERVAL_SEC  <Default is 5s (seconds)> How often to poll for  queries 
+<br/>  --MAX_QUERY_LEN                     Truncates queries longer than this
+<br/>  --OUTPUT   <file-name>              Name of output (mime) file 
+<br/>  --RPCZ                              Polls nodes directly. (--norpcz polls the /live_queries endpoint)
+<br/>  --RUN_FOR    <4h by default>        Auto-terminate after this time 
+<br/>  --SANITIZE                          Whther to truncate queries at WHERE clause  
+<br/>  --SQLITE     <path to sqlite binary>                       
+<br/> --UNIV_UUID                         From YBA Universe page
+<br/> --USETESTDATA                       Testing only   
+<br/>  --VERSION                           Show version 
+<br/>  --YBA_HOST    <URL to connect to YBA>                      REQUIRED 
 </code>
 
 ## Analysis mode
 
 After data has been collected by this program, the file can also be processed, using the --analyze option.
-THis will de-compress and process the file through SQLITE, and generate reports.
+This will de-compress and process the file through SQLITE, and generate reports.
 Here is a sample run:
 
 <code>
