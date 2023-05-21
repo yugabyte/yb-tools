@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.08";
+our $VERSION = "1.09";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -22,40 +22,40 @@ use HTTP::Tiny;
   package JSON::Tiny;
 }
 
-my %opt=(
-    API_TOKEN                      => $ENV{API_TOKEN},
-    YBA_HOST                       => $ENV{YBA_HOST},
-    CUST_UUID                      => $ENV{CUST_UUID},
-    UNIV_UUID                      => $ENV{UNIV_UUID},
-
-    # Operating variables
-    STARTTIME	                  => unixtime_to_printable(time(),"YYYY-MM-DD HH:MM"),
-	STARTTIME_TZ                  => unixtime_to_printable(time(),"YYYY-MM-DD HH:MM","Include tz offset"),
-    INTERVAL_SEC                  => 5,             # You can put fractions of a second here
-    RUN_FOR                       => "4h",  # 4 hours
-    ENDTIME_EPOCH                 => 0, # Calculated after options are processed
-    CURL                          => "curl",
-    FLAGFILE                      => "querymonitor.defaultflags",
-	OUTPUT                        => undef, # Output File name - Set in `Initialize()`
-    # Misc
-    DEBUG                         => 0,
-    HELP                          => 0,
-	VERSION                       => 0,
-    DAEMON                        => 1,
-    LOCKFILE                      => "/var/lock/querymonitor.lock", # UNIV_UUID will be appended
-    LOCK_FH                      => undef,
-	MAX_QUERY_LEN                => 2048,
-	MAX_ERRORS                   => 10,
-	SANITIZE					 => 0,   # Remove PII 
-	ANALYZE						 => undef,     # Input File-name ( "..csv.gz" ) to process through sqlite
-	DB                           => undef,     # output SQLITE database file name
-	SQLITE                       => "sqlite3", # path to Sqlite binary
-	UNIVERSE                     => undef,     # Universe detail info (Populated in initialize)
-	HTTPCONNECT                  => "curl",    # How to connect to the YBA : "curl", or "tiny" (HTTP::Tiny)
-	USETESTDATA                  => undef,     # TESTING only !!
-	TZOFFSET                     => undef, # This is set inside 'unixtime_to_printable', on first use 
-	RPCZ						 => 1,     # If set, get query from each node, instead of /live_queries 
+my %option_specs=( # Specifies info for globals saved in %opt. TYPE=>undef means these are INTERNAL, not settable.
+    API_TOKEN     =>{TYPE=>'=s', DEFAULT=> $ENV{API_TOKEN}, HELP=>"From User profile."},
+    YBA_HOST      =>{TYPE=>'=s', DEFAULT=> $ENV{YBA_HOST},  HELP=>"From User profile."},
+    CUST_UUID     =>{TYPE=>'=s', DEFAULT=> $ENV{CUST_UUID}, HELP=>"From User profile."},  
+    UNIV_UUID     =>{TYPE=>'=s', DEFAULT=> $ENV{UNIV_UUID}, HELP=>"From User profile."},
+	HOSTNAME      =>{TYPE=>undef,DEFAULT=>do{chomp(local $_=qx|hostname|); $_} },
+    STARTTIME     =>{TYPE=>undef,DEFAULT=> unixtime_to_printable(time(),"YYYY-MM-DD HH:MM")},
+    STARTTIME_TZ  =>{TYPE=>undef,DEFAULT=> unixtime_to_printable(time(),"YYYY-MM-DD HH:MM","Include tz offset")},
+    INTERVAL_SEC  =>{TYPE=>'=i', DEFAULT=> 5, HELP=>"Interval (Seconds) between  query snapshots"},
+    RUN_FOR       =>{TYPE=>'=s', DEFAULT=> "4h", ALT=>"RUNFOR", HELP=>"Terminate after this much time. Must be in s(ec), m(in), h(our) etc."},
+    ENDTIME_EPOCH =>{TYPE=>undef,DEFAULT=> 0,}, # Calculated after options are processed
+    CURL          =>{TYPE=>'=s', DEFAULT=> "curl", HELP=>"Full path to curl command"},
+    FLAGFILE      =>{TYPE=>'=s', DEFAULT=> "querymonitor.defaultflags", HELP=>"Name of file containing this program's options (--xx)"},
+    OUTPUT        =>{TYPE=>'=s', DEFAULT=> undef, HELP=>"Output File name. Defaults to queries.<YMD>.<Univ>.mime.gz"},
+    DEBUG         =>{TYPE=>'!',  DEFAULT=> 0,},
+    HELP          =>{TYPE=>'!',  DEFAULT=> 0,},
+    VERSION       =>{TYPE=>'!',  DEFAULT=> 0,},
+    DAEMON        =>{TYPE=>'!',  DEFAULT=> 1,HELP=>"Only for debugging(--NODAEMON)"},
+    LOCKFILE      =>{TYPE=>'=s', DEFAULT=> "/var/lock/querymonitor.lock", HELP=>"Name of lock file"}, # UNIV_UUID will be appended
+    LOCK_FH       =>{TYPE=>undef,DEFAULT=> undef,},
+    MAX_QUERY_LEN =>{TYPE=>'=i', DEFAULT=> 2048, ALT=>"MAXQL|MAXL",},
+    MAX_ERRORS    =>{TYPE=>'=i', DEFAULT=> 10,},
+    SANITIZE      =>{TYPE=>'!',  DEFAULT=> 0,   HELP=>"Remove PII by truncating to WHERE clause"},
+    ANALYZE       =>{TYPE=>'=s', DEFAULT=> undef, ALT=>"PROCESS", HELP=>"ANALYSIS mode Input File-name ('..csv.gz' ) to process through sqlite"},
+    DB            =>{TYPE=>'=s', DEFAULT=> undef,     HELP=>"Analysis mode output SQLITE database file name. Automatic, but you can overrided here"},
+    SQLITE        =>{TYPE=>'=s', DEFAULT=> "sqlite3", HELP=>"path to Sqlite binary"},
+    UNIVERSE      =>{TYPE=>undef,DEFAULT=> undef,  },   # Universe detail info (Populated in initialize)
+    HTTPCONNECT   =>{TYPE=>'=s', DEFAULT=> "curl",   HELP=>"How to connect to the YBA : 'curl', or 'tiny' (HTTP::Tiny)"},
+    USETESTDATA   =>{TYPE=>'!',  DEFAULT=> undef,   HELP=>"TESTING only !! - Do not use."},
+    TZOFFSET      =>{TYPE=>undef,DEFAULT=> undef,  },# This is set inside 'unixtime_to_printable', on first use 
+    RPCZ          =>{TYPE=>'!',  DEFAULT=> 1,     HELP=>"If set, get query from each node, instead of /live_queries"},
 );
+my %opt = map {$_=> $option_specs{$_}{DEFAULT}} keys %option_specs;
+
 my $quit_daemon = 0;
 my $loop_count  = 0;
 my $error_counter=0;
@@ -200,26 +200,24 @@ sub SQL_Sanitize{ # Remove PII
 
 #------------------------------------------------------------------------------
 sub Initialize{
-  chomp ($opt{HOSTNAME} = qx|hostname|);
   print "-- ",$opt{STARTTIME_TZ}," Starting $0 version $VERSION  PID $$ on $opt{HOSTNAME}\n";
-
-  my @program_options = qw[ DEBUG! HELP! DAEMON! SANITIZE! VERSION! RPCZ!
-                       API_TOKEN=s YBA_HOST=s CUST_UUID=s UNIV_UUID=s
-                       INTERVAL_SEC=i RUN_FOR|RUNFOR=s CURL=s SQLITE=s
-                       FLAGFILE=s OUTPUT=s DB=s
-					   MAX_QUERY_LEN|MAXQL|MQL=i ANALYZE|PROCESS=s
-					   HTTPCONNECT=s USETESTDATA!];
   my %flags_used;
-  Getopt::Long::GetOptions (\%flags_used, @program_options)
+  Getopt::Long::GetOptions (\%flags_used, 
+                            map {my $t;my $alt=$option_specs{$_}{ALT};$alt=$alt?"|$alt":"";
+                                 defined($t=$option_specs{$_}{TYPE}) ? ("$_$alt$t"):()} 
+							keys %option_specs )
       or die "ERROR: Bad Option\n";
-  $opt{$_} = $flags_used{$_} for keys %flags_used; # Apply cmd-line flags immediately
+  $opt{$_} = $flags_used{$_} for keys %flags_used;
   exit 1   if $opt{VERSION} ; # Already showed version info  
   if ($opt{HELP}){
     print $HELP_TEXT;
     print "Program Options:\n",
-         map {my $x=$_; $x=~s/\W.*//g; "\t--$x\n"} sort @program_options;
+         map {my ($h,$d); defined($h=$option_specs{$_}{HELP}) ?
+                             "\  --$_ :$h" . (defined($d=$option_specs{$_}{DEFAULT}) ? " (default:$d)\n" : "\n")
+							 : ""} sort keys %option_specs;
     exit 1;
-  }
+  }  
+
   if (@ARGV){
     die "ERROR: Unknown argument (flag expected) : @ARGV";	  
   }
@@ -230,7 +228,9 @@ sub Initialize{
     close $ff;
     $opt{DEBUG} and print "--DEBUG: Flagfile option:'$_'\n;" for @flag_options;
     my %flagfile_option_value;
-    Getopt::Long::GetOptionsFromArray(\@flag_options,\%flagfile_option_value, @program_options)
+    Getopt::Long::GetOptionsFromArray(\@flag_options,\%flagfile_option_value, 
+	                                  map {my $t; defined($t=$option_specs{$_}{TYPE}) ?
+                                        ("$_$t"):()} keys %option_specs)
         or die "ERROR: Bad FlagFile $opt{FLAGFILE} Option\n";
     for my $k (keys %flagfile_option_value){
         if (exists $flags_used{$k}){  # Cmd line overrides flagfile
@@ -243,7 +243,7 @@ sub Initialize{
         }
     }
   }
-
+  $opt{DEBUG} and print "DEBUG: $_\t",defined( $opt{$_})?$opt{$_}:"undef","\n" for sort keys %opt;
   my ($run_digits,$run_unit) = $opt{RUN_FOR} =~m/^(\d+)([dhms]?)$/i;
   $run_digits or die "ERROR:'RUN_FOR' option incorrectly specified($opt{RUN_FOR}). Use: 1d 3h 30s or just a number of seconds";
   $run_unit ||= "s"; # Default to seconds  
@@ -680,7 +680,7 @@ sub new{
 	$http_prefix ||= substr($opt{YBA_HOST},0,5); # HTTP: or HTTPS
 	if ($self->{HTTPCONNECT} eq "curl"){
 		  $self->{curl_base_cmd} = join " ", $opt{CURL}, 
-					 qq|-ks --request GET --header 'Content-Type: application/json'|,
+					 qq|-kfs --request GET --header 'Content-Type: application/json'|,
 					 qq|--header "X-AUTH-YW-API-TOKEN: $opt{API_TOKEN}"|;
 		  if ($opt{DEBUG}){
 			 print "--DEBUG:CURL base CMD: $self->{curl_base_cmd}\n";
