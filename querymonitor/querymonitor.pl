@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.09";
+our $VERSION = "1.11";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -525,14 +525,17 @@ sub Parse_Body_Record{
    if ( ! $self->{HEADER_PRINTED}[$self->{PIECENBR}]){
       $opt{DEBUG} and print "--DEBUG:HDR $self->{PIECENBR}:",map({"$_=>" . $self->{INPUT}{general_header}{$_} . "; "} 
 	     grep {!/params$/} sort keys %{$self->{INPUT}{general_header}}),"\n";
+	  print {$self->{OUTPUT_FH}} "BEGIN TRANSACTION; -- $self->{PIECENBR} : ",
+	          $self->{INPUT}{general_header}{_SECTION_}, "\n";
 	  $dispatch and $dispatch->($self,"Header"); # Handler is called here 
 	  $self->{HEADER_PRINTED}[$self->{PIECENBR}] = 1;
    }
 
    if ( ! defined $rec) {
       $opt{DEBUG} and print "--DEBUG:---- PIECE COMPLETE --\n" ;
-
 	  $dispatch and $dispatch->($self,"EOF"); # Handler is called here 
+	  print {$self->{OUTPUT_FH}} "END TRANSACTION; -- $self->{PIECENBR} : ",
+	          $self->{INPUT}{general_header}{_SECTION_}, "\n";
 	  $self->{PIECENBR}++;
 	  return;
    }   
@@ -594,7 +597,7 @@ SELECT datetime((ts/600)*600,'unixepoch') as UTC,
                    ,2) as breach_pct
 FROM ycql,node 
 WHERE ycql.nodename=node.nodename  
-GROUP BY UCT;
+GROUP BY UTC;
 
 CREATE VIEW IF NOT EXISTS slow_queries AS
 SELECT query, count(*) as nbr_querys, round(avg($elapsed_ms),1) as avg_milli ,
