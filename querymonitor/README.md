@@ -1,5 +1,5 @@
 # querymonitor
-
+![querymonitor icon](querymonitor_icon.png "Querymonitor")
 ## Synopsis
 Runs (as a daemon) and periodically collects live query info into mime-encoded csv (.gz) files.
 Personably Identifyable information (PII) can be removed from each query by truncating the WHERE clause.
