@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.09";
+our $VERSION = "1.12";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -60,7 +60,7 @@ my $quit_daemon = 0;
 my $loop_count  = 0;
 my $error_counter=0;
 my $YBA_API;  # Populated in `Initialize` to a Web::Interface object
-my $output;   # Populated in `Initialize to a MIME::Write::Simple object
+my $output;   # Populated in `Initialize` to a MIME::Write::Simple object
 
 Initialize();
 
@@ -73,15 +73,17 @@ if ($opt{ANALYZE}){
 daemonize();
 
 #------------- M a i n    L o o p --------------------------
-while (not ($quit_daemon  or  time() > $opt{ENDTIME_EPOCH} )){  # Infinite loop ...
+while (not ($quit_daemon  or my $this_iter_ts=time() > $opt{ENDTIME_EPOCH} )){  # Infinite loop ...
    $loop_count++;
+   my $next_iter_ts = $this_iter_ts + $opt{INTERVAL_SEC};
    Main_loop_Iteration();
-   sleep($opt{INTERVAL_SEC});
+   my $sleep_sec = $next_iter_ts - time();
+   $sleep_sec > 0 and  sleep($sleep_sec);
 }
 #------------- E n d  M a i n    L o o p ---------------
 # Could get here if a SIGNAL is received
 warn(unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS") ." Program $$ Completed after $loop_count iterations.\n"); 
-
+$output->Write_event(time(),unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS") ." Program $$ Completed after $loop_count iterations.",1); 
 $opt{LOCK_FH} and close $opt{LOCK_FH} ;  # Should already be closed and removed by sig handler
 unlink $opt{LOCKFILE};
 $output->Close("FINAL");
@@ -270,7 +272,7 @@ sub Initialize{
   $opt{NODES} = Analysis::Mode::Extract_nodes_From_Universe($opt{UNIVERSE}); 
   $opt{OUTPUT} ||= "queries." . unixtime_to_printable(time(),"YYYY-MM-DD") . ".$opt{UNIVERSE}{name}.mime.gz",
   $output = MIME::Write::Simple::->new(UNIVERSE_JSON=>$YBA_API->{json_string}); # No I/O so far 
-  
+  $output->Write_event(time(),"Querymonitor $VERSION Started for universe $opt{UNIVERSE}{name}",1); # Delayed write 
   my $nodestatus = $YBA_API->Get("/status");
   for my $nodename(keys %$nodestatus){
 	next unless ref($nodestatus->{$nodename}) eq "HASH";
@@ -511,11 +513,24 @@ sub Handle_MONITOR_DATA {
 	        join("','",@values),      "');\n"; 
 };
 
+sub Handle_Event_Data{
+	my ($self,$dispatch_type,$body ) = @_;
+	$opt{DEBUG} and print "--DEBUG:IN: EVENT handler type $dispatch_type\n";
+	return unless $dispatch_type eq "Header";
+	# Put stuff into EVENT table 
+	for my $ts (sort keys %{  $self->{INPUT}{general_header} }){
+	  print {$self->{OUTPUT_FH}} "INSERT INTO event VALUES($ts,'",
+	        $self->{INPUT}{general_header}{$ts}  ,
+	        "');\n"; 
+	}
+}
+
 my %Section_Handler =( # Defines Handler subroutines for each Mime piect (_SECTION_) received
 	MIME_HEADER		=> \&Handle_MIME_HEADER	,
 	UNIVERSE_JSON	=> \&Handle_UNIVERSE_JSON ,
 	CSVHEADER		=> \&Handle_CSVHEADER	,
 	MONITOR_DATA	=> \&Handle_MONITOR_DATA,
+	EVENT           => \&Handle_Event_Data,
 );
 
 sub Parse_Body_Record{
@@ -525,14 +540,17 @@ sub Parse_Body_Record{
    if ( ! $self->{HEADER_PRINTED}[$self->{PIECENBR}]){
       $opt{DEBUG} and print "--DEBUG:HDR $self->{PIECENBR}:",map({"$_=>" . $self->{INPUT}{general_header}{$_} . "; "} 
 	     grep {!/params$/} sort keys %{$self->{INPUT}{general_header}}),"\n";
+	  print {$self->{OUTPUT_FH}} "BEGIN TRANSACTION; -- $self->{PIECENBR} : ",
+	          $self->{INPUT}{general_header}{_SECTION_}, "\n";
 	  $dispatch and $dispatch->($self,"Header"); # Handler is called here 
 	  $self->{HEADER_PRINTED}[$self->{PIECENBR}] = 1;
    }
 
    if ( ! defined $rec) {
       $opt{DEBUG} and print "--DEBUG:---- PIECE COMPLETE --\n" ;
-
 	  $dispatch and $dispatch->($self,"EOF"); # Handler is called here 
+	  print {$self->{OUTPUT_FH}} "END TRANSACTION; -- $self->{PIECENBR} : ",
+	          $self->{INPUT}{general_header}{_SECTION_}, "\n";
 	  $self->{PIECENBR}++;
 	  return;
    }   
@@ -594,7 +612,7 @@ SELECT datetime((ts/600)*600,'unixepoch') as UTC,
                    ,2) as breach_pct
 FROM ycql,node 
 WHERE ycql.nodename=node.nodename  
-GROUP BY UCT;
+GROUP BY UTC;
 
 CREATE VIEW IF NOT EXISTS slow_queries AS
 SELECT query, count(*) as nbr_querys, round(avg($elapsed_ms),1) as avg_milli ,
@@ -653,11 +671,11 @@ sub Initialize_SQLITE_Output{
 	print {$self->{OUTPUT_FH}} <<"__SQL1__";
 CREATE TABLE IF NOT EXISTS kv_store(type text,key text, value text);
 INSERT INTO kv_store VALUES 
-       ('GENERAL','Analysis_host','$opt{HOSTNAME}')
-	  ,('GENERAL','import date','$opt{STARTTIME_TZ}')
-	  ,('GENERAL','processing file','$opt{ANALYZE}')
+	   ('GENERAL','Analysis_host','$opt{HOSTNAME}')
+	  ,('GENERAL','Analysis date','$opt{STARTTIME_TZ}')
+	  ,('GENERAL','Processing file','$opt{ANALYZE}')
 	  ,('GENERAL','Analysis version','$main::VERSION');
-	
+CREATE TABLE IF NOT EXISTS event(ts INTEGER, e TEXT);
 __SQL1__
 
 }
@@ -673,6 +691,13 @@ sub new{
 	for(qw|API_TOKEN YBA_HOST CUST_UUID UNIV_UUID|){
         $opt{$_} or die "ERROR: Required parameter --$_ was not specified.\n";
     }
+	for(qw|API_TOKEN  CUST_UUID UNIV_UUID|){
+        (my $value=$opt{$_})=~tr/-//d; # Extract and zap dashes
+		my $len = length($value);
+		next if $len == 32; # Expecting these to be exactly 32 bytes 
+        warn "WARNING: Expecting 32 valid bytes in Option $_=$opt{$_} but found $len bytes. \n";
+		sleep 2;
+    }	
 	my $self =bless {map {$_ => $opt{$_}} qw|HTTPCONNECT UNIV_UUID API_TOKEN YBA_HOST CUST_UUID| }, $class;
 	my $http_prefix = $opt{YBA_HOST} =~m/^http/i ? "" : "HTTP://";
     $self->{BASE_URL_API_CUSTOMER} = "${http_prefix}$opt{YBA_HOST}/api/customers/$opt{CUST_UUID}/universes/$opt{UNIV_UUID}";
@@ -787,6 +812,32 @@ sub Open_and_Initialize{
 	}
 }
 
+sub Write_event{
+   my ($self,$ts,$event,$delayed_write) = @_;
+   if ($delayed_write){
+      push @{$self->{EVENT_QUEUE}}, [$ts,$event];
+	  return;
+   }
+   return unless  @{$self->{EVENT_QUEUE}} or $event;
+   if (! $self->{OUTPUT_FH} ){
+	  # Need to initialize output
+      $self->Open_and_Initialize();
+   }   
+   if ($self->{IN_CSV_SECTION}){
+	   $self->{IN_CSV_SECTION} = 0;
+	   $self->{TYPE_INITIALIZED} = {}; # Zap types to un-init 
+	   $self->boundary(); # Close the CSV section
+   }
+ 	$self->header("text/event",
+	      join("\n",
+			 "_SECTION_: EVENT",
+			 map ({$_->[0] .": " . $_[1]}  @{$self->{EVENT_QUEUE}}),
+			 $event ? ("$ts: $event") : ()
+			 ));
+	$self->boundary();  
+	$self->{EVENT_QUEUE} = [];
+}
+
 sub Initialize_query_type{
 	my ($self,$type,$q) = @_;
 	
@@ -827,6 +878,7 @@ sub WriteQuery{
 sub Close{
 	my ($self, $final) = @_;
     return unless $self->{OUTPUT_FH};
+	$final and $self->Write_event(time(),"Final close",0); # No delay 
 	$self->boundary(undef,$final);
 	$self->{IN_CSV_SECTION} = 0;
     close $self->{OUTPUT_FH};
@@ -902,7 +954,11 @@ sub parse {
     $o->parseBody();
     #push @parts, $header;
   }
-
+  
+  if (! $o->{eof}){
+	 # Did not find proper ending boundary
+	 $o->{callback}->($o->{CALLER},undef); # Indiates Piece completed.
+  }
   #$general_header->{Epilog} = $o->parseBody();
 
   #return \@parts;
