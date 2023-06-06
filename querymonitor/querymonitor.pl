@@ -671,11 +671,11 @@ sub Initialize_SQLITE_Output{
 	print {$self->{OUTPUT_FH}} <<"__SQL1__";
 CREATE TABLE IF NOT EXISTS kv_store(type text,key text, value text);
 INSERT INTO kv_store VALUES 
-       ('GENERAL','Analysis_host','$opt{HOSTNAME}')
+	   ('GENERAL','Analysis_host','$opt{HOSTNAME}')
 	  ,('GENERAL','Analysis date','$opt{STARTTIME_TZ}')
-	  ,('GENERAL','processing file','$opt{ANALYZE}')
+	  ,('GENERAL','Processing file','$opt{ANALYZE}')
 	  ,('GENERAL','Analysis version','$main::VERSION');
-CREATE TABLE IF NOT EXISTS event(ts INTEGER, e TEXT);	
+CREATE TABLE IF NOT EXISTS event(ts INTEGER, e TEXT);
 __SQL1__
 
 }
