@@ -303,6 +303,41 @@ GROUP BY
 ORDER BY
     2 DESC;
 
+-- VIEW: table_sizes
+-- This view is used to generate the table_sizes report.
+
+CREATE VIEW table_sizes AS
+SELECT
+	namespace,
+	table_name,
+    CASE
+        WHEN SUM(sst_size) >= 1099511627776 THEN ROUND(SUM(sst_size) / 1099511627776, 2) || ' TB'
+        WHEN SUM(sst_size) >= 1073741824 THEN ROUND(SUM(sst_size) / 1073741824, 2) || ' GB'
+        ELSE ROUND(SUM(sst_size) / 1048576, 2) || ' MB'
+    END AS SST_SIZE,
+       CASE
+           WHEN SUM(CASE WHEN lease_status = 'HAS_LEASE' THEN sst_size ELSE 0 END) >= 1099511627776 THEN ROUND(SUM(CASE WHEN lease_status = 'HAS_LEASE' THEN sst_size ELSE 0 END) / 1099511627776, 2) || ' TB'
+           WHEN SUM(CASE WHEN lease_status = 'HAS_LEASE' THEN sst_size ELSE 0 END) >= 1073741824 THEN ROUND(SUM(CASE WHEN lease_status = 'HAS_LEASE' THEN sst_size ELSE 0 END) / 1073741824, 2) || ' GB'
+           ELSE ROUND(SUM(CASE WHEN lease_status = 'HAS_LEASE' THEN sst_size ELSE 0 END) / 1048576, 2) || ' MB'
+       END AS RF1_SST_SIZE,
+    CASE
+        WHEN SUM(wal_size) >= 1099511627776 THEN ROUND(SUM(wal_size) / 1099511627776, 2) || ' TB'
+        WHEN SUM(wal_size) >= 1073741824 THEN ROUND(SUM(wal_size) / 1073741824, 2) || ' GB'
+        ELSE ROUND(SUM(wal_size) / 1048576, 2) || ' MB'
+    END AS WAL_SIZE, 
+    CASE 
+        WHEN SUM(sst_size + wal_size) >= 1099511627776 THEN ROUND((SUM(sst_size + wal_size) / 1099511627776), 2) || ' TB' 
+        WHEN SUM(sst_size + wal_size) >= 1073741824 THEN ROUND((SUM(sst_size + wal_size) / 1073741824), 2) || ' GB' ELSE ROUND((SUM(sst_size + wal_size) / 1048576), 2) || ' MB' 
+    END AS TOTAL_SIZE
+FROM 
+    tablet 
+GROUP BY 
+    1,2
+ORDER BY 
+    SUM(sst_size) DESC;
+
+
+
 CREATE VIEW version_info AS 
     SELECT '$0' as program, '$VERSION' as version, '$opt{STARTTIME}' AS run_on, '$opt{HOSTNAME}' as host;
 __SQL__
