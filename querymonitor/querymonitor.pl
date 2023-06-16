@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.12";
+our $VERSION = "1.13";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -35,7 +35,7 @@ my %option_specs=( # Specifies info for globals saved in %opt. TYPE=>undef means
     ENDTIME_EPOCH =>{TYPE=>undef,DEFAULT=> 0,}, # Calculated after options are processed
     CURL          =>{TYPE=>'=s', DEFAULT=> "curl", HELP=>"Full path to curl command"},
     FLAGFILE      =>{TYPE=>'=s', DEFAULT=> "querymonitor.defaultflags", HELP=>"Name of file containing this program's options (--xx)"},
-    OUTPUT        =>{TYPE=>'=s', DEFAULT=> undef, HELP=>"Output File name. Defaults to queries.<YMD>.<Univ>.mime.gz"},
+    OUTPUT        =>{TYPE=>'=s', DEFAULT=> undef, HELP=>"Output File name. Defaults to queries.<YMD>.<Univ>.mime.gz. Can specify STDOUT in ANALYZE mode"},
     DEBUG         =>{TYPE=>'!',  DEFAULT=> 0,},
     HELP          =>{TYPE=>'!',  DEFAULT=> 0,},
     VERSION       =>{TYPE=>'!',  DEFAULT=> 0,},
@@ -462,7 +462,7 @@ sub Handle_UNIVERSE_JSON{
 			      join("','", map{$n->{$_}} sort keys %$n ), "');\n";
 		  print {$self->{OUTPUT_FH}} "INSERT INTO NODE VALUES('",
 			      join("','", map{$n->{$_}} sort keys %$n ), "');\n";
-		  $self->{REGION}{ $n->{region} }++; # Track available regions 	   
+		  $self->{REGION}{ $n->{region} }{NODE_COUNT}++; # Track available regions 	   
 	   });
     print {$self->{OUTPUT_FH}} "----- End of nodes -----\n";
 	for my $k (qw|universeName provider providerType replicationFactor numNodes ybSoftwareVersion enableYCQL
@@ -476,7 +476,19 @@ sub Handle_UNIVERSE_JSON{
 		  my $v = $flag->{$k}; 
 	      print {$self->{OUTPUT_FH}} "INSERT INTO kv_store VALUES ('$flagtype','$k','$v');\n";
 	   }
-	}	 
+	}
+	for my $region (@{ $bj->{universeDetails} {clusters} [0]{placementInfo}{cloudList}[0]{regionList} }){
+		my $preferred = 0;
+		my $az_node_count = 0;
+		for my $az ( @{ $region->{azList} } ){
+			$az->{isAffinitized} and $preferred++;
+			$az_node_count += $az->{numNodesInAZ};
+		}
+		$self->{REGION}{$region->{name}}{PREFERRED}     = $preferred;
+		$self->{REGION}{$region->{name}}{UUID}          = $region->{uuid};
+		$self->{REGION}{$region->{name}}{AZ_NODE_COUNT} = $az_node_count;
+		$opt{DEBUG} and print "--DEBUG:REGION $region->{name}: PREFERRED=$preferred, $az_node_count nodes, $region->{uuid}.\n";
+	}
 }
 
 sub Handle_CSVHEADER	{
@@ -579,25 +591,25 @@ sub Process_file_and_create_Sqlite{
 	$self->{INPUT}->parse($self, \&Parse_Body_Record);
 	close $self->{INPUT_FH};
 	print {$self->{OUTPUT_FH}} "SELECT 'All input records processed.';\n";
-	# Should create and run VIEWs here ....
 
 	$self->{TYPE_EXISTS}{ycql} and $self->Create_and_run_views_for_ycql();
 	$self->{TYPE_EXISTS}{ysql} and $self->Create_and_run_views_for_ysql();
 	close $self->{OUTPUT_FH};
-
+	print "--For detailed analysis, run: $opt{SQLITE} -header -column $self->{SQLITE_FILENAME}\n";
 	return;
 }
 
 sub Create_and_run_views_for_ycql{
     my ($self) = @_;
 	
-	my ($region_fields_summary,$region_fields_slow) = ("","");
+	my ($count_by_region_and_type,$count_by_region) = ("","");
 	for my $r (sort keys %{ $self->{REGION} }){
-	   $region_fields_summary .= "sum(case when instr(query,' system.')>0 and region='$r' then 1 else 0 end) as [sys_$r],\n";	;
-	   $region_fields_summary .= "sum(case when instr(query,' system.')=0 and region='$r' then 1 else 0 end) as [cql_$r],\n";	;
-	   $region_fields_slow    .= "sum ( CASE WHEN region = '$r' THEN 1 ELSE 0 END) as [${r}_queries],\n";
+	   my $preferred =  $self->{REGION}{$r}{PREFERRED} ? "(P)" : "";
+	   $count_by_region_and_type .= "sum(case when instr(query,' system.')>0 and region='$r' then 1 else 0 end) as [sys_$r],\n";
+	   $count_by_region_and_type .= "sum(case when instr(query,' system.')=0 and region='$r' then 1 else 0 end) as [cql_$r$preferred],\n";
+	   $count_by_region    .= "sum ( CASE WHEN region = '$r' THEN 1 ELSE 0 END) as [${r}_queries],\n";
 	}
-	$region_fields_slow=~s/,$//; # Zap trailing comma 
+	$count_by_region=~s/,$//; # Zap trailing comma 
    my ($elapsed_ms) = grep {m/milli/i} @{ $self->{FIELDS}{ycql} }; 	
    print {$self->{OUTPUT_FH}} <<"__Summary_SQL__";
 CREATE VIEW IF NOT EXISTS summary_cql as
@@ -606,7 +618,7 @@ SELECT datetime((ts/600)*600,'unixepoch') as UTC,
         sum(case when instr(query,' system.')=0 then 1 else 0 end) as cqlcount,
         sum(case when instr(query,' system.')>0 and $elapsed_ms > 120 then 1 else 0 end) as sys_gt120,
         sum(case when instr(query,' system.')=0 and $elapsed_ms > 120 then 1 else 0 end) as cql_gt120,
-        $region_fields_summary	
+        $count_by_region_and_type
         round(sum(case when instr(query,' system.')=0 and $elapsed_ms > 120 then 1 else 0 end) *100.0
                / sum(case when instr(query,' system.')=0 then 1 else 0 end)
                    ,2) as breach_pct
@@ -617,7 +629,7 @@ GROUP BY UTC;
 CREATE VIEW IF NOT EXISTS slow_queries AS
 SELECT query, count(*) as nbr_querys, round(avg($elapsed_ms),1) as avg_milli ,
       sum (CASE when $elapsed_ms > 120 then 1 else 0 END)*100 / count(*) as pct_gt120,
-      $region_fields_slow
+      $count_by_region
 FROM ycql, node
 WHERE ycql.nodename=node.nodename
 GROUP BY query
@@ -633,7 +645,38 @@ SELECT ycql.nodename, round(avg($elapsed_ms),1) as avg_ms,
 FROM ycql,node 
 WHERE ycql.nodename=node.nodename   
 GROUP by  ycql.nodename 
-ORDER by ycql.nodename;         
+ORDER by ycql.nodename;
+
+CREATE VIEW IF NOT EXISTS q_detail AS 
+SELECT ts,DATETIME((ts),'unixepoch') as UTC, 
+  $elapsed_ms, ycql.nodeName, "query", 
+  substr(remote_ip,1,instr(remote_ip,':')-1) as client,
+  "type",
+  upper(substr(ltrim(query,' '),1,6)) as verb,
+  CASE WHEN upper(substr(ltrim(query,' '),1,6))='UPDATE' 
+       then substr(ltrim(query,' '),8,18)
+       ELSE substr(query,instr(lower(query),' from ')+6,18) 
+   END as tbl,
+   region
+FROM ycql,node 
+WHERE ycql.nodename=node.nodename  
+      AND instr(query,' system.')=0 
+;
+CREATE VIEW IF NOT EXISTS client_summary AS 
+SELECT client, type,verb, round(avg($elapsed_ms),0) as avg_millis,
+       $count_by_region
+ from  q_detail 
+ group by client,type,verb;
+
+CREATE VIEW IF NOT EXISTS slow_tables AS
+SELECT tbl,type,verb,count(*) as queries,
+         round(avg($elapsed_ms),0) as avg_millis,
+         sum (CASE when $elapsed_ms > 120 then 1 else 0 END)*100 / count(*) as pct_gt120
+FROM q_detail 
+GROUP BY tbl,type,verb
+ORDER BY avg_millis*queries  desc 
+LIMIT 25;
+ 
 .header off
 .mode column
 SELECT 'Imported ' || count(*) ||' ycql rows from $opt{ANALYZE}.' as Imported_count from ycql;
@@ -656,6 +699,15 @@ sub Create_and_run_views_for_ysql{
 sub Initialize_SQLITE_Output{
     my ($self) = @_;
 	$!=undef;
+	if ($opt{OUTPUT}){
+		if ($opt{OUTPUT} =~/^STDOUT$/i){ # Send SQL to stdout
+			die "ERROR: Cannot specify DB and OUTPUT=STDOUT together\n" if $opt{DB};
+			$opt{DB} = " ";
+			$opt{SQLITE} = "cat";
+		}else{
+			die "ERROR: The only valid OUTPUT option is STDOUT in --analyze mode. use --DB.\n";
+		}
+	}
 	my ($sqlite_version) = $opt{SQLITE} ? do {my $vv=qx|$opt{SQLITE} --version|;chomp $vv;$vv=~/([\d\.]+)/}
 	                       : ("N/A");
 	$! and die "ERROR: Cannot run $opt{SQLITE} :$!";
@@ -664,6 +716,7 @@ sub Initialize_SQLITE_Output{
 	$self->{SQLITE_FILENAME}   =~s/\.(?:csv|mime)$//i; # Zap the mime or csv 
 	$self->{SQLITE_FILENAME}   .= ".sqlite"; # Add sqlite suffix
 	$opt{DB}  and    $self->{SQLITE_FILENAME} = $opt{DB}; # DB wins, if specified.
+	-e $self->{SQLITE_FILENAME} and die "ERROR: $self->{SQLITE_FILENAME} already exists. Use --db to specify a different file.\n";
 	print "--Populating Sqlite($sqlite_version) database '$self->{SQLITE_FILENAME}'...\n";
 	
 	open($self->{OUTPUT_FH}, "|-", "$opt{SQLITE} $self->{SQLITE_FILENAME}") 
