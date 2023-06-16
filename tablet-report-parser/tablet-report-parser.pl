@@ -52,7 +52,7 @@
 #   * Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
 #         ./yugatool -m $MASTERS $TLS_CONFIG tablet_info $TABLET_UUID > $TABLET_UUID.txt 
 ##########################################################################
-our $VERSION = "0.35";
+our $VERSION = "0.36";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -302,41 +302,6 @@ GROUP BY
     table_name
 ORDER BY
     2 DESC;
-
--- VIEW: table_sizes
--- This view is used to generate the table_sizes report.
-
-CREATE VIEW table_sizes AS
-SELECT
-	namespace,
-	table_name,
-    CASE
-        WHEN SUM(sst_size) >= 1099511627776 THEN ROUND(SUM(sst_size) / 1099511627776, 2) || ' TB'
-        WHEN SUM(sst_size) >= 1073741824 THEN ROUND(SUM(sst_size) / 1073741824, 2) || ' GB'
-        ELSE ROUND(SUM(sst_size) / 1048576, 2) || ' MB'
-    END AS SST_SIZE,
-       CASE
-           WHEN SUM(CASE WHEN lease_status = 'HAS_LEASE' THEN sst_size ELSE 0 END) >= 1099511627776 THEN ROUND(SUM(CASE WHEN lease_status = 'HAS_LEASE' THEN sst_size ELSE 0 END) / 1099511627776, 2) || ' TB'
-           WHEN SUM(CASE WHEN lease_status = 'HAS_LEASE' THEN sst_size ELSE 0 END) >= 1073741824 THEN ROUND(SUM(CASE WHEN lease_status = 'HAS_LEASE' THEN sst_size ELSE 0 END) / 1073741824, 2) || ' GB'
-           ELSE ROUND(SUM(CASE WHEN lease_status = 'HAS_LEASE' THEN sst_size ELSE 0 END) / 1048576, 2) || ' MB'
-       END AS RF1_SST_SIZE,
-    CASE
-        WHEN SUM(wal_size) >= 1099511627776 THEN ROUND(SUM(wal_size) / 1099511627776, 2) || ' TB'
-        WHEN SUM(wal_size) >= 1073741824 THEN ROUND(SUM(wal_size) / 1073741824, 2) || ' GB'
-        ELSE ROUND(SUM(wal_size) / 1048576, 2) || ' MB'
-    END AS WAL_SIZE, 
-    CASE 
-        WHEN SUM(sst_size + wal_size) >= 1099511627776 THEN ROUND((SUM(sst_size + wal_size) / 1099511627776), 2) || ' TB' 
-        WHEN SUM(sst_size + wal_size) >= 1073741824 THEN ROUND((SUM(sst_size + wal_size) / 1073741824), 2) || ' GB' ELSE ROUND((SUM(sst_size + wal_size) / 1048576), 2) || ' MB' 
-    END AS TOTAL_SIZE
-FROM 
-    tablet 
-GROUP BY 
-    1,2
-ORDER BY 
-    SUM(sst_size) DESC;
-
-
 
 CREATE VIEW version_info AS 
     SELECT '$0' as program, '$VERSION' as version, '$opt{STARTTIME}' AS run_on, '$opt{HOSTNAME}' as host;
@@ -726,6 +691,12 @@ my %field      = (   # Key=Database field name
 	COMMENT           =>{TYPE=>'TEXT'   ,VALUE=>'',SEQ=>14 },
 	SST_TOT_BYTES     =>{TYPE=>'INTEGER',VALUE=>0, SEQ=>15 },
 	WAL_TOT_BYTES     =>{TYPE=>'INTEGER',VALUE=>0, SEQ=>16 },
+	SST_TOT_HUMAN     =>{TYPE=>'TEXT',VALUE=>0, SEQ=>17, INSERT=>sub{MetricUnit::format_kilo($_[0]->{SST_TOT_BYTES})} },
+	WAL_TOT_HUMAN     =>{TYPE=>'TEXT',VALUE=>0, SEQ=>18, INSERT=>sub{MetricUnit::format_kilo($_[0]->{WAL_TOT_BYTES})} },
+	SST_RF1_HUMAN     =>{TYPE=>'TEXT',VALUE=>0, SEQ=>19, INSERT=>sub{MetricUnit::format_kilo(
+	                                          $_[0]->{SST_TOT_BYTES}*$_[0]->{UNIQ_TABLETS_ESTIMATE}/$_[0]->{TOT_TABLET_COUNT}
+	                                        )} },
+	TOT_HUMAN         =>{TYPE=>'TEXT',VALUE=>0, SEQ=>20, INSERT=>sub{MetricUnit::format_kilo($_[0]->{WAL_TOT_BYTES} + $_[0]->{SST_TOT_BYTES})} },	
 );
 
 sub find_or_new{
@@ -825,8 +796,8 @@ sub Table_Report{ # CLass method
 	   print "INSERT INTO tableinfo (",
 	      , join(",",keys %field)
 		  , ") values(\n   ",
-		  , join (",", map({ my $x=$field{$_}{INSERT}; $x ? $x->($t) :  
-		                     $field{$_}{TYPE} eq "TEXT" ? "'" . $t->{$_} . "'" : $t->{$_}||0       
+		  , join (",", map({ my $x=$field{$_}{INSERT}; $x = $x ? $x->($t) : $t->{$_}; 
+		                     $field{$_}{TYPE} eq "TEXT" ? "'" . $x . "'" : $x ||0
 		                  } keys %field))
 		  ,");\n";
 	}
@@ -845,6 +816,16 @@ sub Table_Report{ # CLass method
         FROM tableinfo
         WHERE sst_RF1_mb > 5000
         ORDER by sst_RF1_mb desc;
+
+	CREATE VIEW table_sizes AS
+	SELECT namespace, tablename, uniq_tablet_count as uniq_tablets,
+		sst_tot_human as sst_bytes, 
+		sst_rf1_human as sst_RF1_bytes,
+		wal_tot_human as wal_bytes, 
+		tot_human as total_bytes
+	FROM tableinfo
+	ORDER BY (sst_tot_bytes) DESC;
+
 __tablet_estimate__
 
 	# R e g i o n / Z o n e info
@@ -1326,4 +1307,58 @@ sub Print_SQL{
 1;
 } # End of TABLET
 #======================================================================================
+INIT{
+package MetricUnit;
+	 # Use CLASS methods.  DO NOT INSTANTIATE.
+use strict;
+	# Local Class variables
+	my $Kilo_Base = 1024; # Honest 2**10.
+	my @ORDER= (" ",qw|K M G T P X Z Y| ); # Kilo, Meg, Gig, Tera,Peta
+	my %MetricUnit;
+	kilo_base($Kilo_Base); # Initialize %MetricUnit
+	sub kilo_base{ #Get/Set Defaults to "binary (K=1024)"
+	   my $new_base = shift;  # Could set to less honest K=1000.
+	   return $Kilo_Base unless $new_base;
+	   $Kilo_Base = $new_base;
+	   # Initialize  Unit, Kilo, Mega Giga etc..(Y=2**80)
+	   %MetricUnit = map {$ORDER[$_] => $Kilo_Base**$_ } 0..$#ORDER;
+	   $MetricUnit{B} = 1; # Special case for BYTES
+    }
+	sub GetUnit{ # Convert to Human Readable (K,G etc)
+		my ($number,$fixwidth) = @_;
+		for my $power(reverse @ORDER){
+			  next if $number < $MetricUnit{$power};
+			  $number /= $MetricUnit{$power};
+			  return ($number, $power eq ' '? '':$power); #Fix Empty Unit return
+		 }
+		 return ($number, $fixwidth < 0? "":" ");
+    };
+	sub format_kilo{  # Kilo, mega and gig
+		my $number = shift || 0;
+		my $fixwidth = shift;
+		my $suffix ;
+		($number,$suffix) = GetUnit($number, $fixwidth||0);
+		# Split integer and decimal parts of the number
+		my $integer = int($number);
+		my $decimal = int(substr($number, length($integer)) * 10) # Max 1 decimal dig
+				if (length($integer) < length($number));
+		$decimal = '' unless defined $decimal ;#and $decimal > 0;
+		# Combine integer and decimal parts and return the result.
+		my $result = (length $decimal > 0 ?
+					  join(".", $integer, $decimal) :
+					  $integer);
+	   		# Add Leading spaces if fixed width
+		if ($fixwidth){
+			if ($fixwidth > length($result)){
+				$result =  ' ' x ($fixwidth - length($result) - length($suffix)) . $result;
+			}else{ # need to truncate to integer part
+				$result =  ' ' x ($fixwidth - length($integer) - length($suffix)) . $integer
+		   }
+		}
+		# Combine it all back together and return it.
+		return $result.$suffix;
+	}
+1;
+} # End of Package MetricUnit
+#=======================================================
 #======================================================================================
