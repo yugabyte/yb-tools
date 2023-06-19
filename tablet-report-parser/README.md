@@ -10,6 +10,8 @@
 ## See KB article for details :
 ### https://yugabyte.zendesk.com/knowledge/articles/12124512476045/en-us
 
+_NOTE: The KB article is more up-to-date than this README._
+
 ## HOW TO  Run THIS script  - and feed the generated SQL into sqlite3:
 
    `$ perl tablet_report_parser.pl  tablet-report-09-20T14.out`
