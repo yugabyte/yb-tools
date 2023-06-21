@@ -22,3 +22,13 @@ ${BIN_DIR}/${BIN_NAME}:
 	-X 'github.com/yugabyte/yb-tools/yb-support-tool/cmd.Version=${VERSION}'"
 
 
+windows:
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -a -o ${BIN_DIR}/${BIN_NAME}.exe -ldflags=" \
+	-X 'github.com/yugabyte/yb-tools/yb-support-tool/cmd.Version=${VERSION}'"
+	zip ${BIN_DIR}/${BIN_NAME}-windows-amd64-${VERSION}-$$(date -I).zip ${BIN_DIR}/${BIN_NAME}.exe
+
+
+linux:
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o ${BIN_DIR}/${BIN_NAME} -ldflags=" \
+	-X 'github.com/yugabyte/yb-tools/yb-support-tool/cmd.Version=${VERSION}'"
+	zip ${BIN_DIR}/${BIN_NAME}-linux-amd64-${VERSION}-$$(date -I).zip ${BIN_DIR}/${BIN_NAME}
