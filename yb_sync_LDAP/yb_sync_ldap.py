@@ -33,7 +33,7 @@ from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 
-VERSION = "0.04"
+VERSION = "0.04a-ija"
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
 YW_API_UNIVERSE_LIST = "{}://{}:{}/api/v1/customers/{}/universes"
