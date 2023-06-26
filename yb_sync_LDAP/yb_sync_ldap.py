@@ -509,6 +509,7 @@ class YBLDAPSync:
         result_count = 0
         logging.info('Processing result into dictionary')
         for user_key, group_value in ldap_raw.items():
+            logging.debug('Processing ldap item with user_key %s and group_value %s', user_key, group_value)
             user = dict(item.split("=") for item in user_key.split(","))[userfield]
             group_list = []
             for group_idx in range(len(group_value['memberOf'])):
