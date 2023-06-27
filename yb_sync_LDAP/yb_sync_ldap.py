@@ -33,7 +33,7 @@ from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 
-VERSION = "0.04a-ija"
+VERSION = "0.04b-ija"
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
 YW_API_UNIVERSE_LIST = "{}://{}:{}/api/v1/customers/{}/universes"
@@ -484,6 +484,7 @@ class YBLDAPSync:
         logging.info('query_ldap - filter %s', search_filter)
         try:
             result = connect.search_s(basedn, scope, search_filter, ['memberOf'])
+            logging.debug('Raw LDAP results {}'.format(result))
         except ldap.LDAPError as ex:
             raise LDAPSyncException("LDAP Error: {}: Type: {}".format(str(ex), type(ex)))
         finally:
@@ -512,11 +513,15 @@ class YBLDAPSync:
             logging.debug('Processing ldap item with user_key %s and group_value %s', user_key, group_value)
             user = dict(item.split("=") for item in user_key.split(","))[userfield]
             group_list = []
-            for group_idx in range(len(group_value['memberOf'])):
-                group = dict(item.split("=")
-                             for item in
-                             group_value['memberOf'][group_idx].decode().split(","))[groupfield]
-                group_list.append(group)
+            if 'memberOf' in group_value:
+                for group_idx in range(len(group_value['memberOf'])):
+                    group = dict(item.split("=")
+                                 for item in
+                                 group_value['memberOf'][group_idx].decode().split(","))[groupfield]
+                    group_list.append(group)
+            else:
+                logging.info('No groups found for user {}'.format(user_key))
+                continue
             ldap_dict[user] = group_list
             result_count += 1
         logging.info('Processed %d results into dictionary', result_count)
