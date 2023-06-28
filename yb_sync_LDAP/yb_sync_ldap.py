@@ -33,7 +33,8 @@ from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 
-VERSION = "0.04b-ija"
+VERSION = "0.05"
+
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
 YW_API_UNIVERSE_LIST = "{}://{}:{}/api/v1/customers/{}/universes"
@@ -483,7 +484,7 @@ class YBLDAPSync:
         logging.info('query_ldap - basedn %s', basedn)
         logging.info('query_ldap - filter %s', search_filter)
         try:
-            result = connect.search_s(basedn, scope, search_filter, ['memberOf'])
+            result = connect.search_s(basedn, scope, search_filter)
             logging.debug('Raw LDAP results {}'.format(result))
         except ldap.LDAPError as ex:
             raise LDAPSyncException("LDAP Error: {}: Type: {}".format(str(ex), type(ex)))
@@ -527,6 +528,46 @@ class YBLDAPSync:
         logging.info('Processed %d results into dictionary', result_count)
         return ldap_dict
 
+    @classmethod
+    def process_ldap_result2(cls, ldap_raw, userfield, groupfield):
+        """
+        Routine to process the raw LDAP dictionary into the format of user and list of groups
+        similar to how it appears in YCQL and YSQL.
+        :Param ldap_raw - the incoming dictionary
+        :Param userfield - the userfield name in the parameters
+        :Param groupfield - the groupfield name in the parameters
+        :Return new formatted dictionary {user1:[grp1,grp2..], ...}
+        """
+        ldap_dict = {}
+        result_count = 0
+        logging.info('Processing result into dictionary (2)')
+        for grp_dn, grp_att in ldap_raw.items():
+            logging.debug('Processing ldap item with Group %s and group_att %s', grp_dn, grp_att)
+            if grp_dn == None  or  len(grp_dn) < 3:
+                continue
+            if not type(grp_att) is dict:
+                logging.info("Group {} has no attributes.".format(grp_dn))
+                continue
+            if not grp_att['member']:
+                logging.info("Group {} has no members.".format(grp_dn))
+                continue
+            group = dict(item.split("=") for item in grp_dn.split(","))[groupfield]
+            member_list = grp_att['member']
+            logging.debug("GRP {} MEM {}".format(group,member_list))
+            for member in member_list:
+               logging.debug ("   Working on member {} of type {};".format(member,type(member)))
+               mem_dn= dict( x.split('=') for x in member.decode().split(","))
+               logging.debug("    Mem DN={} of type {}".format(mem_dn, type(mem_dn)))
+               user= mem_dn[userfield]
+               logging.debug("   User={}".format(user))
+               if user not in ldap_dict:
+                        ldap_dict[user] = []
+               ldap_dict[user].append(group)
+            result_count += 1
+        logging.info('Processed %d results into dictionary', result_count)
+        return ldap_dict
+
+        
     @classmethod
     def compute_changes(cls, new_dict, old_dict):
         """
@@ -815,7 +856,11 @@ class YBLDAPSync:
         """
         try:
             self.post_process_args()
-            logging.info('YW Contact point: %s', self.host_ipaddr)
+            logging.info('YB LDAP sync script, Version: %s.  YW Contact point: %s', VERSION, self.host_ipaddr)
+            # We do not verify API endpoint certs, so we need to suppress the warning:
+            #    "InsecureRequestWarning: Unverified HTTPS request is being made"
+            requests.packages.urllib3.disable_warnings(
+                                requests.packages.urllib3.exceptions.InsecureRequestWarning)
             if self.args.apitoken is None:
               (auth_token, customeruuid) = self.get_auth_token(self.args.apiuser,
                                                                self.args.apipassword)
@@ -847,7 +892,7 @@ class YBLDAPSync:
                                                 self.args.ldap_basedn,
                                                 self.args.ldap_search_filter)
                 if ldap_raw_data:
-                    new_ldap_data = self.process_ldap_result(ldap_raw_data,
+                    new_ldap_data = self.process_ldap_result2(ldap_raw_data,
                                                              self.args.ldap_userfield,
                                                              self.args.ldap_groupfield)
             process_diff = self.compute_changes(new_ldap_data, old_ldap_data)
