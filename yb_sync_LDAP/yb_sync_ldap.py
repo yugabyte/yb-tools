@@ -33,7 +33,7 @@ from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 
-VERSION = "0.06"
+VERSION = "0.07"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -545,27 +545,37 @@ class YBLDAPSync:
             if grp_dn == None  or  len(grp_dn) < 3:
                 continue
             if not type(grp_att) is dict:
-                logging.info("Group {} has no attributes.".format(grp_dn))
+                logging.info("Group {} has no attributes. Ignored.".format(grp_dn))
                 continue
             if not grp_att['member']:
-                logging.info("Group {} has no members.".format(grp_dn))
+                logging.info("Group {} has no members. Ignored.".format(grp_dn))
                 continue
-            group = dict(item.split("=") for item in grp_dn.split(","))[groupfield]
+            group_dict = dict(item.split("=") for item in grp_dn.split(","))
+            group = None
+            if groupfield in group_dict:
+               group = group_dict[groupfield]
+            elif groupfield in group_att:
+                   group = group_att[groupfield]
+            else:
+                   logging.warning("Did not find '{}' in group atts for group {}. Ignoring group.".format(groupfield,grp_dn))
+                   continue
             member_list = grp_att['member']
-            logging.debug("GRP {} MEM {}".format(group,member_list))
+            logging.debug("   GROUP {}: MEMBERS {}".format(group,member_list))
             for member in member_list:
                #logging.debug ("   Working on member {} of type {};".format(member,type(member)))
-               mem_dn= dict( x.split('=') for x in member.decode().split(","))
-               logging.debug("    Member:{}; Mem DN={} of type {}".format(member,mem_dn, type(mem_dn)))
-               if userfield not in mem_dn:
-                  logging.warning("User {} does not contain a {} (userfield)".format(member, userfield))
-                  # We should probably do ldap FETCH of all user atts
-                  # mem_dn = self.query_ldap(self.ldap_connection,
-                  #                          member,
-                  #                          "(objectCategory=user)")
-                  continue
+               member_dn= dict( x.split('=') for x in member.decode().split(","))
+               logging.debug("    Member:{}; Mem DN={}".format(member,member_dn))
+               if userfield not in member_dn:
+                  logging.debug("User {} does not contain a {} (userfield). Fetching user details...".format(member, userfield))
+                  # We do ldap FETCH of all user atts
+                  member_dn = self.query_ldap(self.ldap_connection,
+                                            member,
+                                            "(objectCategory=user)")
+                  if userfield not in member_dn:
+                      logging.warning("User {} does not contain a '{}' (userfield). Detail:{}".format(member, userfield,member_dn))
+                      continue
                   
-               user= mem_dn[userfield]
+               user= member_dn[userfield]
                logging.debug("   User={}".format(user))
                if user not in ldap_dict:
                         ldap_dict[user] = []
