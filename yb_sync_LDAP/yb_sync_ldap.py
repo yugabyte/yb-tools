@@ -33,7 +33,7 @@ from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 
-VERSION = "0.05"
+VERSION = "0.06"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -66,7 +66,7 @@ YSQL_ROLE_QUERY = "SELECT r.rolname as role, ARRAY(SELECT b.rolname FROM "\
                 "ON (m.roleid = b.oid) WHERE m.member=r.oid) as member_of "\
                 "FROM pg_catalog.pg_roles r WHERE r.rolname !~ '^pg_' "\
                 "AND r.rolsuper='f' and r.rolcanlogin='t' order by 1;"
-UID_RE = r"\['?([A-Za-z0-9_\.@]+)'?\]"
+UID_RE = r"([A-Za-z0-9_\.\@]+)"
 
 
 def random_string(length):
@@ -528,8 +528,7 @@ class YBLDAPSync:
         logging.info('Processed %d results into dictionary', result_count)
         return ldap_dict
 
-    @classmethod
-    def process_ldap_result2(cls, ldap_raw, userfield, groupfield):
+    def process_ldap_result2(self, ldap_raw, userfield, groupfield):
         """
         Routine to process the raw LDAP dictionary into the format of user and list of groups
         similar to how it appears in YCQL and YSQL.
@@ -555,9 +554,17 @@ class YBLDAPSync:
             member_list = grp_att['member']
             logging.debug("GRP {} MEM {}".format(group,member_list))
             for member in member_list:
-               logging.debug ("   Working on member {} of type {};".format(member,type(member)))
+               #logging.debug ("   Working on member {} of type {};".format(member,type(member)))
                mem_dn= dict( x.split('=') for x in member.decode().split(","))
-               logging.debug("    Mem DN={} of type {}".format(mem_dn, type(mem_dn)))
+               logging.debug("    Member:{}; Mem DN={} of type {}".format(member,mem_dn, type(mem_dn)))
+               if userfield not in mem_dn:
+                  logging.warning("User {} does not contain a {} (userfield)".format(member, userfield))
+                  # We should probably do ldap FETCH of all user atts
+                  # mem_dn = self.query_ldap(self.ldap_connection,
+                  #                          member,
+                  #                          "(objectCategory=user)")
+                  continue
+                  
                user= mem_dn[userfield]
                logging.debug("   User={}".format(user))
                if user not in ldap_dict:
@@ -596,6 +603,7 @@ class YBLDAPSync:
         stmt_list = []
         if 'dictionary_item_added' in diff_library:
             for key, value in diff_library['dictionary_item_added'].items():
+                logging.debug("Adding DB role for {}".format(key))
                 role_to_create = get_uid_from_ddiff(key)
                 if target_api == 'YCQL':
                     stmt_list.append(YCQL_CREATE_ROLE.format(role_to_create,
@@ -610,6 +618,7 @@ class YBLDAPSync:
         # Process dropped records - dictionary_item_removed
         if 'dictionary_item_removed' in diff_library:
             for key, value in diff_library['dictionary_item_removed'].items():
+                logging.debug("Dropping DB role for {}".format(key))
                 role_to_drop = get_uid_from_ddiff(key)
                 if target_api == 'YCQL':
                     stmt_list.append(YCQL_DROP_ROLE.format(role_to_drop))
@@ -618,6 +627,7 @@ class YBLDAPSync:
         # Process changed records - new attribute - iterable_item_added
         if 'iterable_items_added_at_indexes' in diff_library:
             for key, value in diff_library['iterable_items_added_at_indexes'].items():
+                logging.debug("Modifying DB role for {}".format(key))
                 role_to_modify = get_uid_from_ddiff(key)
                 grant_role_list = []
                 for grant_role in value.values():
@@ -631,6 +641,7 @@ class YBLDAPSync:
         # Process changed records - delete attribute - iterable_item_removed
         if 'iterable_items_removed_at_indexes' in diff_library:
             for key, value in diff_library['iterable_items_removed_at_indexes'].items():
+                logging.debug("Revoking DB role for {}".format(key))
                 role_to_modify = get_uid_from_ddiff(key)
                 revoke_role_list = []
                 for revoke_role in value.values():
@@ -882,13 +893,13 @@ class YBLDAPSync:
                                                            api_token,
                                                            customeruuid)
             old_ldap_data = self.load_previous_ldap_data(customeruuid, universe['universeuuid'])
-            connect = self.yb_init_ldap_conn(self.args.ldapserver,
+            self.ldap_connection = self.yb_init_ldap_conn(self.args.ldapserver,
                                              self.args.ldapuser,
                                              self.args.ldap_password,
                                              self.args.ldap_tls,
                                              self.args.ldap_certificate)
-            if connect:
-                ldap_raw_data = self.query_ldap(connect,
+            if self.ldap_connection:
+                ldap_raw_data = self.query_ldap(self.ldap_connection,
                                                 self.args.ldap_basedn,
                                                 self.args.ldap_search_filter)
                 if ldap_raw_data:
