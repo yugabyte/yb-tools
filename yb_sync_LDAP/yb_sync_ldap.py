@@ -33,7 +33,7 @@ from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 
-VERSION = "0.07"
+VERSION = "0.08"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -540,26 +540,26 @@ class YBLDAPSync:
         ldap_dict = {}
         result_count = 0
         logging.info('Processing result into dictionary (2)')
-        for grp_dn, grp_att in ldap_raw.items():
-            logging.debug('Processing ldap item with Group %s and group_att %s', grp_dn, grp_att)
-            if grp_dn == None  or  len(grp_dn) < 3:
+        for group_dn, group_att in ldap_raw.items():
+            logging.debug('Processing ldap item with Group %s and group_att %s', group_dn, group_att)
+            if group_dn == None  or  len(group_dn) < 3:
                 continue
-            if not type(grp_att) is dict:
-                logging.info("Group {} has no attributes. Ignored.".format(grp_dn))
+            if not type(group_att) is dict:
+                logging.info("Group {} has no attributes. Ignored.".format(group_dn))
                 continue
-            if not grp_att['member']:
-                logging.info("Group {} has no members. Ignored.".format(grp_dn))
+            if not group_att['member']:
+                logging.info("Group {} has no members. Ignored.".format(group_dn))
                 continue
-            group_dict = dict(item.split("=") for item in grp_dn.split(","))
+            group_dict = dict(item.split("=") for item in group_dn.split(","))
             group = None
             if groupfield in group_dict:
                group = group_dict[groupfield]
             elif groupfield in group_att:
                    group = group_att[groupfield]
             else:
-                   logging.warning("Did not find '{}' in group atts for group {}. Ignoring group.".format(groupfield,grp_dn))
+                   logging.warning("Did not find '{}' in group atts for group {}. Ignoring group.".format(groupfield,group_dn))
                    continue
-            member_list = grp_att['member']
+            member_list = group_att['member']
             logging.debug("   GROUP {}: MEMBERS {}".format(group,member_list))
             for member in member_list:
                #logging.debug ("   Working on member {} of type {};".format(member,type(member)))
