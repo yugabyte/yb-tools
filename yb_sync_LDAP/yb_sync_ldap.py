@@ -33,7 +33,7 @@ from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 
-VERSION = "0.08"
+VERSION = "0.09"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -480,6 +480,7 @@ class YBLDAPSync:
         """
         # Assume SCOPE_SUBTREE
         ldap_result_dict = None
+        result = None
         scope = ldap.SCOPE_SUBTREE
         logging.info('query_ldap - basedn %s', basedn)
         logging.info('query_ldap - filter %s', search_filter)
@@ -555,7 +556,7 @@ class YBLDAPSync:
             if groupfield in group_dict:
                group = group_dict[groupfield]
             elif groupfield in group_att:
-                   group = group_att[groupfield]
+                   group = group_att[groupfield][0].decode()
             else:
                    logging.warning("Did not find '{}' in group atts for group {}. Ignoring group.".format(groupfield,group_dn))
                    continue
@@ -569,13 +570,17 @@ class YBLDAPSync:
                   logging.debug("User {} does not contain a {} (userfield). Fetching user details...".format(member, userfield))
                   # We do ldap FETCH of all user atts
                   member_dn = self.query_ldap(self.ldap_connection,
-                                            member,
+                                            member.decode(),
                                             "(objectCategory=user)")
                   if userfield not in member_dn:
                       logging.warning("User {} does not contain a '{}' (userfield). Detail:{}".format(member, userfield,member_dn))
                       continue
                   
                user= member_dn[userfield]
+               if isinstance(user,(bytearray)):
+                   user = user[0]
+               if isinstance(user,(bytes)):
+                   user = user.decode()
                logging.debug("   User={}".format(user))
                if user not in ldap_dict:
                         ldap_dict[user] = []
