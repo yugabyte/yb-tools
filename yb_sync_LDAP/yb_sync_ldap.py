@@ -33,7 +33,7 @@ from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 
-VERSION = "0.09"
+VERSION = "0.10"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -499,7 +499,7 @@ class YBLDAPSync:
         return ldap_result_dict
 
     @classmethod
-    def process_ldap_result(cls, ldap_raw, userfield, groupfield):
+    def process_ldap_user_list(cls, ldap_raw, userfield, groupfield):
         """
         Routine to process the raw LDAP dictionary into the format of user and list of groups
         similar to how it appears in YCQL and YSQL.
@@ -529,7 +529,7 @@ class YBLDAPSync:
         logging.info('Processed %d results into dictionary', result_count)
         return ldap_dict
 
-    def process_ldap_result2(self, ldap_raw, userfield, groupfield):
+    def process_ldap_group_list(self, ldap_raw, userfield, groupfield):
         """
         Routine to process the raw LDAP dictionary into the format of user and list of groups
         similar to how it appears in YCQL and YSQL.
@@ -572,12 +572,14 @@ class YBLDAPSync:
                   member_dn = self.query_ldap(self.ldap_connection,
                                             member.decode(),
                                             "(objectCategory=user)")
+                  if isinstance(member_dn,(list,bytearray,tuple)): # it is a single-item list that looks like: [(DN,{dn-values})]
+                      member_dn = member_dn[0][1]                  # Second item in tuple is a DICT of user atts 
                   if userfield not in member_dn:
                       logging.warning("User {} does not contain a '{}' (userfield). Detail:{}".format(member, userfield,member_dn))
                       continue
                   
                user= member_dn[userfield]
-               if isinstance(user,(bytearray)):
+               if isinstance(user,(bytearray,list,tuple)):
                    user = user[0]
                if isinstance(user,(bytes)):
                    user = user.decode()
@@ -918,7 +920,13 @@ class YBLDAPSync:
                                                 self.args.ldap_basedn,
                                                 self.args.ldap_search_filter)
                 if ldap_raw_data:
-                    new_ldap_data = self.process_ldap_result2(ldap_raw_data,
+                   new_ldap_data = None
+                   if 'objectclass=group' in self.args.ldap_search_filter:
+                      new_ldap_data = self.process_ldap_group_list(ldap_raw_data,
+                                                             self.args.ldap_userfield,
+                                                             self.args.ldap_groupfield)
+                   else:
+                      new_ldap_data = self.process_ldap_user_list(ldap_raw_data,
                                                              self.args.ldap_userfield,
                                                              self.args.ldap_groupfield)
             process_diff = self.compute_changes(new_ldap_data, old_ldap_data)
