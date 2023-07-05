@@ -44,7 +44,7 @@
 #         sqlite>
 #
 # EXTRAS:
-#   * Input giles can be gzip compressed (must end with .gz)
+#   * Input files can be gzip compressed (must end with .gz)
 #   * Versions >= 0.32 can parse multiple files (of different types):
 #   * Files with "entities" in the name are processed as "dump-entities" files.
 #      The "Entities" file is created using:
@@ -52,7 +52,7 @@
 #   * Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
 #         ./yugatool -m $MASTERS $TLS_CONFIG tablet_info $TABLET_UUID > $TABLET_UUID.txt 
 ##########################################################################
-our $VERSION = "0.36";
+our $VERSION = "0.38";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -135,9 +135,11 @@ my @more_input_specified = @ARGV;
 
 while (my $inputfilename = shift @more_input_specified){
 	# User has specified and argument (Default usage) - we will process it as a filename
+	print "SELECT 'Processing $inputfilename....' as info;\n"; 
 	-f $inputfilename or die "ERROR: No file '$inputfilename'";
 	if ($inputfilename =~/\.gz$/){# Input is compressed
-		print $ANSICOLOR{GREEN},"$inputfilename appears to be a compressed file.$ANSICOLOR{BRIGHT_GREEN} Auto-gunzipping it on the fly...$ANSICOLOR{NORMAL}\n";
+		print "SELECT '$ANSICOLOR{GREEN} $inputfilename appears to be a compressed file.",
+		         "$ANSICOLOR{BRIGHT_GREEN} Auto-gunzipping it on the fly...$ANSICOLOR{NORMAL}' as INFO;\n";
 		open (STDIN,"-|", "gunzip -c $inputfilename") or die "ERROR: Could not gunzip $inputfilename: $!";
 		$inputfilename = substr($inputfilename,0,-3); # Drop the ".gz"
 	}else{
@@ -148,12 +150,15 @@ while (my $inputfilename = shift @more_input_specified){
 		Setup_Output_Processing($inputfilename );
     }
 	if ($inputfilename =~/entities/i){
+		print "SELECT '   ... processing as an ENTITIES file..' as info;\n"; 
 		my $entities = entities_parser::->new();
 		$entities->Ingest_decode_and_Generate(); # Read from stdin
-	}elsif ($inputfilename =~/^\w{32}\.\w{3,4}$/){
+	}elsif ($inputfilename =~/\w{32}\.\w{3,4}$/){
+		print "SELECT '   ... processing as an TABLET INFO file..' as info;\n"; 
 		my $tabletinfo = Tablet_Info::->new();
 
 	}else{
+		print "SELECT '   ... processing as a TABLET REPORT input ..' as info;\n"; 
 		Process_tablet_report();
 	}
 	#close STDIN; # Causes errors if closed. Works fine leaving parent STDIN open.
@@ -200,6 +205,18 @@ CREATE VIEW delete_leaderless_be_careful AS
 	   AS generated_delete_command
      FROM leaderless;
 	 
+--  Based on  yb-ts-cli unsafe_config_change <tablet_id> <peer1> (undocumented)
+--  https://phorge.dev.yugabyte.com/D12312
+CREATE VIEW UNSAFE_Leader_create AS
+    SELECT  '\$HOME/tserver/bin/yb-ts-cli --server_address='|| ip ||':'||port 
+        || ' unsafe_config_change ' || t.tablet_uuid
+		|| ' ' || node_uuid
+		|| ' -certs_dir_name \$TLSDIR;sleep 30;' AS cmd_to_run
+	 from tablet t,cluster ,tablet_replica_detail trd
+	 WHERE  cluster.type='TSERVER' AND cluster.uuid=node_uuid
+	       AND  t.tablet_uuid=trd.tablet_uuid  AND t.status != 'TABLET_DATA_TOMBSTONED'
+		   AND trd.leader_count !=1;
+		   
 CREATE VIEW large_wal AS 
   SELECT table_name, count(*) as tablets,  
         sum(CASE WHEN wal_size >=128000000 then 1 else 0 END) as "GE128MB",
@@ -357,7 +374,7 @@ while ($line=<>){
 	if (length($line) < 5){ # Blank line ?
 	   if ($. < 2  and  $line=~/^\s*{\s*$/ ){
 		   $opt{JSON}=1;
-		   print "SELECT '.print JSON input detected.';\n";
+		   print "SELECT '-- JSON input detected. ---';\n";
 		   $json_line .= $line;
 	   }
 	   next;
@@ -388,9 +405,9 @@ while ($line=<>){
 # --- End of Main loop ----
 Set_Transaction(0);
 
-if ($opt{JSON}){
-	# no table report
-}else{
+##if ($opt{JSON}){
+##	# no table report
+##}else{
 	print << "__MAIN_COMPLETE__";
 SELECT '  ... $entity{$current_entity}{COUNT} $current_entity items processed.';
 SELECT 'Main SQL loading Completed. Generating table stats...';
@@ -398,7 +415,7 @@ __MAIN_COMPLETE__
 	Set_Transaction(1);
 	TableInfo::Table_Report();
 	Set_Transaction(0);
-}
+##}
 }
 #---------------------------------------------------------------------------------------------
 my $tmpfile = "/tmp/tablet-report-analysis-settings$$";
@@ -463,6 +480,7 @@ exit 0;
 #-------------------------------------------------------------------------------------
 sub Setup_Output_Processing{
 	my ($inputfilename) = @_;
+	$inputfilename=~/\.json$/i and $inputfilename=substr($inputfilename,0,-5); # Drop the ".json" 
 	$output_sqlite_dbfilename = $inputfilename . ".sqlite";
 	if (not $opt{AUTORUN_SQLITE}){
 		return; # No output processing needed-this has been setup manually
@@ -961,6 +979,7 @@ sub Parse_Tserver_line{
 	      "  VALUES('TSERVER','",
           join("','", $uuid,$host,$port,$region,$zone,$uptime),
 		  "');\n";
+	TableInfo::->Register_Region_Zone($region, $zone, $uuid);
 }
 
 sub Parse_Tablet_line{
@@ -1000,6 +1019,8 @@ sub Parse_Tablet_line{
         		  qw|tablet_uuid tablename table_uuid namespace  state status  start_key end_key sst_size  wal_size 
              		  cterm cidx leader lease_status|  
 		  ),");\n";
+	TableInfo::find_or_new( \%values )
+	        ->collect(\%values, $host_uuid);
 }
 
 } # ----- End of JSON_Analyzer ---------------------------------------
