@@ -52,7 +52,7 @@
 #   * Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
 #         ./yugatool -m $MASTERS $TLS_CONFIG tablet_info $TABLET_UUID > $TABLET_UUID.txt 
 ##########################################################################
-our $VERSION = "0.37";
+our $VERSION = "0.38";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -205,6 +205,18 @@ CREATE VIEW delete_leaderless_be_careful AS
 	   AS generated_delete_command
      FROM leaderless;
 	 
+--  Based on  yb-ts-cli unsafe_config_change <tablet_id> <peer1> (undocumented)
+--  https://phorge.dev.yugabyte.com/D12312
+CREATE VIEW UNSAFE_Leader_create AS
+    SELECT  '\$HOME/tserver/bin/yb-ts-cli --server_address='|| ip ||':'||port 
+        || ' unsafe_config_change ' || t.tablet_uuid
+		|| ' ' || node_uuid
+		|| ' -certs_dir_name \$TLSDIR;sleep 30;' AS cmd_to_run
+	 from tablet t,cluster ,tablet_replica_detail trd
+	 WHERE  cluster.type='TSERVER' AND cluster.uuid=node_uuid
+	       AND  t.tablet_uuid=trd.tablet_uuid  AND t.status != 'TABLET_DATA_TOMBSTONED'
+		   AND trd.leader_count !=1;
+		   
 CREATE VIEW large_wal AS 
   SELECT table_name, count(*) as tablets,  
         sum(CASE WHEN wal_size >=128000000 then 1 else 0 END) as "GE128MB",
