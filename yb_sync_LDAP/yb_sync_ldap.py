@@ -33,7 +33,7 @@ from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 
-VERSION = "0.11"
+VERSION = "0.12"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -574,6 +574,7 @@ class YBLDAPSync:
                                             "(objectCategory=user)")
                   if isinstance(member_dn,(list,bytearray,tuple)): # it is a single-item list that looks like: [(DN,{dn-values})]
                       member_dn = member_dn[0][1]                  # Second item in tuple is a DICT of {user=> atts-dict}
+                  if len(member_dn) == 1:
                       member_dn = next(iter(member_dn.values()))   # Extract the first VALUE from dict(atts) (which is also a DICT)
                   if userfield not in member_dn:
                       logging.warning("User {} does not contain a '{}' (userfield). Detail:{}".format(member, userfield,member_dn))
