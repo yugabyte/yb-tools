@@ -33,7 +33,7 @@ from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 
-VERSION = "0.10"
+VERSION = "0.11"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -573,7 +573,8 @@ class YBLDAPSync:
                                             member.decode(),
                                             "(objectCategory=user)")
                   if isinstance(member_dn,(list,bytearray,tuple)): # it is a single-item list that looks like: [(DN,{dn-values})]
-                      member_dn = member_dn[0][1]                  # Second item in tuple is a DICT of user atts 
+                      member_dn = member_dn[0][1]                  # Second item in tuple is a DICT of {user=> atts-dict}
+                      member_dn = next(iter(member_dn.values()))   # Extract the first VALUE from dict(atts) (which is also a DICT)
                   if userfield not in member_dn:
                       logging.warning("User {} does not contain a '{}' (userfield). Detail:{}".format(member, userfield,member_dn))
                       continue
@@ -588,7 +589,7 @@ class YBLDAPSync:
                         ldap_dict[user] = []
                ldap_dict[user].append(group)
             result_count += 1
-        logging.info('Processed %d results into dictionary', result_count)
+        logging.info('Processed %d LDAP groups into dictionary, which contains info for %d users', result_count,len(ldap_dict))
         return ldap_dict
 
         
