@@ -33,7 +33,7 @@ from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 
-VERSION = "0.12"
+VERSION = "0.13"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -66,7 +66,7 @@ YSQL_ROLE_QUERY = "SELECT r.rolname as role, ARRAY(SELECT b.rolname FROM "\
                 "ON (m.roleid = b.oid) WHERE m.member=r.oid) as member_of "\
                 "FROM pg_catalog.pg_roles r WHERE r.rolname !~ '^pg_' "\
                 "AND r.rolsuper='f' and r.rolcanlogin='t' order by 1;"
-UID_RE = r"([A-Za-z0-9_\.\@]+)"
+UID_RE = r"\['?([A-Za-z0-9_\.@]+)'?\]"
 
 
 def random_string(length):
@@ -75,7 +75,7 @@ def random_string(length):
 
 
 def get_uid_from_ddiff(sq1):
-    """ Routine to extract usernames from DeepDiff dictionary items """
+    """ Routine to extract usernames(firstname.lastname)  from DeepDiff dictionary items  like: root['firstname.lastname'] """
     return re.findall(UID_RE, sq1)[0].translate({ord(i): None for i in '][\''})
 
 
