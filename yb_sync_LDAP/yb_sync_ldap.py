@@ -33,7 +33,7 @@ from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 
-VERSION = "0.13"
+VERSION = "0.14"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -546,10 +546,10 @@ class YBLDAPSync:
             if group_dn == None  or  len(group_dn) < 3:
                 continue
             if not type(group_att) is dict:
-                logging.info("Group {} has no attributes. Ignored.".format(group_dn))
+                logging.info("LDAP Group {} has no attributes. Ignored.".format(group_dn))
                 continue
-            if not group_att['member']:
-                logging.info("Group {} has no members. Ignored.".format(group_dn))
+            if not ('member' in group_att  and  len(group_att['member']) > 0):
+                logging.info("LDAP Group {} has no members. Ignored.".format(group_dn))
                 continue
             group_dict = dict(item.split("=") for item in group_dn.split(","))
             group = None
