@@ -33,7 +33,7 @@ from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 
-VERSION = "0.14"
+VERSION = "0.15"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -340,7 +340,11 @@ class YBLDAPSync:
         sslcert = None
         sslkey = None
         conn = None
-        contact_string = ','.join(universe['node_list'])
+        #contact_string = ','.join(universe['node_list'])
+        # the YB version of psycopg2 supports multi hosts (pip install psycopg2-yugabytedb)
+        # but the default does non - use only one conn - since we do only one query
+        contact_string = random.choice(universe['node_list'])
+        logging.debug("Connecting to PG host {}".format(contact_string))
         if dbcert['sslmode'] is not None:
             sslmode = dbcert['sslmode']
             sslrootcert = dbcert['root_certificate_path']
