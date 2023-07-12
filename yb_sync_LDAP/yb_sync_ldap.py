@@ -32,8 +32,9 @@ from cassandra.cluster import Cluster, NoHostAvailable  # pylint: disable=no-nam
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
+from time import gmtime, strftime
 
-VERSION = "0.15"
+VERSION = "0.16"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -344,6 +345,8 @@ class YBLDAPSync:
         # the YB version of psycopg2 supports multi hosts (pip install psycopg2-yugabytedb)
         # but the default does non - use only one conn - since we do only one query
         contact_string = random.choice(universe['node_list'])
+        if self.args.dbhost:
+            contact_string = self.args.dbhost
         logging.debug("Connecting to PG host {}".format(contact_string))
         if dbcert['sslmode'] is not None:
             sslmode = dbcert['sslmode']
@@ -398,7 +401,7 @@ class YBLDAPSync:
                 connected = True
                 logging.info('YCQL API connection successful.')
             except NoHostAvailable:
-                logging.info('Connection failed: NO_HOST_AVAILABLE attempt %d', attempt)
+                logging.warning('YCQL Connection failed: NO_HOST_AVAILABLE attempt %d', attempt)
                 attempt += 1
                 time.sleep(10)
         return session
@@ -499,7 +502,7 @@ class YBLDAPSync:
                 logging.info('query_ldap returned %d items', len(result))
             else:
                 if result:
-                    logging.info('query_ldap returned no items')
+                    logging.warning('query_ldap returned no items')
         return ldap_result_dict
 
     @classmethod
@@ -544,7 +547,7 @@ class YBLDAPSync:
         """
         ldap_dict = {}
         result_count = 0
-        logging.info('Processing result into dictionary (2)')
+        logging.info('Processing result into dictionary (process_ldap_group_list)')
         for group_dn, group_att in ldap_raw.items():
             logging.debug('Processing ldap item with Group %s and group_att %s', group_dn, group_att)
             if group_dn == None  or  len(group_dn) < 3:
@@ -800,6 +803,9 @@ class YBLDAPSync:
             pass
         else:
             raise LDAPSyncException("ERROR: Either --apitoken  OR (--apiuser + --apipassword) MUST BE SPECIFIED")
+        if self.args.verbose:
+            logging.getLogger().setLevel(logging.INFO)
+            logging.info("Verbose logging enabled (logging.INFO)")
         if self.args.debug:
             logging.getLogger().setLevel(logging.DEBUG)
             # Enabling debugging at http.client level (requests->urllib3->http.client)
@@ -825,6 +831,8 @@ class YBLDAPSync:
         parser = argparse.ArgumentParser(description='YB LDAP sync script, Version {}'.format(VERSION))
         parser.add_argument('--debug', required=False,  action='store_true', default=False,
                             help="Enable debug logging (including http request logging) for this script")        
+        parser.add_argument('--verbose', required=False,  action='store_true', default=False,
+                            help="Enable verbose logging for each action taken in this script")                                    
         parser.add_argument('--apihost', required=False,
                             help="YBA/YW API Hostname or IP (Defaults to localhost)")
         parser.add_argument('--apitoken', required=False,
@@ -845,6 +853,8 @@ class YBLDAPSync:
                             help="Target API: YCQL or YSQL")
         parser.add_argument('--universe_name', required=True,
                             help="Universe name")
+        parser.add_argument('--dbhost', required=False, default=None,
+                            help="Database hostname of IP. Uses a random YB node if not specified.")
         parser.add_argument('--dbuser', required=True,
                             help="Database user to connect as")
         parser.add_argument('--dbpass', required=True,
@@ -890,7 +900,9 @@ class YBLDAPSync:
         """
         try:
             self.post_process_args()
-            logging.info('YB LDAP sync script, Version: %s.  YW Contact point: %s', VERSION, self.host_ipaddr)
+            print("{} YB LDAP sync script, Version {} for universe {}, {}.".format(time.strftime("%Y-%m-%d %H:%M:%S UTC", gmtime()),
+                           VERSION, time.strftime("%Y-%m-%d %H:%M:%S", gmtime()),self.args.universe_name, self.args.target_api))
+            logging.info("YW Contact point: %s",  self.host_ipaddr)
             # We do not verify API endpoint certs, so we need to suppress the warning:
             #    "InsecureRequestWarning: Unverified HTTPS request is being made"
             requests.packages.urllib3.disable_warnings(
@@ -961,5 +973,5 @@ class YBLDAPSync:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
+    logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s: %(message)s")
     YBLDAPSync().run()
