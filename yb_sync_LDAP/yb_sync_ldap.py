@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.16"
+VERSION = "0.17"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -172,6 +172,7 @@ class YBLDAPSync:
             with open(filepath, encoding='utf-8') as ldap_file:
                 ldap_data = json.load(ldap_file)
             ldap_file.close()
+            logging.info("Loaded {} previous LDAP items from file {}.".format(len(ldap_data),ldap_file))
         else:
             cls.create_ldap_cache_directory(customeruuid, universeuuid)
         return ldap_data
@@ -556,7 +557,7 @@ class YBLDAPSync:
                 logging.info("LDAP Group {} has no attributes. Ignored.".format(group_dn))
                 continue
             if not ('member' in group_att  and  len(group_att['member']) > 0):
-                logging.info("LDAP Group {} has no members. Ignored.".format(group_dn))
+                logging.warning("LDAP Group {} has no members. Ignored.".format(group_dn))
                 continue
             group_dict = dict(item.split("=") for item in group_dn.split(","))
             group = None
@@ -627,9 +628,13 @@ class YBLDAPSync:
         """
         # Process new records - dictionary_item_added
         stmt_list = []
+        stmt_type = {'AddRole':0, 'DropRole':0, 'GrantRole':0, 'Revoke':0}
+        logging.debug("Change Dictionary for {}:{}".format(target_api,diff_library))
+        
         if 'dictionary_item_added' in diff_library:
             for key, value in diff_library['dictionary_item_added'].items():
                 logging.debug("Adding DB role for {}".format(key))
+                stmt_type['AddRole'] +=1
                 role_to_create = get_uid_from_ddiff(key)
                 if target_api == 'YCQL':
                     stmt_list.append(YCQL_CREATE_ROLE.format(role_to_create,
@@ -645,6 +650,7 @@ class YBLDAPSync:
         if 'dictionary_item_removed' in diff_library:
             for key, value in diff_library['dictionary_item_removed'].items():
                 logging.debug("Dropping DB role for {}".format(key))
+                stmt_type['DropRole'] +=1
                 role_to_drop = get_uid_from_ddiff(key)
                 if target_api == 'YCQL':
                     stmt_list.append(YCQL_DROP_ROLE.format(role_to_drop))
@@ -653,10 +659,11 @@ class YBLDAPSync:
         # Process changed records - new attribute - iterable_item_added
         if 'iterable_items_added_at_indexes' in diff_library:
             for key, value in diff_library['iterable_items_added_at_indexes'].items():
-                logging.debug("Modifying DB role for {}".format(key))
+                logging.debug("GRANTing DB role {} to users:{}".format(key,value.values()))
                 role_to_modify = get_uid_from_ddiff(key)
                 grant_role_list = []
                 for grant_role in value.values():
+                    stmt_type['GrantRole'] +=1
                     if target_api == 'YCQL':
                         stmt_list.append(YCQL_GRANT_ROLE.format(grant_role, role_to_modify))
                     else:
@@ -671,6 +678,7 @@ class YBLDAPSync:
                 role_to_modify = get_uid_from_ddiff(key)
                 revoke_role_list = []
                 for revoke_role in value.values():
+                    stmt_type['Revoke'] +=1
                     if target_api == 'YCQL':
                         stmt_list.append(YCQL_REVOKE_ROLE.format(revoke_role, role_to_modify))
                     else:
@@ -678,7 +686,7 @@ class YBLDAPSync:
                 if target_api == 'YSQL':
                     revoke_roles = ','.join(['"{0}"'.format(role) for role in revoke_role_list])
                     stmt_list.append(YSQL_REVOKE_ROLE.format(revoke_roles, role_to_modify))
-        logging.info('Prepared %d statements for execution against database', len(stmt_list))
+        print ('Prepared {} database update statements: {}'.format(len(stmt_list)), stmt_type)
         return stmt_list
 
     @classmethod
@@ -706,7 +714,7 @@ class YBLDAPSync:
         """
         for stmt in stmt_list:
             if stmt.startswith('CREATE ROLE'):
-                logging.info('Creating new user...')
+                logging.info('Creating new user: %s.',stmt.split(" ")[2])
             else:
                 logging.info('Applying statement: %s', stmt)
             session.execute(stmt)
@@ -949,7 +957,7 @@ class YBLDAPSync:
                                                              self.args.ldap_groupfield)
             process_diff = self.compute_changes(new_ldap_data, old_ldap_data)
             if process_diff:
-                logging.info('Detected changes from previously saved ldap data')
+                logging.info('Detected {} changes from previously saved ldap data'.format(len(process_diff)))
                 self.apply_changes(process_diff, universe)
             # good idea to save the directory to disk now
             self.save_ldap_data(new_ldap_data, customeruuid, universe['universeuuid'])
