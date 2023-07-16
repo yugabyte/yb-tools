@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.13";
+our $VERSION = "1.14";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -53,6 +53,8 @@ my %option_specs=( # Specifies info for globals saved in %opt. TYPE=>undef means
     USETESTDATA   =>{TYPE=>'!',  DEFAULT=> undef,   HELP=>"TESTING only !! - Do not use."},
     TZOFFSET      =>{TYPE=>undef,DEFAULT=> undef,  },# This is set inside 'unixtime_to_printable', on first use 
     RPCZ          =>{TYPE=>'!',  DEFAULT=> 1,     HELP=>"If set, get query from each node, instead of /live_queries"},
+    MASTER_LEADER =>{TYPE=>undef,DEFAULT=>undef, },  # Obtained and Used internally
+    DBINFO        =>{TYPE=>undef,DEFAULT=>undef, },  # Namespaces, tablespaces, tables, tablets .. Obtained and Used internally	
 );
 my %opt = map {$_=> $option_specs{$_}{DEFAULT}} keys %option_specs;
 
@@ -83,7 +85,8 @@ while (not ($quit_daemon  or my $this_iter_ts=time() > $opt{ENDTIME_EPOCH} )){  
 #------------- E n d  M a i n    L o o p ---------------
 # Could get here if a SIGNAL is received
 warn(unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS") ." Program $$ Completed after $loop_count iterations.\n"); 
-$output->Write_event(time(),unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS") ." Program $$ Completed after $loop_count iterations.",1); 
+$output->Write_Section(time(),"EVENT",unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS") ." Program $$ Completed after $loop_count iterations.",
+                       "text/event",1);
 $opt{LOCK_FH} and close $opt{LOCK_FH} ;  # Should already be closed and removed by sig handler
 unlink $opt{LOCKFILE};
 $output->Close("FINAL");
@@ -271,8 +274,8 @@ sub Initialize{
   }
   $opt{NODES} = Analysis::Mode::Extract_nodes_From_Universe($opt{UNIVERSE}); 
   $opt{OUTPUT} ||= "queries." . unixtime_to_printable(time(),"YYYY-MM-DD") . ".$opt{UNIVERSE}{name}.mime.gz",
-  $output = MIME::Write::Simple::->new(UNIVERSE_JSON=>$YBA_API->{json_string}); # No I/O so far 
-  $output->Write_event(time(),"Querymonitor $VERSION Started for universe $opt{UNIVERSE}{name}",1); # Delayed write 
+  $output = MIME::Write::Simple::->new(UNIVERSE_JSON=>$YBA_API->{json_string}); # No I/O so far ; Seince we just got the UNIV info, json_string has the JSON for it.
+  $output->Write_Section(time(),"EVENT","Querymonitor $VERSION Started for universe $opt{UNIVERSE}{name}","text/event",1); # Delayed write
   my $nodestatus = $YBA_API->Get("/status");
   for my $nodename(keys %$nodestatus){
 	next unless ref($nodestatus->{$nodename}) eq "HASH";
@@ -281,6 +284,18 @@ sub Initialize{
 	print "--WARNING: NODE $nodename Status:$nodestatus->{$nodename}{node_status}; ",
 	       "Master-alive:$nodestatus->{$nodename}{master_alive}, Tserver-alive:$nodestatus->{$nodename}{tserver_alive}\n";
   }
+  # Get & store top level Namespace, Tablespace and Tables list 
+  $opt{DBINFO}{NAMESPACES} = $YBA_API->Get("/namespaces"); # AOH
+  $output->Write_Section(time(),"NAMESPACES",$YBA_API->{json_string},"text/json",1); # Delay write 
+  # Find Master/Leader 
+  $opt{MASTER_LEADER}      = $YBA_API->Get("/leader")->{privateIP};
+  $opt{DEBUG} and print "--DEBUG:Master/Leader JSON:",$YBA_API->{json_string},". IP is ",$opt{MASTER_LEADER},".\n";
+  my ($ml_node) = grep {$_->{private_ip} eq $opt{MASTER_LEADER}} @{ $opt{NODES} } or die "ERROR : No Master/Leader NODE found for $opt{MASTER_LEADER}";
+  my $master_http_port = $opt{UNIVERSE}{universeDetails}{communicationPorts}{masterHttpPort} or die "ERROR: Master HTTP port not found in univ JSON";
+  # Get dump_entities from MASTER_LEADER
+  my $entities =  $YBA_API->Get("/proxy/$ml_node->{private_ip}:$master_http_port/dump-entities","BASE_URL_UNIVERSE");
+  $output->Write_Section(time(),"DUMPENTITIES",$YBA_API->{json_string},"text/json",1); # Delay write 
+  
   if ($opt{USETESTDATA}){
 	 print "--Writing ONE record of test data, then exiting...\n";
 	 $output->WriteQuery(time(), "ycql", {FIVE=>5,SIX=>6,COW=>"Moo"},"SELECT some_junk FROM made_up");
@@ -543,6 +558,9 @@ my %Section_Handler =( # Defines Handler subroutines for each Mime piect (_SECTI
 	CSVHEADER		=> \&Handle_CSVHEADER	,
 	MONITOR_DATA	=> \&Handle_MONITOR_DATA,
 	EVENT           => \&Handle_Event_Data,
+	DUMPENTITIES    => \&Handle_ENTITIES_Data,
+	NAMESPACES      => \&Handle_Namespaces_Data,
+	TABLETMETRIC    => \&Handle_Tablet_Metrics,
 );
 
 sub Parse_Body_Record{
@@ -837,6 +855,39 @@ sub boundary{ # getter/setter
    print { $self->{OUTPUT_FH} }  "--" . $self->{boundary} . ($final ? "--\n" : "\n");
 }
 
+sub Write_Section{ # Writes the specified SECTION as an independent MIME piece 
+   my ($self,$ts,$section,$data,$mime_type,$delayed_write) = @_;
+   if ($delayed_write){
+      push @{$self->{"${section}_QUEUE"}}, [$ts,$data,$mime_type];
+	  return;
+   }
+   return unless  @{$self->{"${section}_QUEUE"}} or $data;
+   if (! $mime_type ){
+	   if (@{$self->{"${section}_QUEUE"}}){
+		   $mime_type = ($self->{"${section}_QUEUE"})->[0][2];
+	   }else{
+	      $mime_type = "text/plain";
+	   }
+   }
+   if (! $self->{OUTPUT_FH} ){
+	  # Need to initialize output
+      $self->Open_and_Initialize();
+   }   
+   if ($self->{IN_CSV_SECTION}){
+	   $self->{IN_CSV_SECTION} = 0;
+	   $self->{TYPE_INITIALIZED} = {}; # Zap types to un-init 
+	   $self->boundary(); # Close the CSV section
+   }
+ 	$self->header($mime_type,
+	      join("\n",
+			 "_SECTION_: $section",
+             map ({$_->[0] .": " . $_->[1]}  @{$self->{"${section}_QUEUE"}} ),
+			 $data ? ("$ts: $data") : ()
+			 ));
+	$self->boundary();  
+	$self->{"${section}_QUEUE"} = [];
+}
+
 sub Open_and_Initialize{
 	my ($self) = @_;
 	$opt{DEBUG} and print "--DEBUG: Opening output file=" , $opt{OUTPUT},"\n";
@@ -862,33 +913,11 @@ sub Open_and_Initialize{
 					  ."_SECTION_: UNIVERSE_JSON");
 		print { $self->{OUTPUT_FH} } $self->{UNIVERSE_JSON},"\n";
 		$self->boundary();
+		for my $section_queue( grep {m/_QUEUE$/} sort keys %$self){
+			my $section = substr($section_queue,0,-6);
+			$self->Write_Section(0,$section,undef,undef,0); # Flush pending sections 
+		}
 	}
-}
-
-sub Write_event{
-   my ($self,$ts,$event,$delayed_write) = @_;
-   if ($delayed_write){
-      push @{$self->{EVENT_QUEUE}}, [$ts,$event];
-	  return;
-   }
-   return unless  @{$self->{EVENT_QUEUE}} or $event;
-   if (! $self->{OUTPUT_FH} ){
-	  # Need to initialize output
-      $self->Open_and_Initialize();
-   }   
-   if ($self->{IN_CSV_SECTION}){
-	   $self->{IN_CSV_SECTION} = 0;
-	   $self->{TYPE_INITIALIZED} = {}; # Zap types to un-init 
-	   $self->boundary(); # Close the CSV section
-   }
- 	$self->header("text/event",
-	      join("\n",
-			 "_SECTION_: EVENT",
-			 map ({$_->[0] .": " . $_[1]}  @{$self->{EVENT_QUEUE}}),
-			 $event ? ("$ts: $event") : ()
-			 ));
-	$self->boundary();  
-	$self->{EVENT_QUEUE} = [];
 }
 
 sub Initialize_query_type{
@@ -931,7 +960,11 @@ sub WriteQuery{
 sub Close{
 	my ($self, $final) = @_;
     return unless $self->{OUTPUT_FH};
-	$final and $self->Write_event(time(),"Final close",0); # No delay 
+	$final and $self->Write_Section(time(),"EVENT","Final close","text/event",0); # No delay
+	for my $section_queue( grep {m/_QUEUE$/} sort keys %$self){
+		my $section = substr($section_queue,0,-6);
+		$self->Write_Section(0,$section,undef,undef,0); # Flush pending sections 
+	}
 	$self->boundary(undef,$final);
 	$self->{IN_CSV_SECTION} = 0;
     close $self->{OUTPUT_FH};
