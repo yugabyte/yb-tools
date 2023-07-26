@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.17"
+VERSION = "0.18"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -686,7 +686,7 @@ class YBLDAPSync:
                 if target_api == 'YSQL':
                     revoke_roles = ','.join(['"{0}"'.format(role) for role in revoke_role_list])
                     stmt_list.append(YSQL_REVOKE_ROLE.format(revoke_roles, role_to_modify))
-        print ('Prepared {} database update statements: {}'.format(len(stmt_list)), stmt_type)
+        print ('Prepared {} database update statements: {}'.format(len(stmt_list), stmt_type))
         return stmt_list
 
     @classmethod
@@ -728,7 +728,11 @@ class YBLDAPSync:
         stmt_list = None
         db_certificate = universe['db_certificate']
         stmt_list = self.process_changes(process_diff, self.args.target_api)
-        if self.args.target_api == 'YCQL':
+        if self.args.dryrun:
+            print("--- Dry Run -- {} statements created. (No changes will be made) ---".format(len(stmt_list)))
+            for stmt in stmt_list:
+                print("  {}".format(stmt))
+        elif self.args.target_api == 'YCQL':
             if not self.ycql_session:
                 self.ycql_session = self.connect_to_ycql(universe,
                                                          self.args.dbuser,
@@ -819,6 +823,14 @@ class YBLDAPSync:
             # Enabling debugging at http.client level (requests->urllib3->http.client)
             # you will see the REQUEST, including HEADERS and DATA, and RESPONSE with HEADERS but without DATA.
             # the only thing missing will be the response.body which is not logged.
+            import http.client
+            http_client_logger = logging.getLogger("http.client")
+            #the http.client library does not use logging to output debug messages; it will always use print()
+            def print_to_log(*args):
+                http_client_logger.debug(" ".join(args)) 
+            # monkey-patch a `print` global into the http.client module; all calls to
+            # print() in that module will then use our print_to_log implementation
+            http.client.print = print_to_log
             try: # for Python 3
                 from http.client import HTTPConnection
             except ImportError:
@@ -900,6 +912,8 @@ class YBLDAPSync:
                             help="File location that points to LDAP certificate")
         parser.add_argument('--ldap_tls', action='store_false', default=False,
                             help="LDAP Use TLS")
+        parser.add_argument('--dryun', action='store_false', default=False,
+                            help="Show list of potential DB role changes, but DO NOT apply them")
         return parser.parse_args()
 
     def run(self):
@@ -908,8 +922,8 @@ class YBLDAPSync:
         """
         try:
             self.post_process_args()
-            print("{} YB LDAP sync script, Version {} for universe {}, {}.".format(time.strftime("%Y-%m-%d %H:%M:%S UTC", gmtime()),
-                           VERSION, time.strftime("%Y-%m-%d %H:%M:%S", gmtime()),self.args.universe_name, self.args.target_api))
+            print("[{}] YB LDAP sync script, Version {} for universe {}, {}.".format(time.strftime("%Y-%m-%d %H:%M:%S UTC", gmtime()),
+                           VERSION,self.args.universe_name, self.args.target_api))
             logging.info("YW Contact point: %s",  self.host_ipaddr)
             # We do not verify API endpoint certs, so we need to suppress the warning:
             #    "InsecureRequestWarning: Unverified HTTPS request is being made"
