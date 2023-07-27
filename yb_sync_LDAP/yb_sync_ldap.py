@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.18"
+VERSION = "0.19"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -768,6 +768,8 @@ class YBLDAPSync:
                                                          self.args.dbpass,
                                                          db_certificate)
             ldap_db_dict = self.ysql_auth_to_dict(self.ysql_session)
+        logging.info("Loaded {} DB Users.".format(len(ldap_db_dict)))
+        logging.debug(" DB Users:{}".format(ldap_db_dict))
         return ldap_db_dict
 
     def setup_yb_tls(self, universe, api_token, customeruuid):
@@ -912,7 +914,7 @@ class YBLDAPSync:
                             help="File location that points to LDAP certificate")
         parser.add_argument('--ldap_tls', action='store_false', default=False,
                             help="LDAP Use TLS")
-        parser.add_argument('--dryun', action='store_false', default=False,
+        parser.add_argument('--dryrun', action='store_false', default=False,
                             help="Show list of potential DB role changes, but DO NOT apply them")
         return parser.parse_args()
 
@@ -972,7 +974,7 @@ class YBLDAPSync:
             process_diff = self.compute_changes(new_ldap_data, old_ldap_data)
             if process_diff:
                 logging.info('Detected {} changes from previously saved ldap data'.format(len(process_diff)))
-                self.apply_changes(process_diff, universe)
+                #Cannot apply yet - need to check for DB user existance## self.apply_changes(process_diff, universe)
             # good idea to save the directory to disk now
             self.save_ldap_data(new_ldap_data, customeruuid, universe['universeuuid'])
             # query database and get current state, compare and process any lingering change
