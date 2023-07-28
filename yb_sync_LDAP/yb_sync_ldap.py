@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.20"
+VERSION = "0.21"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -54,7 +54,10 @@ YSQL_CREATE_ROLE = "CREATE ROLE \"{}\" WITH LOGIN PASSWORD '{}' IN ROLE {};"
 YSQL_GRANT_ROLE = "GRANT {} TO \"{}\";"
 YSQL_REVOKE_ROLE = "REVOKE {} FROM \"{}\";"
 YSQL_DROP_ROLE = "DROP ROLE IF EXISTS \"{}\";"
-YSQL_OWNED_OBJECTS = "SELECT count(*) as owned_objects FROM pg_roles r,pg_shdepend d WHERE r.rolname='{}' and d.refobjid=r.oid;"
+YSQL_OWNED_OBJECTS = "SELECT r.rolname as role,count(*) as owned_objects "\
+                     "FROM pg_roles r,pg_shdepend d "\
+                     "WHERE d.refobjid=r.oid "\
+                     "GROUP BY  r.rolname;"
 YW_TEMP_DIR = "/tmp"
 LDAP_BASE_DATA_DIR = "/opt/yugabyte/yugaware/data"
 LDAP_DATA_CACHE_DIR = os.path.join(LDAP_BASE_DATA_DIR, 'cache')
@@ -419,16 +422,18 @@ class YBLDAPSync:
         dbdict = {}
         owned_object_count = {}
         with session:
-            auth_cursor = session.cursor(cursor_factory=psycopg2.extras.DictCursor)
             owned_cursor = session.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            owned_cursor.execute(YSQL_OWNED_OBJECTS)
+            rows = owned_cursor.fetchall()
+            for row in rows:
+                owned_object_count[row['role']] = row['owned_objects']
+            owned_cursor.close()
+            #
+            auth_cursor = session.cursor(cursor_factory=psycopg2.extras.DictCursor)
             auth_cursor.execute(YSQL_ROLE_QUERY)
             rows = auth_cursor.fetchall()
             for row in rows:
                 dbdict[row['role']] = row['member_of']
-                owned_cursor.execute(YSQL_OWNED_OBJECTS.format(row['role']))
-                owned_rec = owned_cursor.fetchone()
-                owned_object_count[row['role']] = owned_rec['owned_objects']
-
             auth_cursor.close()
         return dbdict,owned_object_count
 
@@ -662,11 +667,12 @@ class YBLDAPSync:
                 role_to_drop = get_uid_from_ddiff(key)
                 if target_api == 'YCQL':
                     stmt_list.append(YCQL_DROP_ROLE.format(role_to_drop))
-                elif owned_counts[role_to_drop] == 0:
-                    stmt_list.append(YSQL_DROP_ROLE.format(role_to_drop))
-                else:
+                elif role_to_drop in owned_counts and owned_counts[role_to_drop] > 0:
                     logging.error("ERROR: Could not drop ROLE '{}' because it owns {} objects".format(role_to_drop,owned_counts[role_to_drop]))
-                    stmt_list.append("-- Role {} could not be dropped because it owns objects".format(role_to_drop))
+                    stmt_list.append("--ERROR: Role {} could not be dropped because it owns {} objects".format(role_to_drop, owned_counts[role_to_drop]))                
+                else:
+                    stmt_list.append(YSQL_DROP_ROLE.format(role_to_drop))
+                    
         # Process changed records - new attribute - iterable_item_added
         if 'iterable_items_added_at_indexes' in diff_library:
             for key, value in diff_library['iterable_items_added_at_indexes'].items():
