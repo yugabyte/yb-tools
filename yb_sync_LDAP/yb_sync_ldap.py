@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.19"
+VERSION = "0.20"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -54,6 +54,7 @@ YSQL_CREATE_ROLE = "CREATE ROLE \"{}\" WITH LOGIN PASSWORD '{}' IN ROLE {};"
 YSQL_GRANT_ROLE = "GRANT {} TO \"{}\";"
 YSQL_REVOKE_ROLE = "REVOKE {} FROM \"{}\";"
 YSQL_DROP_ROLE = "DROP ROLE IF EXISTS \"{}\";"
+YSQL_OWNED_OBJECTS = "SELECT count(*) as owned_objects FROM pg_roles r,pg_shdepend d WHERE r.rolname='{}' and d.refobjid=r.oid;"
 YW_TEMP_DIR = "/tmp"
 LDAP_BASE_DATA_DIR = "/opt/yugabyte/yugaware/data"
 LDAP_DATA_CACHE_DIR = os.path.join(LDAP_BASE_DATA_DIR, 'cache')
@@ -416,14 +417,20 @@ class YBLDAPSync:
         :Return dbdict - dictionary contain the state of the database
         """
         dbdict = {}
+        owned_object_count = {}
         with session:
             auth_cursor = session.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            owned_cursor = session.cursor(cursor_factory=psycopg2.extras.DictCursor)
             auth_cursor.execute(YSQL_ROLE_QUERY)
             rows = auth_cursor.fetchall()
             for row in rows:
                 dbdict[row['role']] = row['member_of']
+                owned_cursor.execute(YSQL_OWNED_OBJECTS.format(row['role']))
+                owned_rec = owned_cursor.fetchone()
+                owned_object_count[row['role']] = owned_rec['owned_objects']
+
             auth_cursor.close()
-        return dbdict
+        return dbdict,owned_object_count
 
     @classmethod
     def ycql_auth_to_dict(cls, session):
@@ -618,13 +625,13 @@ class YBLDAPSync:
         return diff_library
 
     @classmethod
-    def process_changes(cls, diff_library, target_api):
+    def process_changes(cls, diff_library, target_api, owned_counts):
         """
         Routine to process the computed changes back to YCQL.
         :Param diff_library -- the compute changes in dictionary form accessed by
         dictionary_item_add, dictionary_item_removed, iterable_items_added_at_indexes,
         iterable_items_removed_at_indexes
-        :Return list of statements to execute against YCQL
+        :Return list of statements to execute against YCQL/YSQL
         """
         # Process new records - dictionary_item_added
         stmt_list = []
@@ -641,6 +648,7 @@ class YBLDAPSync:
                                                              generate_random_password()))
                     for grant_role in value:
                         stmt_list.append(YCQL_GRANT_ROLE.format(grant_role, role_to_create))
+                        stmt_type['GrantRole'] +=1
                 else:
                     grant_roles = ','.join(['"{0}"'.format(role) for role in value])
                     stmt_list.append(YSQL_CREATE_ROLE.format(role_to_create,
@@ -654,8 +662,11 @@ class YBLDAPSync:
                 role_to_drop = get_uid_from_ddiff(key)
                 if target_api == 'YCQL':
                     stmt_list.append(YCQL_DROP_ROLE.format(role_to_drop))
-                else:
+                elif owned_counts[role_to_drop] == 0:
                     stmt_list.append(YSQL_DROP_ROLE.format(role_to_drop))
+                else:
+                    logging.error("ERROR: Could not drop ROLE '{}' because it owns {} objects".format(role_to_drop,owned_counts[role_to_drop]))
+                    stmt_list.append("-- Role {} could not be dropped because it owns objects".format(role_to_drop))
         # Process changed records - new attribute - iterable_item_added
         if 'iterable_items_added_at_indexes' in diff_library:
             for key, value in diff_library['iterable_items_added_at_indexes'].items():
@@ -700,6 +711,9 @@ class YBLDAPSync:
         for stmt in stmt_list:
             if stmt.startswith('CREATE ROLE'):
                 logging.info('Creating new user...')
+            elif stmt.startswith('--'):
+                logging.info(stmt) # It is a SQL comment
+                continue           # Do not execute it 
             else:
                 logging.info('Applying statement: %s', stmt)
             exec_cursor.execute(stmt)
@@ -719,7 +733,7 @@ class YBLDAPSync:
                 logging.info('Applying statement: %s', stmt)
             session.execute(stmt)
 
-    def apply_changes(self, process_diff, universe):
+    def apply_changes(self, process_diff, universe, owned_counts):
         """
         Routine to apply changes to the given universe
         :Param process_diff - dictionary of changes that will be used to generate a list
@@ -727,7 +741,7 @@ class YBLDAPSync:
         """
         stmt_list = None
         db_certificate = universe['db_certificate']
-        stmt_list = self.process_changes(process_diff, self.args.target_api)
+        stmt_list = self.process_changes(process_diff, self.args.target_api, owned_counts)
         if self.args.dryrun:
             print("--- Dry Run -- {} statements created. (No changes will be made) ---".format(len(stmt_list)))
             for stmt in stmt_list:
@@ -754,6 +768,7 @@ class YBLDAPSync:
         :Return dictionary that has the current state
         """
         db_certificate = universe['db_certificate']
+        owned_counts={}
         if self.args.target_api == 'YCQL':
             if not self.ycql_session:
                 self.ycql_session = self.connect_to_ycql(universe,
@@ -767,10 +782,10 @@ class YBLDAPSync:
                                                          self.args.dbuser,
                                                          self.args.dbpass,
                                                          db_certificate)
-            ldap_db_dict = self.ysql_auth_to_dict(self.ysql_session)
+            (ldap_db_dict, owned_counts) = self.ysql_auth_to_dict(self.ysql_session)
         logging.info("Loaded {} DB Users.".format(len(ldap_db_dict)))
         logging.debug(" DB Users:{}".format(ldap_db_dict))
-        return ldap_db_dict
+        return ldap_db_dict,owned_counts
 
     def setup_yb_tls(self, universe, api_token, customeruuid):
         """
@@ -916,6 +931,8 @@ class YBLDAPSync:
                             help="LDAP Use TLS")
         parser.add_argument('--dryrun', action='store_false', default=False,
                             help="Show list of potential DB role changes, but DO NOT apply them")
+        parser.add_argument('--reports', required=False,
+                            help="One or a comma separated list of 'tree' reports. Eg: LDAP,DBROLE,DBCHANGE")
         return parser.parse_args()
 
     def run(self):
@@ -979,10 +996,10 @@ class YBLDAPSync:
             self.save_ldap_data(new_ldap_data, customeruuid, universe['universeuuid'])
             # query database and get current state, compare and process any lingering change
             logging.info('Querying the database for its state of users/groups')
-            ldap_db_dict = self.query_db_state(universe)
+            (ldap_db_dict,owned_counts) = self.query_db_state(universe)
             process_db_diff = self.compute_changes(new_ldap_data, ldap_db_dict)
             if process_db_diff:
-                self.apply_changes(process_db_diff, universe)
+                self.apply_changes(process_db_diff, universe, owned_counts)
             if self.ycql_session:
                 self.ycql_session.shutdown()
             if self.ysql_session:
