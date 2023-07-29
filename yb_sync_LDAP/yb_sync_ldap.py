@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.21"
+VERSION = "0.22"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -65,12 +65,12 @@ LDAP_DATA_CACHE_CUST_DIR = os.path.join(LDAP_DATA_CACHE_DIR, '{}')
 LDAP_DATA_CACHE_UNIV_DIR = os.path.join(LDAP_DATA_CACHE_CUST_DIR, '{}')
 LDAP_FILE_DATA = os.path.join(LDAP_BASE_DATA_DIR, 'cache/{}/{}/ldap_data.json')
 LDAP_BASE_DIR_ERROR = "The base directory {} does not exist"
-YCQL_ROLE_QUERY = "SELECT role, member_of FROM roles IF can_login = true AND is_superuser = false"
+YCQL_ROLE_QUERY = "SELECT role, member_of FROM roles IF can_login = true {}" # param : "AND is_superuser = false" or ""
 YSQL_ROLE_QUERY = "SELECT r.rolname as role, ARRAY(SELECT b.rolname FROM "\
                 "pg_catalog.pg_auth_members m JOIN pg_catalog.pg_roles b "\
                 "ON (m.roleid = b.oid) WHERE m.member=r.oid) as member_of "\
                 "FROM pg_catalog.pg_roles r WHERE r.rolname !~ '^pg_' "\
-                "AND r.rolsuper='f' and r.rolcanlogin='t' order by 1;"
+                " {} AND r.rolcanlogin='t' order by 1;"  # param: "AND r.rolsuper='f'" or ""
 UID_RE = r"\['?([A-Za-z0-9_\.@]+)'?\]"
 
 
@@ -412,10 +412,10 @@ class YBLDAPSync:
         return session
 
     @classmethod
-    def ysql_auth_to_dict(cls, session):
+    def ysql_auth_to_dict(self, session):
         """
         Routine to query the PG catalog for all roles and grants.
-        Explicitly queries for users that can login and are not superuser.
+        Explicitly queries for users that can login and (conditionally) are not superuser.
         :Param session - an active session from connect_to_ycql
         :Return dbdict - dictionary contain the state of the database
         """
@@ -430,7 +430,8 @@ class YBLDAPSync:
             owned_cursor.close()
             #
             auth_cursor = session.cursor(cursor_factory=psycopg2.extras.DictCursor)
-            auth_cursor.execute(YSQL_ROLE_QUERY)
+            auth_cursor.execute(YSQL_ROLE_QUERY.format(
+                    self.args.allow_drop_superuser and "" or "AND r.rolsuper='f'"  ))
             rows = auth_cursor.fetchall()
             for row in rows:
                 dbdict[row['role']] = row['member_of']
@@ -438,17 +439,18 @@ class YBLDAPSync:
         return dbdict,owned_object_count
 
     @classmethod
-    def ycql_auth_to_dict(cls, session):
+    def ycql_auth_to_dict(self, session):
         """
         Routine to query the system_auth keyspace for all roles and grants.
-        Explicitly queries for users that can login and are not superuser.
+        Explicitly queries for users that can login and (conditionally) are not superuser.
         TODO: Look at universe Gflags to see if there are excluded users from ycql ldap Gflag
         :Param session - an active session from connect_to_ycql
         :Return dbdict - dictionary contain the state of the database
         """
         dbdict = {}
         session.row_factory = dict_factory
-        rows = session.execute(YCQL_ROLE_QUERY)
+        rows = session.execute(YCQL_ROLE_QUERY.format(
+                  self.args.allow_drop_superuser and "" or "AND is_superuser = false"))
         for row in rows:
             dbdict[row['role']] = row['member_of']
         return dbdict
@@ -716,7 +718,7 @@ class YBLDAPSync:
         exec_cursor = session.cursor()
         for stmt in stmt_list:
             if stmt.startswith('CREATE ROLE'):
-                logging.info('Creating new user...')
+                logging.info('Creating new user: %s.',stmt.split(" ")[2])
             elif stmt.startswith('--'):
                 logging.info(stmt) # It is a SQL comment
                 continue           # Do not execute it 
@@ -734,7 +736,7 @@ class YBLDAPSync:
         """
         for stmt in stmt_list:
             if stmt.startswith('CREATE ROLE'):
-                logging.info('Creating new user: %s.',stmt.split(" ")[2])
+                logging.info('Creating new user: %s.',stmt.split(" ")[5]) # after 'IF NOT EXISTS'
             else:
                 logging.info('Applying statement: %s', stmt)
             session.execute(stmt)
@@ -890,7 +892,7 @@ class YBLDAPSync:
                             help="YW API Password")
         parser.add_argument('--ipv6', action='store_false', default=False,
                             help="Is system ipv6 based")
-        parser.add_argument('--target_api', default='YCQL',
+        parser.add_argument('--target_api', default='YCQL', metavar="YCQL|YSQL",
                             choices=['YCQL', 'YSQL'],
                             type=str.upper,
                             help="Target API: YCQL or YSQL")
@@ -924,8 +926,8 @@ class YBLDAPSync:
         parser.add_argument('--ldap_password', required=True,
                             help="LDAP Bind DN password")
         parser.add_argument('--ldap_search_filter', required=True,
-                            help="LDAP Search filter")
-        parser.add_argument('--ldap_basedn', required=True,
+                            help="LDAP Search filter, like  '(&(objectclass=group)(|(samaccountname=grp1)...))'")
+        parser.add_argument('--ldap_basedn', required=True, metavar="dc=dept,dc=corp..",
                             help="LDAP BaseDN to search")
         parser.add_argument('--ldap_userfield', required=True,
                             help="LDAP field to determine user's id to create")
@@ -937,8 +939,10 @@ class YBLDAPSync:
                             help="LDAP Use TLS")
         parser.add_argument('--dryrun', action='store_false', default=False,
                             help="Show list of potential DB role changes, but DO NOT apply them")
-        parser.add_argument('--reports', required=False,
-                            help="One or a comma separated list of 'tree' reports. Eg: LDAP,DBROLE,DBCHANGE")
+        parser.add_argument('--reports', required=False, type=str.upper,metavar="COMMA,SEP,RPT...",
+                            help="One or a comma separated list of 'tree' reports. Eg: LDAP,DBROLE,DBCHANGE or ALL")
+        parser.add_argument('--allow_drop_superuser', action='store_false', default=False,
+                            help="Allow this code to DROP a superuser role if absent in LDAP")
         return parser.parse_args()
 
     def run(self):
@@ -1006,6 +1010,8 @@ class YBLDAPSync:
             process_db_diff = self.compute_changes(new_ldap_data, ldap_db_dict)
             if process_db_diff:
                 self.apply_changes(process_db_diff, universe, owned_counts)
+            else:
+                print("No DB changes. LDAP and {} are in sync.".format(self.args.target_api))
             if self.ycql_session:
                 self.ycql_session.shutdown()
             if self.ysql_session:
