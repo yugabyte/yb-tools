@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.16";
+our $VERSION = "1.17";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -564,7 +564,8 @@ sub Handle_Event_Data{
 	$opt{DEBUG} and print "--DEBUG:IN: ",(caller(0))[3]," handler type $dispatch_type\n";
 	return unless $dispatch_type eq "Header";
 
-	  print {$self->{OUTPUT_FH}} "INSERT INTO event VALUES($self->{INPUT}{general_header}{TIMESTAMP},'",
+    $self->{INPUT}{general_header}{MSG} =~s/'/''/g; # MSG : escape single quotes 
+	print {$self->{OUTPUT_FH}} "INSERT INTO event VALUES($self->{INPUT}{general_header}{TIMESTAMP},'",
 	        $self->{INPUT}{general_header}{MSG}  ,
 			"');\n";
 }
