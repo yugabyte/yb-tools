@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.23"
+VERSION = "0.24"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -203,17 +203,17 @@ class YBLDAPSync:
     def Pretty_Print(cls,d, indent=0, keyfilter=None):
        if isinstance(d, list):
           for item in d:
-            Pretty_Print(cls,item,indent,keyfilter)
+            cls.Pretty_Print(item,indent,keyfilter)
           return
        if isinstance(d,tuple):
           for (idx,val) in enumerate(d):
-            Pretty_Print(cls,val,indent,keyfilter)
+            cls.Pretty_Print(val,indent,keyfilter)
           return
        if isinstance(d, dict):
           for key, value in d.items():
            if keyfilter==None  or (keyfilter and keyfilter == key):
                 print('\t' * indent + ("" if indent ==0 else "--> ") + str(key) + ":") 
-                Pretty_Print(cls,value, indent+1,keyfilter)
+                cls.Pretty_Print(value, indent+1,keyfilter)
            else:
               continue # Ignore key  NOT in filter
        else:
@@ -976,7 +976,7 @@ class YBLDAPSync:
                             help="LDAP Use TLS")
         parser.add_argument('--dryrun', action='store_false', default=False,
                             help="Show list of potential DB role changes, but DO NOT apply them")
-        parser.add_argument('--reports', required=False, type=str.upper,metavar="COMMA,SEP,RPT...",
+        parser.add_argument('--reports', required=False, type=str.upper,metavar="COMMA,SEP,RPT...", default="",
                             help="One or a comma separated list of 'tree' reports. Eg: LDAPRAW,LDAPBYUSER,LDAPBYGROUP,DBROLE,DBUPDATES or ALL")
         parser.add_argument('--allow_drop_superuser', action='store_false', default=False,
                             help="Allow this code to DROP a superuser role if absent in LDAP")
