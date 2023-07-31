@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.22"
+VERSION = "0.23"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -198,6 +198,30 @@ class YBLDAPSync:
         with open(filepath, 'w', encoding='utf-8') as ldap_file:
             json.dump(ldap_data, ldap_file)
         ldap_file.close()
+
+    @classmethod
+    def Pretty_Print(cls,d, indent=0, keyfilter=None):
+       if isinstance(d, list):
+          for item in d:
+            Pretty_Print(cls,item,indent,keyfilter)
+          return
+       if isinstance(d,tuple):
+          for (idx,val) in enumerate(d):
+            Pretty_Print(cls,val,indent,keyfilter)
+          return
+       if isinstance(d, dict):
+          for key, value in d.items():
+           if keyfilter==None  or (keyfilter and keyfilter == key):
+                print('\t' * indent + ("" if indent ==0 else "--> ") + str(key) + ":") 
+                Pretty_Print(cls,value, indent+1,keyfilter)
+           else:
+              continue # Ignore key  NOT in filter
+       else:
+           try:
+             d=d.decode()
+           except:
+             None # Ignore exception 
+           print('\t' * indent + str(d))
 
     def get_auth_token(self, username, password):
         """
@@ -563,6 +587,10 @@ class YBLDAPSync:
         ldap_dict = {}
         result_count = 0
         logging.info('Processing result into dictionary (process_ldap_group_list)')
+        if "LDAPRAW" in self.args.reports or "ALL" in self.args.reports:
+           print("REPORT 'LDAP RAW':")
+           self.Pretty_Print(ldap_raw,0,"member")
+           
         for group_dn, group_att in ldap_raw.items():
             logging.debug('Processing ldap item with Group %s and group_att %s', group_dn, group_att)
             if group_dn == None  or  len(group_dn) < 3:
@@ -613,6 +641,9 @@ class YBLDAPSync:
                ldap_dict[user].append(group)
             result_count += 1
         logging.info('Processed %d LDAP groups into dictionary, which contains info for %d users', result_count,len(ldap_dict))
+        if "LDAPBYUSER" in self.args.reports or "ALL" in self.args.reports:
+           print("REPORT 'LDAP BY USER':")
+           self.Pretty_Print(ldap_dict)
         return ldap_dict
 
         
@@ -750,6 +781,9 @@ class YBLDAPSync:
         stmt_list = None
         db_certificate = universe['db_certificate']
         stmt_list = self.process_changes(process_diff, self.args.target_api, owned_counts)
+        if "DBUPDATES" in self.args.reports or "ALL" in self.args.reports:
+           print("REPORT 'DB UPDATES':")
+           self.Pretty_Print(stmt_list,0)
         if self.args.dryrun:
             print("--- Dry Run -- {} statements created. (No changes will be made) ---".format(len(stmt_list)))
             for stmt in stmt_list:
@@ -793,6 +827,9 @@ class YBLDAPSync:
             (ldap_db_dict, owned_counts) = self.ysql_auth_to_dict(self.ysql_session)
         logging.info("Loaded {} DB Users.".format(len(ldap_db_dict)))
         logging.debug(" DB Users:{}".format(ldap_db_dict))
+        if "DBROLE" in self.args.reports or "ALL" in self.args.reports:
+           print("REPORT 'DB ROLE':")
+           self.Pretty_Print(ldap_db_dict,0)
         return ldap_db_dict,owned_counts
 
     def setup_yb_tls(self, universe, api_token, customeruuid):
@@ -940,7 +977,7 @@ class YBLDAPSync:
         parser.add_argument('--dryrun', action='store_false', default=False,
                             help="Show list of potential DB role changes, but DO NOT apply them")
         parser.add_argument('--reports', required=False, type=str.upper,metavar="COMMA,SEP,RPT...",
-                            help="One or a comma separated list of 'tree' reports. Eg: LDAP,DBROLE,DBCHANGE or ALL")
+                            help="One or a comma separated list of 'tree' reports. Eg: LDAPRAW,LDAPBYUSER,LDAPBYGROUP,DBROLE,DBUPDATES or ALL")
         parser.add_argument('--allow_drop_superuser', action='store_false', default=False,
                             help="Allow this code to DROP a superuser role if absent in LDAP")
         return parser.parse_args()
