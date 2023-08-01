@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.24"
+VERSION = "0.25"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -436,7 +436,7 @@ class YBLDAPSync:
         return session
 
     @classmethod
-    def ysql_auth_to_dict(self, session):
+    def ysql_auth_to_dict(self, session, allow_drop_superuser):
         """
         Routine to query the PG catalog for all roles and grants.
         Explicitly queries for users that can login and (conditionally) are not superuser.
@@ -455,7 +455,7 @@ class YBLDAPSync:
             #
             auth_cursor = session.cursor(cursor_factory=psycopg2.extras.DictCursor)
             auth_cursor.execute(YSQL_ROLE_QUERY.format(
-                    self.args.allow_drop_superuser and "" or "AND r.rolsuper='f'"  ))
+                    "" if allow_drop_superuser else "AND r.rolsuper='f'"  ))
             rows = auth_cursor.fetchall()
             for row in rows:
                 dbdict[row['role']] = row['member_of']
@@ -463,7 +463,7 @@ class YBLDAPSync:
         return dbdict,owned_object_count
 
     @classmethod
-    def ycql_auth_to_dict(self, session):
+    def ycql_auth_to_dict(self, session, allow_drop_superuser):
         """
         Routine to query the system_auth keyspace for all roles and grants.
         Explicitly queries for users that can login and (conditionally) are not superuser.
@@ -474,7 +474,7 @@ class YBLDAPSync:
         dbdict = {}
         session.row_factory = dict_factory
         rows = session.execute(YCQL_ROLE_QUERY.format(
-                  self.args.allow_drop_superuser and "" or "AND is_superuser = false"))
+                  "" if allow_drop_superuser else "AND is_superuser = false"))
         for row in rows:
             dbdict[row['role']] = row['member_of']
         return dbdict
@@ -817,14 +817,14 @@ class YBLDAPSync:
                                                          self.args.dbuser,
                                                          self.args.dbpass,
                                                          db_certificate)
-            ldap_db_dict = self.ycql_auth_to_dict(self.ycql_session)
+            ldap_db_dict = self.ycql_auth_to_dict(self.ycql_session, self.args.allow_drop_superuser)
         else:
             if not self.ysql_session:
                 self.ysql_session = self.connect_to_ysql(universe,
                                                          self.args.dbuser,
                                                          self.args.dbpass,
                                                          db_certificate)
-            (ldap_db_dict, owned_counts) = self.ysql_auth_to_dict(self.ysql_session)
+            (ldap_db_dict, owned_counts) = self.ysql_auth_to_dict(self.ysql_session, self.args.allow_drop_superuser)
         logging.info("Loaded {} DB Users.".format(len(ldap_db_dict)))
         logging.debug(" DB Users:{}".format(ldap_db_dict))
         if "DBROLE" in self.args.reports or "ALL" in self.args.reports:
