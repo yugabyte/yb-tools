@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.12";
+our $VERSION = "1.18";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -35,7 +35,7 @@ my %option_specs=( # Specifies info for globals saved in %opt. TYPE=>undef means
     ENDTIME_EPOCH =>{TYPE=>undef,DEFAULT=> 0,}, # Calculated after options are processed
     CURL          =>{TYPE=>'=s', DEFAULT=> "curl", HELP=>"Full path to curl command"},
     FLAGFILE      =>{TYPE=>'=s', DEFAULT=> "querymonitor.defaultflags", HELP=>"Name of file containing this program's options (--xx)"},
-    OUTPUT        =>{TYPE=>'=s', DEFAULT=> undef, HELP=>"Output File name. Defaults to queries.<YMD>.<Univ>.mime.gz"},
+    OUTPUT        =>{TYPE=>'=s', DEFAULT=> undef, HELP=>"Output File name. Defaults to queries.<YMD>.<Univ>.mime.gz. Can specify STDOUT in ANALYZE mode"},
     DEBUG         =>{TYPE=>'!',  DEFAULT=> 0,},
     HELP          =>{TYPE=>'!',  DEFAULT=> 0,},
     VERSION       =>{TYPE=>'!',  DEFAULT=> 0,},
@@ -53,6 +53,8 @@ my %option_specs=( # Specifies info for globals saved in %opt. TYPE=>undef means
     USETESTDATA   =>{TYPE=>'!',  DEFAULT=> undef,   HELP=>"TESTING only !! - Do not use."},
     TZOFFSET      =>{TYPE=>undef,DEFAULT=> undef,  },# This is set inside 'unixtime_to_printable', on first use 
     RPCZ          =>{TYPE=>'!',  DEFAULT=> 1,     HELP=>"If set, get query from each node, instead of /live_queries"},
+    MASTER_LEADER =>{TYPE=>undef,DEFAULT=>undef, },  # Obtained and Used internally
+    DBINFO        =>{TYPE=>undef,DEFAULT=>undef, },  # Namespaces, tablespaces, tables, tablets .. Obtained and Used internally	
 );
 my %opt = map {$_=> $option_specs{$_}{DEFAULT}} keys %option_specs;
 
@@ -77,13 +79,18 @@ while (not ($quit_daemon  or my $this_iter_ts=time() > $opt{ENDTIME_EPOCH} )){  
    $loop_count++;
    my $next_iter_ts = $this_iter_ts + $opt{INTERVAL_SEC};
    Main_loop_Iteration();
+   if ($loop_count % 120 == 0  and  $output->{OUTPUT_FH}){ # After 120 loops and we have Output, get lag 
+      Save_tserver_follower_lag_metrics();
+   }
    my $sleep_sec = $next_iter_ts - time();
    $sleep_sec > 0 and  sleep($sleep_sec);
 }
 #------------- E n d  M a i n    L o o p ---------------
 # Could get here if a SIGNAL is received
 warn(unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS") ." Program $$ Completed after $loop_count iterations.\n"); 
-$output->Write_event(time(),unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS") ." Program $$ Completed after $loop_count iterations.",1); 
+$output->Write_Section(time(),"EVENT",
+                       "MSG:" . unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS") ." Program $$ Completed after $loop_count iterations.",
+                       undef,"text/event",1);
 $opt{LOCK_FH} and close $opt{LOCK_FH} ;  # Should already be closed and removed by sig handler
 unlink $opt{LOCKFILE};
 $output->Close("FINAL");
@@ -108,8 +115,10 @@ sub Main_loop_Iteration{
 	
     my $ts = time();
 	if ($queries->{error}){
+		$output->Write_Section(time(),"EVENT","MSG: ERROR: GET error . counter=$error_counter",
+                       undef,"text/event",0);
 		$error_counter++ >= $opt{MAX_ERRORS} and $quit_daemon = 1;
-	    return $queries->{error};	
+	    return $queries->{error};
 	}
     for my $type (qw|ysql ycql|){
        for my $q (@{ $queries->{$type}{queries} }){
@@ -185,7 +194,17 @@ sub Get_RPCZ_from_nodes{
    }
 
    return ;   
-}	
+}
+#------------------------------------------------------------------------------
+sub Save_tserver_follower_lag_metrics{
+	for my $n (@{ $opt{NODES} }){
+		next unless $n->{isTserver};
+		my $lags = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/metrics?metrics=follower_lag_ms","BASE_URL_UNIVERSE");
+        my $ts = time();
+		$output->Write_Section($ts,"TABLETMETRIC","NODE:$n->{nodeUuid}\nmetric:follower_lag_ms"
+		              ,$YBA_API->{json_string},"text/json",0);
+	}
+}
 #------------------------------------------------------------------------------
 sub SQL_Sanitize{ # Remove PII 
    my ($q) = @_;
@@ -271,8 +290,8 @@ sub Initialize{
   }
   $opt{NODES} = Analysis::Mode::Extract_nodes_From_Universe($opt{UNIVERSE}); 
   $opt{OUTPUT} ||= "queries." . unixtime_to_printable(time(),"YYYY-MM-DD") . ".$opt{UNIVERSE}{name}.mime.gz",
-  $output = MIME::Write::Simple::->new(UNIVERSE_JSON=>$YBA_API->{json_string}); # No I/O so far 
-  $output->Write_event(time(),"Querymonitor $VERSION Started for universe $opt{UNIVERSE}{name}",1); # Delayed write 
+  $output = MIME::Write::Simple::->new(UNIVERSE_JSON=>$YBA_API->{json_string}); # No I/O so far ; Seince we just got the UNIV info, json_string has the JSON for it.
+  $output->Write_Section(time(),"EVENT","MSG:Querymonitor $VERSION Started for universe $opt{UNIVERSE}{name}",undef,"text/event",1); # Delayed write
   my $nodestatus = $YBA_API->Get("/status");
   for my $nodename(keys %$nodestatus){
 	next unless ref($nodestatus->{$nodename}) eq "HASH";
@@ -281,16 +300,42 @@ sub Initialize{
 	print "--WARNING: NODE $nodename Status:$nodestatus->{$nodename}{node_status}; ",
 	       "Master-alive:$nodestatus->{$nodename}{master_alive}, Tserver-alive:$nodestatus->{$nodename}{tserver_alive}\n";
   }
+  # Get & store top level Namespace, Tablespace and Tables list 
+  if ($opt{UNIVERSE}{universeDetails}{clusters}[0]{userIntent}{enableYSQL}){
+     $opt{DBINFO}{NAMESPACES} = $YBA_API->Get("/namespaces"); # AOH
+     $output->Write_Section(time(),"NAMESPACES",undef,$YBA_API->{json_string},"text/json",1); # Delay write 
+  }
+  # Find Master/Leader 
+  $opt{MASTER_LEADER}      = $YBA_API->Get("/leader")->{privateIP};
+  $opt{DEBUG} and print "--DEBUG:Master/Leader JSON:",$YBA_API->{json_string},". IP is ",$opt{MASTER_LEADER},".\n";
+  my ($ml_node) = grep {$_->{private_ip} eq $opt{MASTER_LEADER}} @{ $opt{NODES} } or die "ERROR : No Master/Leader NODE found for $opt{MASTER_LEADER}";
+  my $master_http_port = $opt{UNIVERSE}{universeDetails}{communicationPorts}{masterHttpPort} or die "ERROR: Master HTTP port not found in univ JSON";
+  # Get dump_entities from MASTER_LEADER
+  my $entities =  $YBA_API->Get("/proxy/$ml_node->{private_ip}:$master_http_port/dump-entities","BASE_URL_UNIVERSE");
+  $output->Write_Section(time(),"DUMPENTITIES",undef,$YBA_API->{json_string},"text/json",1); # Delay write 
+  
   if ($opt{USETESTDATA}){
 	 print "--Writing ONE record of test data, then exiting...\n";
-	 $output->WriteQuery(time(), "ycql", {FIVE=>5,SIX=>6,COW=>"Moo"},"SELECT some_junk FROM made_up");
+	 Save_tserver_follower_lag_metrics();
+	 $output->WriteQuery(time(), "ycql", {FIVE=>5,SIX=>6,COW=>"Moo",elapsed_millis=>200,query=>undef,nodename=>'BogusNode'},"SELECT some_junk FROM made_up");
 	 $output->Close("FINAL");
 	 exit 2;
   }  
   # Run iteration ONCE, to verify it works...
   return unless $opt{DAEMON} ;
   
+  my ($lock_dir,$lockfile) = $opt{LOCKFILE}=~m{^(.+/)([^/]+)$};
+  my $lock_retry = 0;
   $opt{LOCKFILE} .= ".$opt{UNIV_UUID}"; # one lock per universe 
+  while (! -w $opt{LOCKFILE}  and $lock_retry++ < 2){
+     print "WARNING: $opt{LOCKFILE} (--LOCKFILE) is not writable.\n";
+     if ($flags_used{LOCKFILE}){
+        die "ERROR: Unwritable LOCKFILE specified.";
+     }
+     # User did not specify it, so we auto-try the /temp dir
+     $opt{LOCKFILE} = "/tmp/$lockfile";
+	 print "WARNING: Trying to use lockfile $opt{LOCKFILE}...\n";
+  }
   print "--Testing main loop before daemonizing...\n";
 
   if (Main_loop_Iteration()){
@@ -421,8 +466,10 @@ sub Extract_nodes_From_Universe{ # CLASS method
 	my $count=0;
 	for my $n (@{  $univ_hash->{universeDetails}{nodeDetailsSet} }){
        push @node, my $thisnode = {map({$_=>$n->{$_}||''} qw|nodeIdx nodeName nodeUuid azUuid isMaster
-                                  	   isTserver ysqlServerHttpPort yqlServerHttpPort state|),
+                                  	   isTserver ysqlServerHttpPort yqlServerHttpPort state tserverHttpPort 
+									   tserverRpcPort masterHttpPort masterRpcPort nodeExporterPort|),
 	                              map({$_=>$n->{cloudInfo}{$_}} qw|private_ip public_ip az region |) };
+       $thisnode->{$_} =~tr/-//d for grep {/uuid/i} keys %$thisnode;
        $callback and $callback->($thisnode, $count);
        $count++;
     }
@@ -462,7 +509,7 @@ sub Handle_UNIVERSE_JSON{
 			      join("','", map{$n->{$_}} sort keys %$n ), "');\n";
 		  print {$self->{OUTPUT_FH}} "INSERT INTO NODE VALUES('",
 			      join("','", map{$n->{$_}} sort keys %$n ), "');\n";
-		  $self->{REGION}{ $n->{region} }++; # Track available regions 	   
+		  $self->{REGION}{ $n->{region} }{NODE_COUNT}++; # Track available regions 	   
 	   });
     print {$self->{OUTPUT_FH}} "----- End of nodes -----\n";
 	for my $k (qw|universeName provider providerType replicationFactor numNodes ybSoftwareVersion enableYCQL
@@ -476,7 +523,19 @@ sub Handle_UNIVERSE_JSON{
 		  my $v = $flag->{$k}; 
 	      print {$self->{OUTPUT_FH}} "INSERT INTO kv_store VALUES ('$flagtype','$k','$v');\n";
 	   }
-	}	 
+	}
+	for my $region (@{ $bj->{universeDetails} {clusters} [0]{placementInfo}{cloudList}[0]{regionList} }){
+		my $preferred = 0;
+		my $az_node_count = 0;
+		for my $az ( @{ $region->{azList} } ){
+			$az->{isAffinitized} and $preferred++;
+			$az_node_count += $az->{numNodesInAZ};
+		}
+		$self->{REGION}{$region->{name}}{PREFERRED}     = $preferred;
+		$self->{REGION}{$region->{name}}{UUID}          = $region->{uuid};
+		$self->{REGION}{$region->{name}}{AZ_NODE_COUNT} = $az_node_count;
+		$opt{DEBUG} and print "--DEBUG:REGION $region->{name}: PREFERRED=$preferred, $az_node_count nodes, $region->{uuid}.\n";
+	}
 }
 
 sub Handle_CSVHEADER	{
@@ -515,14 +574,92 @@ sub Handle_MONITOR_DATA {
 
 sub Handle_Event_Data{
 	my ($self,$dispatch_type,$body ) = @_;
-	$opt{DEBUG} and print "--DEBUG:IN: EVENT handler type $dispatch_type\n";
+	$opt{DEBUG} and print "--DEBUG:IN: ",(caller(0))[3]," handler type $dispatch_type\n";
 	return unless $dispatch_type eq "Header";
-	# Put stuff into EVENT table 
-	for my $ts (sort keys %{  $self->{INPUT}{general_header} }){
-	  print {$self->{OUTPUT_FH}} "INSERT INTO event VALUES($ts,'",
-	        $self->{INPUT}{general_header}{$ts}  ,
-	        "');\n"; 
+
+    $self->{INPUT}{general_header}{MSG} =~s/'/''/g; # MSG : escape single quotes 
+	print {$self->{OUTPUT_FH}} "INSERT INTO event VALUES($self->{INPUT}{general_header}{TIMESTAMP},'",
+	        $self->{INPUT}{general_header}{MSG}  ,
+			"');\n";
+}
+
+sub Handle_ENTITIES_Data{
+	my ($self,$dispatch_type,$body ) = @_;
+	$opt{DEBUG} and print "--DEBUG:IN: ",(caller(0))[3]," handler type $dispatch_type\n";
+	return unless $dispatch_type eq "Body" and $body;
+	# We get a giant JSON dump of entities .. parse it 
+	#{"keyspaces":[{"keyspace_id":"..","keyspace_name":"system","keyspace_type":"ycql"},
+	# {"keyspace_id":"7c51fb494aaf4da786c5ffd4175f4f3c","keyspace_name":"vijay","keyspace_type":"ycql"}],"tables":[{"table_id":"000...
+	#tablets":[{"table_id":"sys.catalog.uuid","tablet_id":"00000000000000000000000000000000","state":"RUNNING"},{"table_id":"000033e80000300080000000000042e3","tablet_id":"003353a4627048fb8a9733f353ccf903","state":"RUNNING","replicas":[{"type":"VOTER","server_uuid":"92b2779d3a5f496fb0ad7b846f1270e4","addr":"10.231.0.66:9100"},{..],"leader":"92b2779d3a5f496fb0ad7b846f1270e4"},
+	my $bj = JSON::Tiny::decode_json($body);
+    for my $ks (@{ $bj->{keyspaces} }){
+	 	# Add to KEYSPACES table #$opt{DEBUG} and print "--DEBUG: Keyspace $ks->{keyspace_name} ($ks->{keyspace_id}) type $ks->{keyspace_type}\n";
+		$ks->{keyspace_id} =~tr/-//d;
+		print {$self->{OUTPUT_FH}} "INSERT INTO keyspaces VALUES('",
+		       join("','", $ks->{keyspace_id},$ks->{keyspace_name},$ks->{keyspace_type}),
+			   "');\n";
 	}
+    for my $t (@{ $bj->{tables} }){
+		print {$self->{OUTPUT_FH}} "INSERT INTO tables VALUES('",
+		       join("','", $t->{table_id}, $t->{keyspace_id},  $t->{table_name}, $t->{state}),
+			   "');\n";
+	}
+    for my $t (@{ $bj->{tablets} }){
+	 	my $replicas = $t->{replicas} ; # AOH
+	 	my $l        = $t->{leader} || "";
+		for my $r (@$replicas){
+		   print {$self->{OUTPUT_FH}} "INSERT INTO tablets VALUES('",
+		       join("','", $t->{tablet_id}, $t->{table_id}, $t->{state}, $r->{type}, $r->{server_uuid},$r->{addr},$l ),
+			   "');\n";
+		}
+	}
+	$opt{DEBUG} and printf "--DEBUG: %d Keyspaces, %d tables, %d tablets\n", 
+	                     scalar(@{ $bj->{keyspaces} }),scalar(@{ $bj->{tables} }), scalar(@{ $bj->{tablets} });
+}
+
+sub Handle_Namespaces_Data{
+	my ($self,$dispatch_type,$body ) = @_;
+	$opt{DEBUG} and print "--DEBUG:IN: ",(caller(0))[3]," handler type $dispatch_type\n";
+	return unless $dispatch_type eq "Body" and $body;
+	my $bj = JSON::Tiny::decode_json($body);
+    for my $ns (@$bj){
+		$ns->{namespaceUUID} =~tr/-//d;
+		print {$self->{OUTPUT_FH}} "INSERT INTO namespaces VALUES('",
+		       join("','",  $ns->{namespaceUUID}, $ns->{name}, $ns->{tableType}),
+			   "');\n";
+	}
+}
+
+sub Handle_Tablet_Metrics{
+	my ($self,$dispatch_type,$body ) = @_;
+	$opt{DEBUG} and print "--DEBUG:IN: ",(caller(0))[3]," handler type $dispatch_type\n";
+	if ( $dispatch_type eq "Header" ){
+		$self->{TABLETMETRIC_HEADER} = $self->{INPUT}{general_header};
+		$self->{TABLETMETRIC_BODY}   = "";
+		return;
+	}
+	if ( $dispatch_type eq "Body" and $body){
+		$self->{TABLETMETRIC_BODY} .= $body; # Accumulate the pieces 
+		return;
+	}
+	return unless $dispatch_type eq "EOF";
+	return unless length($self->{TABLETMETRIC_BODY}) > 10; # Sanity checvk 
+	my $bj = JSON::Tiny::decode_json($self->{TABLETMETRIC_BODY});
+	# Put stuff into tablemetrics table 
+	for my $metricInfo (@$bj){
+	   $self->{TABLETMETRIC_HEADER}{NODE} =~tr/-//d; # Zap dashes 
+	   for my $m( @{$metricInfo->{metrics}} ){
+	     print {$self->{OUTPUT_FH}} "INSERT INTO TABLETMETRIC VALUES("
+	           #timestamp INTEGER, node-uuid , tablet_id TEXT, metric_name TEXT, metric_value NUMERIC
+		   ,$self->{TABLETMETRIC_HEADER}{TIMESTAMP}
+		   ,qq|,"$self->{TABLETMETRIC_HEADER}{NODE}"|  # Node UUID 
+		   ,qq|,"$metricInfo->{id}"| # Tablet ID
+		   ,qq|,"$m->{name}"|,
+		   ,qq|,|,$m->{value}
+		   ,");\n";
+	   }
+	}
+	$self->{TABLETMETRIC_HEADER} = {};
 }
 
 my %Section_Handler =( # Defines Handler subroutines for each Mime piect (_SECTION_) received
@@ -531,12 +668,16 @@ my %Section_Handler =( # Defines Handler subroutines for each Mime piect (_SECTI
 	CSVHEADER		=> \&Handle_CSVHEADER	,
 	MONITOR_DATA	=> \&Handle_MONITOR_DATA,
 	EVENT           => \&Handle_Event_Data,
+	DUMPENTITIES    => \&Handle_ENTITIES_Data,
+	NAMESPACES      => \&Handle_Namespaces_Data,
+	TABLETMETRIC    => \&Handle_Tablet_Metrics,
+	NONE            => sub{$opt{DEBUG} and print "--DEBUG:GOT 'NONE' Section at  $_[0]->{INPUT}{recordnumber} - ignored\n"},
 );
 
 sub Parse_Body_Record{
    my ($self, $rec) = @_;
 
-   my $dispatch = $Section_Handler{ $self->{INPUT}{general_header}{_SECTION_} };
+   my $dispatch = $Section_Handler{ $self->{INPUT}{general_header}{_SECTION_} ||= "NONE" };
    if ( ! $self->{HEADER_PRINTED}[$self->{PIECENBR}]){
       $opt{DEBUG} and print "--DEBUG:HDR $self->{PIECENBR}:",map({"$_=>" . $self->{INPUT}{general_header}{$_} . "; "} 
 	     grep {!/params$/} sort keys %{$self->{INPUT}{general_header}}),"\n";
@@ -579,25 +720,25 @@ sub Process_file_and_create_Sqlite{
 	$self->{INPUT}->parse($self, \&Parse_Body_Record);
 	close $self->{INPUT_FH};
 	print {$self->{OUTPUT_FH}} "SELECT 'All input records processed.';\n";
-	# Should create and run VIEWs here ....
 
 	$self->{TYPE_EXISTS}{ycql} and $self->Create_and_run_views_for_ycql();
 	$self->{TYPE_EXISTS}{ysql} and $self->Create_and_run_views_for_ysql();
 	close $self->{OUTPUT_FH};
-
+	print "--For detailed analysis, run: $opt{SQLITE} -header -column $self->{SQLITE_FILENAME}\n";
 	return;
 }
 
 sub Create_and_run_views_for_ycql{
     my ($self) = @_;
 	
-	my ($region_fields_summary,$region_fields_slow) = ("","");
+	my ($count_by_region_and_type,$count_by_region) = ("","");
 	for my $r (sort keys %{ $self->{REGION} }){
-	   $region_fields_summary .= "sum(case when instr(query,' system.')>0 and region='$r' then 1 else 0 end) as [sys_$r],\n";	;
-	   $region_fields_summary .= "sum(case when instr(query,' system.')=0 and region='$r' then 1 else 0 end) as [cql_$r],\n";	;
-	   $region_fields_slow    .= "sum ( CASE WHEN region = '$r' THEN 1 ELSE 0 END) as [${r}_queries],\n";
+	   my $preferred =  $self->{REGION}{$r}{PREFERRED} ? "(P)" : "";
+	   $count_by_region_and_type .= "sum(case when instr(query,' system.')>0 and region='$r' then 1 else 0 end) as [sys_$r],\n";
+	   $count_by_region_and_type .= "sum(case when instr(query,' system.')=0 and region='$r' then 1 else 0 end) as [cql_$r$preferred],\n";
+	   $count_by_region    .= "sum ( CASE WHEN region = '$r' THEN 1 ELSE 0 END) as [${r}_queries],\n";
 	}
-	$region_fields_slow=~s/,$//; # Zap trailing comma 
+	$count_by_region=~s/,$//; # Zap trailing comma 
    my ($elapsed_ms) = grep {m/milli/i} @{ $self->{FIELDS}{ycql} }; 	
    print {$self->{OUTPUT_FH}} <<"__Summary_SQL__";
 CREATE VIEW IF NOT EXISTS summary_cql as
@@ -606,7 +747,7 @@ SELECT datetime((ts/600)*600,'unixepoch') as UTC,
         sum(case when instr(query,' system.')=0 then 1 else 0 end) as cqlcount,
         sum(case when instr(query,' system.')>0 and $elapsed_ms > 120 then 1 else 0 end) as sys_gt120,
         sum(case when instr(query,' system.')=0 and $elapsed_ms > 120 then 1 else 0 end) as cql_gt120,
-        $region_fields_summary	
+        $count_by_region_and_type
         round(sum(case when instr(query,' system.')=0 and $elapsed_ms > 120 then 1 else 0 end) *100.0
                / sum(case when instr(query,' system.')=0 then 1 else 0 end)
                    ,2) as breach_pct
@@ -617,7 +758,7 @@ GROUP BY UTC;
 CREATE VIEW IF NOT EXISTS slow_queries AS
 SELECT query, count(*) as nbr_querys, round(avg($elapsed_ms),1) as avg_milli ,
       sum (CASE when $elapsed_ms > 120 then 1 else 0 END)*100 / count(*) as pct_gt120,
-      $region_fields_slow
+      $count_by_region
 FROM ycql, node
 WHERE ycql.nodename=node.nodename
 GROUP BY query
@@ -633,7 +774,38 @@ SELECT ycql.nodename, round(avg($elapsed_ms),1) as avg_ms,
 FROM ycql,node 
 WHERE ycql.nodename=node.nodename   
 GROUP by  ycql.nodename 
-ORDER by ycql.nodename;         
+ORDER by ycql.nodename;
+
+CREATE VIEW IF NOT EXISTS q_detail AS 
+SELECT ts,DATETIME((ts),'unixepoch') as UTC, 
+  $elapsed_ms, ycql.nodeName, "query", 
+  substr(remote_ip,1,instr(remote_ip,':')-1) as client,
+  "type",
+  upper(substr(ltrim(query,' '),1,6)) as verb,
+  CASE WHEN upper(substr(ltrim(query,' '),1,6))='UPDATE' 
+       then substr(ltrim(query,' '),8,18)
+       ELSE substr(query,instr(lower(query),' from ')+6,18) 
+   END as tbl,
+   region
+FROM ycql,node 
+WHERE ycql.nodename=node.nodename  
+      AND instr(query,' system.')=0 
+;
+CREATE VIEW IF NOT EXISTS client_summary AS 
+SELECT client, type,verb, round(avg($elapsed_ms),0) as avg_millis,
+       $count_by_region
+ from  q_detail 
+ group by client,type,verb;
+
+CREATE VIEW IF NOT EXISTS slow_tables AS
+SELECT tbl,type,verb,count(*) as queries,
+         round(avg($elapsed_ms),0) as avg_millis,
+         sum (CASE when $elapsed_ms > 120 then 1 else 0 END)*100 / count(*) as pct_gt120
+FROM q_detail 
+GROUP BY tbl,type,verb
+ORDER BY avg_millis*queries  desc 
+LIMIT 25;
+ 
 .header off
 .mode column
 SELECT 'Imported ' || count(*) ||' ycql rows from $opt{ANALYZE}.' as Imported_count from ycql;
@@ -656,6 +828,15 @@ sub Create_and_run_views_for_ysql{
 sub Initialize_SQLITE_Output{
     my ($self) = @_;
 	$!=undef;
+	if ($opt{OUTPUT}){
+		if ($opt{OUTPUT} =~/^STDOUT$/i){ # Send SQL to stdout
+			die "ERROR: Cannot specify DB and OUTPUT=STDOUT together\n" if $opt{DB};
+			$opt{DB} = " ";
+			$opt{SQLITE} = "cat";
+		}else{
+			die "ERROR: The only valid OUTPUT option is STDOUT in --analyze mode. use --DB.\n";
+		}
+	}
 	my ($sqlite_version) = $opt{SQLITE} ? do {my $vv=qx|$opt{SQLITE} --version|;chomp $vv;$vv=~/([\d\.]+)/}
 	                       : ("N/A");
 	$! and die "ERROR: Cannot run $opt{SQLITE} :$!";
@@ -664,6 +845,7 @@ sub Initialize_SQLITE_Output{
 	$self->{SQLITE_FILENAME}   =~s/\.(?:csv|mime)$//i; # Zap the mime or csv 
 	$self->{SQLITE_FILENAME}   .= ".sqlite"; # Add sqlite suffix
 	$opt{DB}  and    $self->{SQLITE_FILENAME} = $opt{DB}; # DB wins, if specified.
+	-e $self->{SQLITE_FILENAME} and die "ERROR: $self->{SQLITE_FILENAME} already exists. Use --db to specify a different file.\n";
 	print "--Populating Sqlite($sqlite_version) database '$self->{SQLITE_FILENAME}'...\n";
 	
 	open($self->{OUTPUT_FH}, "|-", "$opt{SQLITE} $self->{SQLITE_FILENAME}") 
@@ -676,6 +858,11 @@ INSERT INTO kv_store VALUES
 	  ,('GENERAL','Processing file','$opt{ANALYZE}')
 	  ,('GENERAL','Analysis version','$main::VERSION');
 CREATE TABLE IF NOT EXISTS event(ts INTEGER, e TEXT);
+CREATE TABLE IF NOT EXISTS keyspaces(id TEXT PRIMARY KEY, name TEXT, type TEXT); -- YCQL
+CREATE TABLE IF NOT EXISTS tables(id TEXT PRIMARY KEY, keyspace_id TEXT, name TEXT,state TEXT);
+CREATE TABLE IF NOT EXISTS tablets(id TEXT, table_id TEXT ,state TEXT,type TEXT,server_uuid TEXT,addr TEXT,leader TEXT); -- Multiple tablet replicas w same ID
+CREATE TABLE IF NOT EXISTS namespaces(namespaceUUID TEXT, name TEXT, tableType TEXT); -- YSQL 
+CREATE TABLE IF NOT EXISTS tabletmetric(timestamp INTEGER, node_uuid TEXT, tablet_id TEXT, metric_name TEXT, metric_value NUMERIC);
 __SQL1__
 
 }
@@ -737,14 +924,18 @@ sub Get{
 		$self->{json_string} = qx|$self->{curl_base_cmd} --url $url$endpoint|;
 		if ($?){
 		   print "ERROR: curl get '$endpoint' failed: $?\n";
-		   exit 1;
+		   $output->Write_Section(time(),"EVENT","MSG:ERROR: curl get '$endpoint' failed: $?",
+                       undef,"text/event",0);
+		   return {error=>$?};
 		}
     }else{ # HTTP::Tiny
 	   $self->{raw_response} = $self->{HT}->get(  $url . $endpoint );
 	   if (not $self->{raw_response}->{success}){
 		  print "ERROR: Get '$endpoint' failed with status=$self->{raw_response}->{status}: $self->{raw_response}->{reason}\n";
+		  $output->Write_Section(time(),"EVENT","MSG:ERROR: Get '$endpoint' failed with status=$self->{raw_response}->{status}: $self->{raw_response}->{reason}",
+                       undef,"text/event",0);
 		  $self->{raw_response}->{status} == 599 and print "\t(599)Content:$self->{raw_response}{content};\n";
-		  exit 1;
+		  return {error=> $self->{raw_response}->{status}};
 	   }
 	   $self->{json_string} = $self->{raw_response}{content};
 	}
@@ -784,6 +975,43 @@ sub boundary{ # getter/setter
    print { $self->{OUTPUT_FH} }  "--" . $self->{boundary} . ($final ? "--\n" : "\n");
 }
 
+sub Write_Section{ # Writes the specified SECTION as an independent MIME piece 
+   my ($self,$ts,$section,$header,$data,$mime_type,$delayed_write) = @_;
+   if ($delayed_write){
+      push @{$self->{"${section}_QUEUE"}}, [$ts,$header,$data,$mime_type];
+	  return;
+   }
+   return unless  @{$self->{"${section}_QUEUE"} ||= []} or $header or $data;
+
+   if (my @queued = @{$self->{"${section}_QUEUE"}}){
+	   $self->{"${section}_QUEUE"} = []; # Zap it - we already copied the q 
+	   for my $q(@queued){
+	      my ($q_ts,$q_header,$q_data,$q_mime_type) = @$q;
+		  Write_Section($self, $q_ts,$section,$q_header,$q_data,$q_mime_type,0); # Write immediately 
+	   }
+   }
+   $mime_type ||= "text/plain";
+
+   if (! $self->{OUTPUT_FH} ){
+	  # Need to initialize output
+      $self->Open_and_Initialize();
+   }   
+   if ($self->{IN_CSV_SECTION}){
+	   $self->{IN_CSV_SECTION} = 0;
+	   $self->{TYPE_INITIALIZED} = {}; # Zap types to un-init 
+	   $self->boundary(); # Close the CSV section
+   }
+   return unless $header or $data; # Dont output empty sections 
+ 	$self->header($mime_type,
+	      join("\n",
+			 "_SECTION_: $section",
+             map ({$_->[0] .": " . $_->[1]}  @{$self->{"${section}_QUEUE"}} ),
+			 "TIMESTAMP:$ts" . ($header ? "\n$header" : "")
+			 ));
+	$data and print { $self->{OUTPUT_FH} } $data,"\n";
+	$self->boundary();  
+}
+
 sub Open_and_Initialize{
 	my ($self) = @_;
 	$opt{DEBUG} and print "--DEBUG: Opening output file=" , $opt{OUTPUT},"\n";
@@ -809,33 +1037,11 @@ sub Open_and_Initialize{
 					  ."_SECTION_: UNIVERSE_JSON");
 		print { $self->{OUTPUT_FH} } $self->{UNIVERSE_JSON},"\n";
 		$self->boundary();
+		for my $section_queue( grep {m/_QUEUE$/} sort keys %$self){
+			my $section = substr($section_queue,0,-6);
+			$self->Write_Section(0,$section,undef,undef,undef,0); # Flush pending sections 
+		}
 	}
-}
-
-sub Write_event{
-   my ($self,$ts,$event,$delayed_write) = @_;
-   if ($delayed_write){
-      push @{$self->{EVENT_QUEUE}}, [$ts,$event];
-	  return;
-   }
-   return unless  @{$self->{EVENT_QUEUE}} or $event;
-   if (! $self->{OUTPUT_FH} ){
-	  # Need to initialize output
-      $self->Open_and_Initialize();
-   }   
-   if ($self->{IN_CSV_SECTION}){
-	   $self->{IN_CSV_SECTION} = 0;
-	   $self->{TYPE_INITIALIZED} = {}; # Zap types to un-init 
-	   $self->boundary(); # Close the CSV section
-   }
- 	$self->header("text/event",
-	      join("\n",
-			 "_SECTION_: EVENT",
-			 map ({$_->[0] .": " . $_[1]}  @{$self->{EVENT_QUEUE}}),
-			 $event ? ("$ts: $event") : ()
-			 ));
-	$self->boundary();  
-	$self->{EVENT_QUEUE} = [];
 }
 
 sub Initialize_query_type{
@@ -878,7 +1084,11 @@ sub WriteQuery{
 sub Close{
 	my ($self, $final) = @_;
     return unless $self->{OUTPUT_FH};
-	$final and $self->Write_event(time(),"Final close",0); # No delay 
+	$final and $self->Write_Section(time(),"EVENT","MSG:Final close",undef,"text/event",0); # No delay
+	for my $section_queue( grep {m/_QUEUE$/} sort keys %$self){
+		my $section = substr($section_queue,0,-6);
+		$self->Write_Section(0,$section,undef,undef,undef,0); # Flush pending sections 
+	}
 	$self->boundary(undef,$final);
 	$self->{IN_CSV_SECTION} = 0;
     close $self->{OUTPUT_FH};
@@ -975,6 +1185,7 @@ sub parseBody {
     if (/^--$boundary/){
 		$o->{callback}->($o->{CALLER},undef); # Indiates Piece completed.
 		$o->{general_header} = undef;
+		#$o->{general_header}{_SECTION_} = "NONE";
 		return;
 	}
 	$o->{recordnumber}++;
