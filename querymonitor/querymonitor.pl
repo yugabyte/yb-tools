@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.17";
+our $VERSION = "1.18";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -301,8 +301,10 @@ sub Initialize{
 	       "Master-alive:$nodestatus->{$nodename}{master_alive}, Tserver-alive:$nodestatus->{$nodename}{tserver_alive}\n";
   }
   # Get & store top level Namespace, Tablespace and Tables list 
-  $opt{DBINFO}{NAMESPACES} = $YBA_API->Get("/namespaces"); # AOH
-  $output->Write_Section(time(),"NAMESPACES",undef,$YBA_API->{json_string},"text/json",1); # Delay write 
+  if ($opt{UNIVERSE}{universeDetails}{clusters}[0]{userIntent}{enableYSQL}){
+     $opt{DBINFO}{NAMESPACES} = $YBA_API->Get("/namespaces"); # AOH
+     $output->Write_Section(time(),"NAMESPACES",undef,$YBA_API->{json_string},"text/json",1); # Delay write 
+  }
   # Find Master/Leader 
   $opt{MASTER_LEADER}      = $YBA_API->Get("/leader")->{privateIP};
   $opt{DEBUG} and print "--DEBUG:Master/Leader JSON:",$YBA_API->{json_string},". IP is ",$opt{MASTER_LEADER},".\n";
@@ -322,7 +324,18 @@ sub Initialize{
   # Run iteration ONCE, to verify it works...
   return unless $opt{DAEMON} ;
   
+  my ($lock_dir,$lockfile) = $opt{LOCKFILE}=~m{^(.+/)([^/]+)$};
+  my $lock_retry = 0;
   $opt{LOCKFILE} .= ".$opt{UNIV_UUID}"; # one lock per universe 
+  while (! -w $opt{LOCKFILE}  and $lock_retry++ < 2){
+     print "WARNING: $opt{LOCKFILE} (--LOCKFILE) is not writable.\n";
+     if ($flags_used{LOCKFILE}){
+        die "ERROR: Unwritable LOCKFILE specified.";
+     }
+     # User did not specify it, so we auto-try the /temp dir
+     $opt{LOCKFILE} = "/tmp/$lockfile";
+	 print "WARNING: Trying to use lockfile $opt{LOCKFILE}...\n";
+  }
   print "--Testing main loop before daemonizing...\n";
 
   if (Main_loop_Iteration()){
@@ -913,7 +926,7 @@ sub Get{
 		   print "ERROR: curl get '$endpoint' failed: $?\n";
 		   $output->Write_Section(time(),"EVENT","MSG:ERROR: curl get '$endpoint' failed: $?",
                        undef,"text/event",0);
-		   exit 1;
+		   return {error=>$?};
 		}
     }else{ # HTTP::Tiny
 	   $self->{raw_response} = $self->{HT}->get(  $url . $endpoint );
@@ -922,7 +935,7 @@ sub Get{
 		  $output->Write_Section(time(),"EVENT","MSG:ERROR: Get '$endpoint' failed with status=$self->{raw_response}->{status}: $self->{raw_response}->{reason}",
                        undef,"text/event",0);
 		  $self->{raw_response}->{status} == 599 and print "\t(599)Content:$self->{raw_response}{content};\n";
-		  exit 1;
+		  return {error=> $self->{raw_response}->{status}};
 	   }
 	   $self->{json_string} = $self->{raw_response}{content};
 	}
