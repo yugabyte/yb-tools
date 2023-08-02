@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.25"
+VERSION = "0.26"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -222,6 +222,17 @@ class YBLDAPSync:
            except:
              None # Ignore exception 
            print('\t' * indent + str(d))
+           
+    @classmethod
+    def Print_Report(cls,hdr,data,keyfilter=None): # Adds header and borders
+        logging.debug("Printing report {} with {} items, filtering={}.".format(hdr,len(data),keyfilter))
+        print("-"*50)
+        row = len(hdr)+2
+        h = ''.join(['+'] + ['-' *row] + ['+'])
+        result= h + '\n'"| "+hdr+" |"'\n' + h
+        print(result)
+        cls.Pretty_Print(data,0,keyfilter)
+        print("-"*50)
 
     def get_auth_token(self, username, password):
         """
@@ -556,7 +567,7 @@ class YBLDAPSync:
         """
         ldap_dict = {}
         result_count = 0
-        logging.info('Processing result into dictionary')
+        logging.info('Processing LDAP User result into dictionary')
         for user_key, group_value in ldap_raw.items():
             logging.debug('Processing ldap item with user_key %s and group_value %s', user_key, group_value)
             user = dict(item.split("=") for item in user_key.split(","))[userfield]
@@ -586,10 +597,10 @@ class YBLDAPSync:
         """
         ldap_dict = {}
         result_count = 0
-        logging.info('Processing result into dictionary (process_ldap_group_list)')
+        logging.info('Processing LDAP group result into dictionary (process_ldap_group_list)')
         if "LDAPRAW" in self.args.reports or "ALL" in self.args.reports:
-           print("REPORT 'LDAP RAW':")
-           self.Pretty_Print(ldap_raw,0,"member")
+           logging.debug("Printing 'LDAP RAW' report with {} LDAP items".format(len(ldap_raw)))
+           self.Print_Report("REPORT 'LDAP RAW'", ldap_raw,"member")
            
         for group_dn, group_att in ldap_raw.items():
             logging.debug('Processing ldap item with Group %s and group_att %s', group_dn, group_att)
@@ -642,8 +653,8 @@ class YBLDAPSync:
             result_count += 1
         logging.info('Processed %d LDAP groups into dictionary, which contains info for %d users', result_count,len(ldap_dict))
         if "LDAPBYUSER" in self.args.reports or "ALL" in self.args.reports:
-           print("REPORT 'LDAP BY USER':")
-           self.Pretty_Print(ldap_dict)
+           self.Print_Report("REPORT 'LDAP BY USER':",ldap_dict)
+
         return ldap_dict
 
         
@@ -782,8 +793,7 @@ class YBLDAPSync:
         db_certificate = universe['db_certificate']
         stmt_list = self.process_changes(process_diff, self.args.target_api, owned_counts)
         if "DBUPDATES" in self.args.reports or "ALL" in self.args.reports:
-           print("REPORT 'DB UPDATES':")
-           self.Pretty_Print(stmt_list,0)
+           self.Print_Report("REPORT 'DB UPDATES'",stmt_list,0)
         if self.args.dryrun:
             print("--- Dry Run -- {} statements created. (No changes will be made) ---".format(len(stmt_list)))
             for stmt in stmt_list:
@@ -828,8 +838,7 @@ class YBLDAPSync:
         logging.info("Loaded {} DB Users.".format(len(ldap_db_dict)))
         logging.debug(" DB Users:{}".format(ldap_db_dict))
         if "DBROLE" in self.args.reports or "ALL" in self.args.reports:
-           print("REPORT 'DB ROLE':")
-           self.Pretty_Print(ldap_db_dict,0)
+           Print_Report("REPORT 'DB ROLE'",ldap_db_dict)
         return ldap_db_dict,owned_counts
 
     def setup_yb_tls(self, universe, api_token, customeruuid):
