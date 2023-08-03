@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.18";
+our $VERSION = "1.19";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -1147,17 +1147,7 @@ sub parse {
  
   $o->{general_header} = $o->parseHeader();
   croak "no boundary defined" unless $o->{general_header}->{"Content-Type.params"}->{"boundary"};
-  my $b = $o->{general_header}->{"Content-Type.params"}->{"boundary"};
-  if (length($b)>2 and (my $quote=substr($b,0,1)) eq substr($b,-1,1)){
-      if ($quote eq '"'  or $quote eq "'"){
-		  $b=substr($b,1,length($b)-2);
-	  }
-  }
-  $o->{boundary} = $b;
-  
   $o->parseBody();
-
-  #my @parts = ($general_header);
 
   while(! (eof($o->{fh}) || $o->{eof})){
     $o->{general_header} = $o->parseHeader();
@@ -1169,10 +1159,6 @@ sub parse {
 	 # Did not find proper ending boundary
 	 $o->{callback}->($o->{CALLER},undef); # Indiates Piece completed.
   }
-  #$general_header->{Epilog} = $o->parseBody();
-
-  #return \@parts;
-
 }
 
 sub parseBody {
@@ -1185,7 +1171,6 @@ sub parseBody {
     if (/^--$boundary/){
 		$o->{callback}->($o->{CALLER},undef); # Indiates Piece completed.
 		$o->{general_header} = undef;
-		#$o->{general_header}{_SECTION_} = "NONE";
 		return;
 	}
 	$o->{recordnumber}++;
@@ -1221,6 +1206,15 @@ sub parseHeader {
       $header{$p}->{$l} = $w;
     }
   }
+  
+
+  my $b = $header{"Content-Type.params"}->{"boundary"};
+  if ($b and length($b)>2 and (my $quote=substr($b,0,1)) eq substr($b,-1,1)){
+      if ($quote eq '"'  or $quote eq "'"){
+		  $b=substr($b,1,length($b)-2);
+	  }
+  }
+  $b and $o->{boundary} = $b;
   return \%header;
 }
 1;
