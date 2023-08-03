@@ -11,7 +11,7 @@ The data collected is suitable for offline analysis to obtain:
 * Node response times & volumes
 * system behaviour by time
 * SLO compliance
-* Tablet followe lag analysis
+* Tablet follower lag analysis
 * Master view of All namespaces/tables/tablets and leaders
 * Client connection statistics
 
@@ -161,7 +161,7 @@ That database has data in several tables and views - these are described below:
 `ycql            `: Query details collected (raw) for YCQL
 `ysql            `: Query details collected (raw) for YSQL
 
-You can getthis list (without the description) using the generated sqlite database:
+You can get this list (without the description) using the generated sqlite database:
 
 ```
 $ sqlite3 -header -column queries.2023-08-01.servername.sqlite
