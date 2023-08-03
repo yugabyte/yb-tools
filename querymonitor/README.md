@@ -2,6 +2,7 @@
 ![querymonitor icon](querymonitor_icon.png "Querymonitor")
 ## Synopsis
 Runs (as a daemon) and periodically collects live query info into mime-encoded csv (.gz) files.
+Also, periodically collects per-tablet follower lag metrics(which is not available elsewhere).
 Personal Identifiable Information (PII) can be removed from each query by truncating the WHERE clause.
 Built-in `--ANALYZE` mode will analyze the generated file.
 
@@ -10,6 +11,9 @@ The data collected is suitable for offline analysis to obtain:
 * Node response times & volumes
 * system behaviour by time
 * SLO compliance
+* Tablet followe lag analysis
+* Master view of All namespaces/tables/tablets and leaders
+* Client connection statistics
 
 ## Installation / Environment
 This requires perl, and a few core modules that should be present in any Linux system.
@@ -127,10 +131,46 @@ EDT                  systemq  cqlcount  sys_gt120  cql_gt120  sys_dc3  cql_dc3  
 2023-04-24 14:40:00  0        220       0          0          0        0        0.0
 
 ======= Slow Queries =======
-query                                                                                                                                                                       nbr_querys  avg_milli  pct_gt120  DC3_querys
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------  ----------  ---------  ---------  ----------
-SELECT * FROM system.peers                                                                                                                                                  230         119.5      35         171
-SELECT * FROM system.local WHERE key='local'                                                                                                                                219         116.0      37         155
-SELECT keyspace_name, table_name, start_key, end_key, replica_addresses FROM system.partitions                                                                              1277        98.2       30         830
-select customerid,emails,individual407typecode,rescountrycode,customertypecode,inccountrycode,emailremindertimestamp,isemailunsolicited from customer where customerid = ?  783         44.4       1          743
+query                                                                                             nbr_querys  avg_milli  pct_gt120  DC3_querys
+----------------------------------------------------------------------------------------------------------------------------------------------
+SELECT * FROM system.peers                                                                        230         119.5      35         171
+SELECT * FROM system.local WHERE key='local'                                                      219         116.0      37         155
+SELECT keyspace_name, table_name, start_key, end_key, replica_addresses FROM system.partitions    1277        98.2       30         830
+select customerid,emails,individual407typecode,rescountrycode,customertypecode,inccountrycode...  783         44.4       1          743
+```
+
+## Info available for analysis
+
+After you run querymonitor using `--analyze <file-name>` , it generates a sqlite database.
+That database has data in several tables and views - these are described below:
+
+`client_summary  `: By client IP : type of queries, latency, and  per-region query count 
+`event           `: Internal events that occur during data collection (start|stop|errors)
+`keyspaces       `: List of `YCQL` keyspaces, with details 
+`kv_store        `: Key-Value store - has run parameters, gflags  
+`namespaces      `: List of YSQL namespaces (aka Databases)
+`NODE            `: List of nodes (masters/tservers) and details 
+`node_summary_cql`: Queries and response times per node 
+`q_detail        `: Details of each query including zone info 
+`slow_queries    `: "Large" query counts that take a "Long time"
+`slow_tables     `: By-table analysis - Latency  by query type 
+`summary_cql     `: By-Date/Time analysis of queries (in 10-minute slices)
+`tables          `: YCQL/YSQL table details 
+`tabletmetric    `: currently `follower_lag` per tablet, timestamped.
+`tablets         `: tablet details 
+`ycql            `: Query details collected (raw) for YCQL
+`ysql            `: Query details collected (raw) for YSQL
+
+You can getthis list (without the description) using the generated sqlite database:
+
+```
+$ sqlite3 -header -column queries.2023-08-01.servername.sqlite
+SQLite version 3.37.2 2022-01-06 13:25:41
+Enter ".help" for usage hints.
+sqlite> .tables
+NODE              kv_store          slow_queries      tabletmetric
+client_summary    namespaces        slow_tables       tablets
+event             node_summary_cql  summary_cql       ycql
+keyspaces         q_detail          tables
+sqlite>
 ```
