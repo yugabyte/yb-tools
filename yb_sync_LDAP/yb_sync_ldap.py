@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright 2021 YugaByte, Inc. and Contributors
+# Copyright 2023 YugaByte, Inc. and Contributors
 #
 # Licensed under the Polyform Free Trial License 1.0.0 (the "License"); you
 # may not use this file except in compliance with the License. You
@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.27"
+VERSION = "0.28"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -67,10 +67,10 @@ LDAP_FILE_DATA = os.path.join(LDAP_BASE_DATA_DIR, 'cache/{}/{}/ldap_data.json')
 LDAP_BASE_DIR_ERROR = "The base directory {} does not exist"
 YCQL_ROLE_QUERY = "SELECT role, member_of FROM roles IF can_login = true {}" # param : "AND is_superuser = false" or ""
 YSQL_ROLE_QUERY = "SELECT r.rolname as role, ARRAY(SELECT b.rolname FROM "\
-                "pg_catalog.pg_auth_members m JOIN pg_catalog.pg_roles b "\
-                "ON (m.roleid = b.oid) WHERE m.member=r.oid) as member_of "\
-                "FROM pg_catalog.pg_roles r WHERE r.rolname !~ '^pg_' "\
-                " {} AND r.rolcanlogin='t' order by 1;"  # param: "AND r.rolsuper='f'" or ""
+                  "pg_catalog.pg_auth_members m JOIN pg_catalog.pg_roles b "\
+                  "ON (m.roleid = b.oid) WHERE m.member=r.oid) as member_of "\
+                  "FROM pg_catalog.pg_roles r WHERE r.rolname !~ '^pg_' "\
+                  " {} AND r.rolcanlogin='t' order by 1;"  # param: "AND r.rolsuper='f'" or ""
 UID_RE = r"\['?([A-Za-z0-9_\.@]+)'?\]"
 
 
@@ -837,10 +837,10 @@ class YBLDAPSync:
                                                          self.args.dbpass,
                                                          db_certificate)
             (ldap_db_dict, owned_counts) = self.ysql_auth_to_dict(self.ysql_session, self.args.allow_drop_superuser)
-        logging.info("Loaded {} DB Users.".format(len(ldap_db_dict)))
+        logging.info("Loaded {} DB Users (allow_drop_superuser={}).".format(len(ldap_db_dict,allow_drop_superuser)))
         logging.debug(" DB Users:{}".format(ldap_db_dict))
         if "DBROLE" in self.args.reports or "ALL" in self.args.reports:
-           self.Print_Report("DB ROLE",ldap_db_dict)
+           self.Print_Report("DB ROLE (allow_drop_superuser={})".format(allow_drop_superuser),ldap_db_dict)
         return ldap_db_dict,owned_counts
 
     def setup_yb_tls(self, universe, api_token, customeruuid):
@@ -985,11 +985,11 @@ class YBLDAPSync:
                             help="File location that points to LDAP certificate")
         parser.add_argument('--ldap_tls', action='store_false', default=False,
                             help="LDAP Use TLS")
-        parser.add_argument('--dryrun', action='store_false', default=False,
+        parser.add_argument('--dryrun', action='store_true', default=False,
                             help="Show list of potential DB role changes, but DO NOT apply them")
         parser.add_argument('--reports', required=False, type=str.upper,metavar="COMMA,SEP,RPT...", default="",
                             help="One or a comma separated list of 'tree' reports. Eg: LDAPRAW,LDAPBYUSER,LDAPBYGROUP,DBROLE,DBUPDATES or ALL")
-        parser.add_argument('--allow_drop_superuser', action='store_false', default=False,
+        parser.add_argument('--allow_drop_superuser', action='store_true', default=False,
                             help="Allow this code to DROP a superuser role if absent in LDAP")
         return parser.parse_args()
 
