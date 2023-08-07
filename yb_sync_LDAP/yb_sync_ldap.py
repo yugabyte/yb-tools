@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.29"
+VERSION = "0.30"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -65,7 +65,8 @@ LDAP_DATA_CACHE_CUST_DIR = os.path.join(LDAP_DATA_CACHE_DIR, '{}')
 LDAP_DATA_CACHE_UNIV_DIR = os.path.join(LDAP_DATA_CACHE_CUST_DIR, '{}')
 LDAP_FILE_DATA = os.path.join(LDAP_BASE_DATA_DIR, 'cache/{}/{}/ldap_data.json')
 LDAP_BASE_DIR_ERROR = "The base directory {} does not exist"
-YCQL_ROLE_QUERY = "SELECT role, member_of FROM roles IF can_login = true {}" # param : "AND is_superuser = false" or ""
+YCQL_ROLE_QUERY = "SELECT role, member_of FROM roles WHERE  can_login = true "\
+                  "AND  role !='cassandra' {}" # param : "AND is_superuser = false" or ""
 YSQL_ROLE_QUERY = "SELECT r.rolname as role, ARRAY(SELECT b.rolname FROM "\
                   "pg_catalog.pg_auth_members m JOIN pg_catalog.pg_roles b "\
                   "ON (m.roleid = b.oid) WHERE m.member=r.oid) as member_of "\
