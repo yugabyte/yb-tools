@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.28"
+VERSION = "0.29"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -837,10 +837,10 @@ class YBLDAPSync:
                                                          self.args.dbpass,
                                                          db_certificate)
             (ldap_db_dict, owned_counts) = self.ysql_auth_to_dict(self.ysql_session, self.args.allow_drop_superuser)
-        logging.info("Loaded {} DB Users (allow_drop_superuser={}).".format(len(ldap_db_dict,allow_drop_superuser)))
+        logging.info("Loaded {} DB Users (allow_drop_superuser={}).".format(len(ldap_db_dict),self.args.allow_drop_superuser))
         logging.debug(" DB Users:{}".format(ldap_db_dict))
         if "DBROLE" in self.args.reports or "ALL" in self.args.reports:
-           self.Print_Report("DB ROLE (allow_drop_superuser={})".format(allow_drop_superuser),ldap_db_dict)
+           self.Print_Report("DB ROLE (allow_drop_superuser={})".format(self.args.allow_drop_superuser),ldap_db_dict)
         return ldap_db_dict,owned_counts
 
     def setup_yb_tls(self, universe, api_token, customeruuid):
