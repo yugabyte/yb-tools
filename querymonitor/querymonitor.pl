@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.19";
+our $VERSION = "1.20";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -90,7 +90,7 @@ while (not ($quit_daemon  or my $this_iter_ts=time() > $opt{ENDTIME_EPOCH} )){  
 warn(unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS") ." Program $$ Completed after $loop_count iterations.\n"); 
 $output->Write_Section(time(),"EVENT",
                        "MSG:" . unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS") ." Program $$ Completed after $loop_count iterations.",
-                       undef,"text/event",1);
+                       undef,"text/event");
 $opt{LOCK_FH} and close $opt{LOCK_FH} ;  # Should already be closed and removed by sig handler
 unlink $opt{LOCKFILE};
 $output->Close("FINAL");
@@ -116,7 +116,7 @@ sub Main_loop_Iteration{
     my $ts = time();
 	if ($queries->{error}){
 		$output->Write_Section(time(),"EVENT","MSG: ERROR: GET error . counter=$error_counter",
-                       undef,"text/event",0);
+                       undef,"text/event");
 		$error_counter++ >= $opt{MAX_ERRORS} and $quit_daemon = 1;
 	    return $queries->{error};
 	}
@@ -202,7 +202,7 @@ sub Save_tserver_follower_lag_metrics{
 		my $lags = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/metrics?metrics=follower_lag_ms","BASE_URL_UNIVERSE");
         my $ts = time();
 		$output->Write_Section($ts,"TABLETMETRIC","NODE:$n->{nodeUuid}\nmetric:follower_lag_ms"
-		              ,$YBA_API->{json_string},"text/json",0);
+		              ,$YBA_API->{json_string},"text/json");
 	}
 }
 #------------------------------------------------------------------------------
@@ -291,7 +291,7 @@ sub Initialize{
   $opt{NODES} = Analysis::Mode::Extract_nodes_From_Universe($opt{UNIVERSE}); 
   $opt{OUTPUT} ||= "queries." . unixtime_to_printable(time(),"YYYY-MM-DD") . ".$opt{UNIVERSE}{name}.mime.gz",
   $output = MIME::Write::Simple::->new(UNIVERSE_JSON=>$YBA_API->{json_string}); # No I/O so far ; Seince we just got the UNIV info, json_string has the JSON for it.
-  $output->Write_Section(time(),"EVENT","MSG:Querymonitor $VERSION Started for universe $opt{UNIVERSE}{name}",undef,"text/event",1); # Delayed write
+  $output->Write_Section(time(),"EVENT","MSG:Querymonitor $VERSION Started for universe $opt{UNIVERSE}{name}",undef,"text/event");
   my $nodestatus = $YBA_API->Get("/status");
   for my $nodename(keys %$nodestatus){
 	next unless ref($nodestatus->{$nodename}) eq "HASH";
@@ -303,7 +303,7 @@ sub Initialize{
   # Get & store top level Namespace, Tablespace and Tables list 
   if ($opt{UNIVERSE}{universeDetails}{clusters}[0]{userIntent}{enableYSQL}){
      $opt{DBINFO}{NAMESPACES} = $YBA_API->Get("/namespaces"); # AOH
-     $output->Write_Section(time(),"NAMESPACES",undef,$YBA_API->{json_string},"text/json",1); # Delay write 
+     $output->Write_Section(time(),"NAMESPACES",undef,$YBA_API->{json_string},"text/json");
   }
   # Find Master/Leader 
   $opt{MASTER_LEADER}      = $YBA_API->Get("/leader")->{privateIP};
@@ -312,7 +312,7 @@ sub Initialize{
   my $master_http_port = $opt{UNIVERSE}{universeDetails}{communicationPorts}{masterHttpPort} or die "ERROR: Master HTTP port not found in univ JSON";
   # Get dump_entities from MASTER_LEADER
   my $entities =  $YBA_API->Get("/proxy/$ml_node->{private_ip}:$master_http_port/dump-entities","BASE_URL_UNIVERSE");
-  $output->Write_Section(time(),"DUMPENTITIES",undef,$YBA_API->{json_string},"text/json",1); # Delay write 
+  $output->Write_Section(time(),"DUMPENTITIES",undef,$YBA_API->{json_string},"text/json");
   
   if ($opt{USETESTDATA}){
 	 print "--Writing ONE record of test data, then exiting...\n";
@@ -326,14 +326,16 @@ sub Initialize{
   
   my ($lock_dir,$lockfile) = $opt{LOCKFILE}=~m{^(.+/)([^/]+)$};
   my $lock_retry = 0;
+  $opt{UNIV_UUID}=~tr/'"//d; # Zap quotes 
   $opt{LOCKFILE} .= ".$opt{UNIV_UUID}"; # one lock per universe 
-  while (! -w $opt{LOCKFILE}  and $lock_retry++ < 2){
-     print "WARNING: $opt{LOCKFILE} (--LOCKFILE) is not writable.\n";
+  while (! -w $lock_dir  and $lock_retry++ < 2){
+     print "WARNING: $lock_dir (--LOCKFILE) is not writable.\n";
      if ($flags_used{LOCKFILE}){
-        die "ERROR: Unwritable LOCKFILE specified.";
+        die "ERROR: Unwritable LOCKFILE dir ($flags_used{LOCKFILE}) specified.";
      }
      # User did not specify it, so we auto-try the /temp dir
-     $opt{LOCKFILE} = "/tmp/$lockfile";
+     $lock_dir="/tmp";
+     $opt{LOCKFILE} = "$lock_dir/$lockfile";
 	 print "WARNING: Trying to use lockfile $opt{LOCKFILE}...\n";
   }
   print "--Testing main loop before daemonizing...\n";
@@ -356,7 +358,8 @@ sub daemonize {
     }
     my $grandchild_output = "nohup.out";
     sysopen $opt{LOCK_FH}, $opt{LOCKFILE}, O_EXCL | O_RDWR | O_CREAT | O_NONBLOCK
-       or die "ERROR (Fatal):$0 is already running: Lockfile $opt{LOCKFILE}:$!";
+       or die "ERROR (Fatal):$0 is already running?: Lockfile $opt{LOCKFILE}"
+	    ." created " . sprintf('%.2f',-M $opt{LOCKFILE}) ." days ago:$!";
      # Handle Signals ..
     sub Signal_Handler {   # 1st argument is signal name
         my($sig) = @_;
@@ -482,9 +485,9 @@ sub Handle_MIME_HEADER  {
 	return unless $dispatch_type eq "Header"; # Only expecting a Header 
 
     for ( grep {!/_SECTION_|Content-Type|params$/} sort keys %{$self->{INPUT}{general_header}} ){
+		   $self->{INPUT}{general_header}{$_} =~tr/'//d; # Zap single quotes (UNIV_UUID)
 		   print {$self->{OUTPUT_FH}} "INSERT INTO kv_store VALUES ('MIMEHDR','$_','$self->{INPUT}{general_header}{$_}');\n";
 	}
-		
 }
 
 sub Handle_UNIVERSE_JSON{
@@ -615,6 +618,10 @@ sub Handle_ENTITIES_Data{
 	}
 	$opt{DEBUG} and printf "--DEBUG: %d Keyspaces, %d tables, %d tablets\n", 
 	                     scalar(@{ $bj->{keyspaces} }),scalar(@{ $bj->{tables} }), scalar(@{ $bj->{tablets} });
+    # Fixup Node UUIDs : These are not in the Universe JSON - so we update from tablets 
+	print {$self->{OUTPUT_FH}} "UPDATE NODE ",
+       "SET nodeUuid=(select server_uuid FROM tablets ",
+           "WHERE  substr(addr,1,instr(addr,\":\")-1) = private_ip limit 1);\n";
 }
 
 sub Handle_Namespaces_Data{
@@ -925,7 +932,7 @@ sub Get{
 		if ($?){
 		   print "ERROR: curl get '$endpoint' failed: $?\n";
 		   $output->Write_Section(time(),"EVENT","MSG:ERROR: curl get '$endpoint' failed: $?",
-                       undef,"text/event",0);
+                       undef,"text/event");
 		   return {error=>$?};
 		}
     }else{ # HTTP::Tiny
@@ -933,7 +940,7 @@ sub Get{
 	   if (not $self->{raw_response}->{success}){
 		  print "ERROR: Get '$endpoint' failed with status=$self->{raw_response}->{status}: $self->{raw_response}->{reason}\n";
 		  $output->Write_Section(time(),"EVENT","MSG:ERROR: Get '$endpoint' failed with status=$self->{raw_response}->{status}: $self->{raw_response}->{reason}",
-                       undef,"text/event",0);
+                       undef,"text/event");
 		  $self->{raw_response}->{status} == 599 and print "\t(599)Content:$self->{raw_response}{content};\n";
 		  return {error=> $self->{raw_response}->{status}};
 	   }
@@ -976,20 +983,10 @@ sub boundary{ # getter/setter
 }
 
 sub Write_Section{ # Writes the specified SECTION as an independent MIME piece 
-   my ($self,$ts,$section,$header,$data,$mime_type,$delayed_write) = @_;
-   if ($delayed_write){
-      push @{$self->{"${section}_QUEUE"}}, [$ts,$header,$data,$mime_type];
-	  return;
-   }
-   return unless  @{$self->{"${section}_QUEUE"} ||= []} or $header or $data;
+   my ($self,$ts,$section,$header,$data,$mime_type) = @_;
 
-   if (my @queued = @{$self->{"${section}_QUEUE"}}){
-	   $self->{"${section}_QUEUE"} = []; # Zap it - we already copied the q 
-	   for my $q(@queued){
-	      my ($q_ts,$q_header,$q_data,$q_mime_type) = @$q;
-		  Write_Section($self, $q_ts,$section,$q_header,$q_data,$q_mime_type,0); # Write immediately 
-	   }
-   }
+   return unless $header or $data;
+
    $mime_type ||= "text/plain";
 
    if (! $self->{OUTPUT_FH} ){
@@ -1001,11 +998,10 @@ sub Write_Section{ # Writes the specified SECTION as an independent MIME piece
 	   $self->{TYPE_INITIALIZED} = {}; # Zap types to un-init 
 	   $self->boundary(); # Close the CSV section
    }
-   return unless $header or $data; # Dont output empty sections 
+
  	$self->header($mime_type,
 	      join("\n",
 			 "_SECTION_: $section",
-             map ({$_->[0] .": " . $_->[1]}  @{$self->{"${section}_QUEUE"}} ),
 			 "TIMESTAMP:$ts" . ($header ? "\n$header" : "")
 			 ));
 	$data and print { $self->{OUTPUT_FH} } $data,"\n";
@@ -1037,10 +1033,6 @@ sub Open_and_Initialize{
 					  ."_SECTION_: UNIVERSE_JSON");
 		print { $self->{OUTPUT_FH} } $self->{UNIVERSE_JSON},"\n";
 		$self->boundary();
-		for my $section_queue( grep {m/_QUEUE$/} sort keys %$self){
-			my $section = substr($section_queue,0,-6);
-			$self->Write_Section(0,$section,undef,undef,undef,0); # Flush pending sections 
-		}
 	}
 }
 
@@ -1084,11 +1076,7 @@ sub WriteQuery{
 sub Close{
 	my ($self, $final) = @_;
     return unless $self->{OUTPUT_FH};
-	$final and $self->Write_Section(time(),"EVENT","MSG:Final close",undef,"text/event",0); # No delay
-	for my $section_queue( grep {m/_QUEUE$/} sort keys %$self){
-		my $section = substr($section_queue,0,-6);
-		$self->Write_Section(0,$section,undef,undef,undef,0); # Flush pending sections 
-	}
+	$final and $self->Write_Section(time(),"EVENT","MSG:Final close",undef,"text/event");
 	$self->boundary(undef,$final);
 	$self->{IN_CSV_SECTION} = 0;
     close $self->{OUTPUT_FH};
