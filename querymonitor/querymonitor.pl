@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.20";
+our $VERSION = "1.21";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -186,6 +186,7 @@ sub Get_RPCZ_from_nodes{
             my $ts = time();
 	        for my $c (@{$q->{connections}}){
 		        next unless $c->{query};
+				next if $c->{database} eq "postgres"  or $c->{database} eq "system_platform"; #has too many columns 
 				$c->{host} = $n->{nodeName};
 				$opt{DEBUG} and $loop_count<50 and PrintDeep($c,"DEBUG:got ysql \@$ts:"), print "\n";
 				$output->WriteQuery($ts, "ysql", $c, $c->{query});
@@ -302,7 +303,7 @@ sub Initialize{
   }
   # Get & store top level Namespace, Tablespace and Tables list 
   if ($opt{UNIVERSE}{universeDetails}{clusters}[0]{userIntent}{enableYSQL}){
-     $opt{DBINFO}{NAMESPACES} = $YBA_API->Get("/namespaces"); # AOH
+     $opt{DBINFO}{NAMESPACES} = $YBA_API->Get("/namespaces"); # AOH - Endpoint may fail 
      $output->Write_Section(time(),"NAMESPACES",undef,$YBA_API->{json_string},"text/json");
   }
   # Find Master/Leader 
@@ -310,9 +311,28 @@ sub Initialize{
   $opt{DEBUG} and print "--DEBUG:Master/Leader JSON:",$YBA_API->{json_string},". IP is ",$opt{MASTER_LEADER},".\n";
   my ($ml_node) = grep {$_->{private_ip} eq $opt{MASTER_LEADER}} @{ $opt{NODES} } or die "ERROR : No Master/Leader NODE found for $opt{MASTER_LEADER}";
   my $master_http_port = $opt{UNIVERSE}{universeDetails}{communicationPorts}{masterHttpPort} or die "ERROR: Master HTTP port not found in univ JSON";
-  # Get dump_entities from MASTER_LEADER
-  my $entities =  $YBA_API->Get("/proxy/$ml_node->{private_ip}:$master_http_port/dump-entities","BASE_URL_UNIVERSE");
+  # Get dump_entities JSON from MASTER_LEADER
+  $opt{DEBUG} and print "--DEBUG:Getting Dump Entities...\n";  
+  $YBA_API->Get("/proxy/$ml_node->{private_ip}:$master_http_port/dump-entities","BASE_URL_UNIVERSE");
   $output->Write_Section(time(),"DUMPENTITIES",undef,$YBA_API->{json_string},"text/json");
+  # Get tables + Details
+  print "-- Getting tables and details...\n";
+  my $tbl_start_time = time();
+  my $tbl_count      = 0;
+  my $tbl_count_prev = 0;
+  my $tables = $YBA_API->Get("/tables") || []; # Need this because entities does not give table ID
+  for my $tbl(@$tables){
+	  my $tbl_header = join("\n",map{"$_: $tbl->{$_}"} sort keys %$tbl);
+      my $desc = $YBA_API->Get("/tables/$tbl->{tableUUID}"); # Get table description 
+      $output->Write_Section(time(),"TABLEDESC",$tbl_header,$YBA_API->{json_string},"text/json");
+	  if ( ++$tbl_count % 100 == 0  or  (time() - $tbl_start_time) % 10 ==0){
+		  next unless $tbl_count - $tbl_count_prev > 4; # Avoid frequent updates 
+		  print "-- .. processed $tbl_count out of ",scalar(@$tables)," tables after " ,
+		       (time() - $tbl_start_time), " seconds.\n";
+		  $tbl_count_prev = $tbl_count;
+	  }
+  }
+  print "-- Details for ",scalar(@$tables), " tables saved.\n";
   
   if ($opt{USETESTDATA}){
 	 print "--Writing ONE record of test data, then exiting...\n";
@@ -603,7 +623,7 @@ sub Handle_ENTITIES_Data{
 			   "');\n";
 	}
     for my $t (@{ $bj->{tables} }){
-		print {$self->{OUTPUT_FH}} "INSERT INTO tables VALUES('",
+		print {$self->{OUTPUT_FH}} "INSERT INTO tables (id,keyspace_id,name,state) VALUES('",
 		       join("','", $t->{table_id}, $t->{keyspace_id},  $t->{table_name}, $t->{state}),
 			   "');\n";
 	}
@@ -635,6 +655,25 @@ sub Handle_Namespaces_Data{
 		       join("','",  $ns->{namespaceUUID}, $ns->{name}, $ns->{tableType}),
 			   "');\n";
 	}
+}
+
+sub Handle_Table_Description{
+	my ($self,$dispatch_type,$body ) = @_;
+	$opt{DEBUG} and print "--DEBUG:IN: ",(caller(0))[3]," handler type $dispatch_type\n";
+	if ( $dispatch_type eq "Header" ){
+		$self->{TABLE_HDR} = $self->{INPUT}{general_header};
+		# "tableUUID":"...","keySpace":"vdf","tableType":"YQL_TABLE_TYPE","tableName":"emp","relationType":"USER_TABLE_RELATION",
+		# "sizeBytes":598584.0,"isIndexTable":false,"pgSchemaName":""
+		return;
+	}
+	if ( $dispatch_type eq "Body" and $body){
+        # Process body JSON
+		#tableUUID":"...","tableType":"YQL_TABLE_TYPE","tableDetails":{"tableName":"veh_elemnt","keyspace":"vdf","ttlInSeconds":-1,
+		# "columns":[{"columnOrder":0,"name":"vin_nbr","type":"VARCHAR","isPartitionKey":true,"isClusteringKey":false,"sortOrder":"NONE",
+		#     "partitionKey":true,"clusteringKey":false},...
+		delete $self->{TABLE_HDR};
+	}
+
 }
 
 sub Handle_Tablet_Metrics{
@@ -676,6 +715,7 @@ my %Section_Handler =( # Defines Handler subroutines for each Mime piect (_SECTI
 	MONITOR_DATA	=> \&Handle_MONITOR_DATA,
 	EVENT           => \&Handle_Event_Data,
 	DUMPENTITIES    => \&Handle_ENTITIES_Data,
+	TABLEDESC       => \&Handle_Table_Description,
 	NAMESPACES      => \&Handle_Namespaces_Data,
 	TABLETMETRIC    => \&Handle_Tablet_Metrics,
 	NONE            => sub{$opt{DEBUG} and print "--DEBUG:GOT 'NONE' Section at  $_[0]->{INPUT}{recordnumber} - ignored\n"},
@@ -866,7 +906,10 @@ INSERT INTO kv_store VALUES
 	  ,('GENERAL','Analysis version','$main::VERSION');
 CREATE TABLE IF NOT EXISTS event(ts INTEGER, e TEXT);
 CREATE TABLE IF NOT EXISTS keyspaces(id TEXT PRIMARY KEY, name TEXT, type TEXT); -- YCQL
-CREATE TABLE IF NOT EXISTS tables(id TEXT PRIMARY KEY, keyspace_id TEXT, name TEXT,state TEXT);
+CREATE TABLE IF NOT EXISTS tables(id TEXT PRIMARY KEY, keyspace TEXT, keyspace_id TEXT, name TEXT,state TEXT,uuid TEXT,tableType TEXT, 
+                relationType TEXT,sizeBytes NUMERIC, walSizeBytes NUMERIC, isIndexTable INTEGER,pgSchemaName TEXT, ttlInSeconds INTEGER);
+-- {"tableUUID":"000033..","keySpace":"yugabyte","tableType":"PGSQL_TABLE_TYPE","tableName":"addresses","relationType":"USER_TABLE_RELATION","sizeBytes":0.0,"walSizeBytes":1.8874368E7,"isIndexTable":false,"pgSchemaName"
+CREATE TABLE IF NOT EXISTS tabledesc(id TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS tablets(id TEXT, table_id TEXT ,state TEXT,type TEXT,server_uuid TEXT,addr TEXT,leader TEXT); -- Multiple tablet replicas w same ID
 CREATE TABLE IF NOT EXISTS namespaces(namespaceUUID TEXT, name TEXT, tableType TEXT); -- YSQL 
 CREATE TABLE IF NOT EXISTS tabletmetric(timestamp INTEGER, node_uuid TEXT, tablet_id TEXT, metric_name TEXT, metric_value NUMERIC);
