@@ -71,6 +71,7 @@ YSQL_ROLE_QUERY = "SELECT r.rolname as role, ARRAY(SELECT b.rolname FROM "\
                   "pg_catalog.pg_auth_members m JOIN pg_catalog.pg_roles b "\
                   "ON (m.roleid = b.oid) WHERE m.member=r.oid) as member_of "\
                   "FROM pg_catalog.pg_roles r WHERE r.rolname !~ '^pg_' "\
+                  "  AND r.rolname NOT IN ('yugabyte','postgres')"\
                   " {} AND r.rolcanlogin='t' order by 1;"  # param: "AND r.rolsuper='f'" or ""
 UID_RE = r"\['?([A-Za-z0-9_\.@]+)'?\]"
 
@@ -493,8 +494,7 @@ class YBLDAPSync:
             dbdict[row['role']] = row['member_of']
         return dbdict
 
-    @classmethod
-    def yb_init_ldap_conn(cls, ldap_uri, ldap_user, ldap_password, ldap_usetls, ldap_certificate):
+    def yb_init_ldap_conn(self, ldap_uri, ldap_user, ldap_password, ldap_usetls, ldap_certificate):
         """
         Routine to connect to ldap given the parameters documented here.
         :Param ldap_uri -- the ldap server
@@ -504,6 +504,9 @@ class YBLDAPSync:
         :Param ldap_certificate - the path to the certificate
         :Return connection
         """
+        if self.args.ldap_testvalue:
+           return "Non-null Invalid value" # TEST mode - dont connect 
+           
         connect = None
         try:
             connect = ldap.initialize(ldap_uri)
@@ -533,11 +536,14 @@ class YBLDAPSync:
                 logging.info('Connected to LDAP Server %s', ldap_uri)
         return connect
 
-    @classmethod
-    def query_ldap(cls, connect, basedn, search_filter):
+    def query_ldap(self, connect, basedn, search_filter):
         """
         Routine to query ldap directory
         """
+        if self.args.ldap_testvalue:
+           import ast
+           return  dict(ast.literal_eval(self.args.ldap_testvalue)) # TEST mode - returnedd canned value
+           
         # Assume SCOPE_SUBTREE
         ldap_result_dict = None
         result = None
@@ -923,40 +929,40 @@ class YBLDAPSync:
         Routine to parse arguments from the command line.
         """
         parser = argparse.ArgumentParser(description='YB LDAP sync script, Version {}'.format(VERSION))
-        parser.add_argument('--debug', required=False,  action='store_true', default=False,
+        parser.add_argument('--debug', required=False,  action='store_true', default=os.getenv("DEBUG",False),
                             help="Enable debug logging (including http request logging) for this script")        
-        parser.add_argument('--verbose', required=False,  action='store_true', default=False,
+        parser.add_argument('--verbose', required=False,  action='store_true', default=os.getenv("VERBOSE",False),
                             help="Enable verbose logging for each action taken in this script")                                    
-        parser.add_argument('--apihost', required=False,
+        parser.add_argument('--apihost', required=False, default=os.getenv("APIHOST"),
                             help="YBA/YW API Hostname or IP (Defaults to localhost)")
-        parser.add_argument('--apitoken', required=False,
+        parser.add_argument('--apitoken', required=False, default=os.getenv("APITOKEN"),
                             help="YW API TOKEN - Preferable to use this instead of apiuser+apipassword")
-        parser.add_argument('--use_https', required=False,  action='store_true', default=False,
+        parser.add_argument('--use_https', required=False,  action='store_true', default=os.getenv("USE_HTTPS",False),
                             help="YW API http type : Set for https (default is false (http))")
-        parser.add_argument('--apiport', required=False, default=9000, type=int,
+        parser.add_argument('--apiport', required=False, default=os.getenv("APIPORT",9000), type=int,
                             help="YW API PORT: Defaults to 9000, which is valid if running inside docker. For external, use 80 or 443" )
-        parser.add_argument('--apiuser', required=False,
+        parser.add_argument('--apiuser', required=False, default=os.getenv("APIUSER"),
                             help="YW API Username")
-        parser.add_argument('--apipassword', required=False,
+        parser.add_argument('--apipassword', required=False, default=os.getenv("APIPASSWORD"),
                             help="YW API Password")
-        parser.add_argument('--ipv6', action='store_false', default=False,
+        parser.add_argument('--ipv6', action='store_false', default=os.getenv("IPV6",False),
                             help="Is system ipv6 based")
-        parser.add_argument('--target_api', default='YCQL', metavar="YCQL|YSQL",
+        parser.add_argument('--target_api', default=os.getenv("TARGET_API","YCQL"), metavar="YCQL|YSQL",
                             choices=['YCQL', 'YSQL'],
                             type=str.upper,
                             help="Target API: YCQL or YSQL")
-        parser.add_argument('--universe_name', required=True,
+        parser.add_argument('--universe_name', required=True,default=os.getenv("UNIVERSE_NAME"),
                             help="Universe name")
-        parser.add_argument('--dbhost', required=False, default=None,
+        parser.add_argument('--dbhost', required=False, default=os.getenv("DBHOST"),
                             help="Database hostname of IP. Uses a random YB node if not specified.")
-        parser.add_argument('--dbuser', required=True,
+        parser.add_argument('--dbuser', required=True,default=os.getenv("DBUSER"),
                             help="Database user to connect as")
-        parser.add_argument('--dbpass', required=True,
+        parser.add_argument('--dbpass', required=True, default=os.getenv("DBPASS"),
                             help="Password for dbuser")
-        parser.add_argument('--dbname', default='yugabyte',
+        parser.add_argument('--dbname', default=os.getenv("DBNAME",'yugabyte'),
                             type=str.lower,
                             help="YSQL database name to connect to")
-        parser.add_argument('--db_sslmode',
+        parser.add_argument('--db_sslmode', default=os.getenv("DB_SSL_MODE"),
                             choices=['disable',
                                      'allow',
                                      'prefer',
@@ -964,34 +970,36 @@ class YBLDAPSync:
                                      'verify-ca',
                                      'verify-full'],
                             help="SSL mode for YSQL TLS")
-        parser.add_argument('--db_certpath',
+        parser.add_argument('--db_certpath', default=os.getenv("DB_CERTPATH"),
                             help="SSL certificate path for YSQL TLS")
-        parser.add_argument('--db_certkey',
+        parser.add_argument('--db_certkey', default=os.getenv("DB_CERTKEY"),
                             help="SSL key path for YSQL TLS")
-        parser.add_argument('--ldapserver', required=True,
+        parser.add_argument('--ldapserver', required=True, default=os.getenv("LDAPSERVER"),
                             help="LDAP server address. Should be prefaced with ldap://hostname")
-        parser.add_argument('--ldapuser', required=True,
+        parser.add_argument('--ldapuser', required=True, default=os.getenv("LDAPUSER"),
                             help="LDAP Bind DN for retrieving directory information")
-        parser.add_argument('--ldap_password', required=True,
+        parser.add_argument('--ldap_password', required=True, default=os.getenv("LDAP_PASSWORD"),
                             help="LDAP Bind DN password")
-        parser.add_argument('--ldap_search_filter', required=True,
+        parser.add_argument('--ldap_search_filter', required=True, default=os.getenv("LDAP_SEARCH_FILTER"),
                             help="LDAP Search filter, like  '(&(objectclass=group)(|(samaccountname=grp1)...))'")
-        parser.add_argument('--ldap_basedn', required=True, metavar="dc=dept,dc=corp..",
+        parser.add_argument('--ldap_basedn', required=True, metavar="dc=dept,dc=corp..", default=os.getenv("LDAP_BASEDN"),
                             help="LDAP BaseDN to search")
-        parser.add_argument('--ldap_userfield', required=True,
+        parser.add_argument('--ldap_userfield', required=True, default=os.getenv("LDAP_USERFIELD"),
                             help="LDAP field to determine user's id to create")
-        parser.add_argument('--ldap_groupfield', required=True,
+        parser.add_argument('--ldap_groupfield', required=True, default=os.getenv("LDAP_GROUPFIELD"),
                             help="LDAP field to grab group information (e.g. cn)")
-        parser.add_argument('--ldap_certificate',
+        parser.add_argument('--ldap_certificate',  default=os.getenv("LDAP_CERTIFICATE"),
                             help="File location that points to LDAP certificate")
-        parser.add_argument('--ldap_tls', action='store_false', default=False,
+        parser.add_argument('--ldap_tls', action='store_false', default=os.getenv("LDAP_TLS",False),
                             help="LDAP Use TLS")
-        parser.add_argument('--dryrun', action='store_true', default=False,
+        parser.add_argument('--dryrun', action='store_true', default=os.getenv("DRYRUN",False),
                             help="Show list of potential DB role changes, but DO NOT apply them")
-        parser.add_argument('--reports', required=False, type=str.upper,metavar="COMMA,SEP,RPT...", default="",
+        parser.add_argument('--reports', required=False, type=str.upper,metavar="COMMA,SEP,RPT...", default=os.getenv("REPORTS",""),
                             help="One or a comma separated list of 'tree' reports. Eg: LDAPRAW,LDAPBYUSER,LDAPBYGROUP,DBROLE,DBUPDATES or ALL")
-        parser.add_argument('--allow_drop_superuser', action='store_true', default=False,
+        parser.add_argument('--allow_drop_superuser', action='store_true', default=os.getenv("ALLOW_DROP_SUPERUSER",False),
                             help="Allow this code to DROP a superuser role if absent in LDAP")
+        parser.add_argument('--ldap_testvalue', required=False, help=argparse.SUPPRESS,default=os.getenv("LDAP_TESTVALUE"))
+                   # This is a HIDDEN arg for TESTING, containing a stringified LDAP search result (if you dont have an LDAP test srv)
         return parser.parse_args()
 
     def run(self):
