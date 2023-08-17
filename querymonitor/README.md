@@ -11,6 +11,9 @@ The data collected is suitable for offline analysis to obtain:
 * Node response times & volumes
 * system behaviour by time
 * SLO compliance
+* Master and Tserver gflag settings.
+* `follower_lag_ms` metrics
+* Table column details
 * Tablet follower lag analysis
 * Master view of All namespaces/tables/tablets and leaders
 * Client connection statistics
