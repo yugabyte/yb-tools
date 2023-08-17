@@ -12,6 +12,7 @@ The data collected is suitable for offline analysis to obtain:
 * SLO compliance
 * Master and Tserver gflag settings.
 * `follower_lag_ms` metrics
+* Table column details
 
 ## Installation / Environment
 This requires perl, and a few core modules that should be present in any Linux system.
