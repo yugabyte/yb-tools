@@ -10,6 +10,8 @@ The data collected is suitable for offline analysis to obtain:
 * Node response times & volumes
 * system behaviour by time
 * SLO compliance
+* Master and Tserver gflag settings.
+* `follower_lag_ms` metrics
 
 ## Installation / Environment
 This requires perl, and a few core modules that should be present in any Linux system.
