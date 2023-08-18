@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.22";
+our $VERSION = "1.23";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -171,8 +171,11 @@ sub Get_RPCZ_from_nodes{
 				for my $item(@$item_array){
 					my $info= {query => join(";",map{$_->{sql_string}}
 					                              @{$item->{cql_details}{call_details}}),
+                               params => join(";",map{$_->{params}||""}
+					                              @{$item->{cql_details}{call_details}}),
 					           type=>$item->{cql_details}{type},
 					           elapsed_millis => $item->{elapsed_millis},
+							   sql_id => $item->{cql_details}[0]{sql_id},
 							   nodeName=>$n->{nodeName}};
 					next unless length($info->{query}) > 1;
 					$info->{remote_ip} = $c->{remote_ip};
