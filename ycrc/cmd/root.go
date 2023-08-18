@@ -120,7 +120,7 @@ func parallelRowCount(pMaps chan partitionMap, result chan int, done chan struct
 }
 
 func checkPartitionRowCount(pMap partitionMap, session *gocql.Session) (int, error) {
-	statement := fmt.Sprintf(`SELECT count(*) as rows from %s.%s WHERE partition_hash(%s) >= ? AND partition_hash(%s) <= ?`, cluster.Keyspace, pMap.table, pMap.pColumns, pMap.pColumns)
+	statement := fmt.Sprintf(`SELECT count(*) as rows from %s.%s WHERE partition_hash("%s") >= ? AND partition_hash("%s") <= ?`, cluster.Keyspace, pMap.table, pMap.pColumns, pMap.pColumns)
 	var rows int
 	if debug {
 		fmt.Printf("DEBUG: executing `SELECT count(*) as rows from %s.%s WHERE partition_hash(%s) >= %d and partition_hash(%s) <= %d`\n", cluster.Keyspace, pMap.table, pMap.pColumns, pMap.lbound, pMap.pColumns, pMap.ubound)
