@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.21";
+our $VERSION = "1.22";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -763,11 +763,13 @@ sub Process_file_and_create_Sqlite{
 	}
 	
     $self->Initialize_SQLITE_Output();
-	
-	$self->{INPUT}->parse($self, \&Parse_Body_Record);
-	close $self->{INPUT_FH};
-	print {$self->{OUTPUT_FH}} "SELECT 'All input records processed.';\n";
-
+	# Incomplete file or bad JSON may cause the next parse to fail:
+	eval { $self->{INPUT}->parse($self, \&Parse_Body_Record) };
+    if ($@){
+       print {$self->{OUTPUT_FH}} "SELECT '-- ERROR Parsing input:$@ --';\n";
+	}else{
+       print {$self->{OUTPUT_FH}} "SELECT 'All input records processed.';\n";
+    }
 	$self->{TYPE_EXISTS}{ycql} and $self->Create_and_run_views_for_ycql();
 	$self->{TYPE_EXISTS}{ysql} and $self->Create_and_run_views_for_ysql();
 	close $self->{OUTPUT_FH};
