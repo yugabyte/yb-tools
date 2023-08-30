@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.25";
+our $VERSION = "1.26";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -620,6 +620,7 @@ sub Handle_Event_Data{
 sub Handle_ENTITIES_Data{
 	my ($self,$dispatch_type,$body ) = @_;
 	$opt{DEBUG} and print "--DEBUG:IN: ",(caller(0))[3]," handler type $dispatch_type\n";
+	return if $self->{SECTION_PROCESSED}{DUMPENTITIES}; # Already processed - Don't allow dups.
 	return unless $dispatch_type eq "Body" and $body;
 	# We get a giant JSON dump of entities .. parse it 
 	#{"keyspaces":[{"keyspace_id":"..","keyspace_name":"system","keyspace_type":"ycql"},
@@ -758,6 +759,7 @@ sub Parse_Body_Record{
 	  print {$self->{OUTPUT_FH}} "END TRANSACTION; -- $self->{PIECENBR} : ",
 	          $self->{INPUT}{general_header}{_SECTION_}, "\n";
 	  $self->{PIECENBR}++;
+	  $self->{SECTION_PROCESSED}{ $self->{INPUT}{general_header}{_SECTION_} } ++; # How many of these are processed 
 	  return;
    }   
    $opt{DEBUG} and print "--DEBUG:GOT Piece:",substr($rec,0,200),"..\n";
