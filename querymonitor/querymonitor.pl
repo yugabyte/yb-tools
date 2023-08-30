@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.24";
+our $VERSION = "1.25";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -173,7 +173,7 @@ sub Get_RPCZ_from_nodes{
 				for my $item(@$item_array){
 					my $info= {query => join(";",map{$_->{sql_string}}
 					                              @{$item->{cql_details}{call_details}}),
-                               params => join(";",map{$_->{params}||""}
+                               params => join(";",map{unpack("H*", $_->{params}||"")} # Store as HEX-string 
 					                              @{$item->{cql_details}{call_details}}),
 					           type=>$item->{cql_details}{type},
 					           elapsed_millis => $item->{elapsed_millis},
@@ -271,7 +271,7 @@ sub Initialize{
         }
     }
   }
-  $opt{DEBUG} and print "DEBUG: $_\t",defined( $opt{$_})?$opt{$_}:"undef","\n" for sort keys %opt;
+  $opt{DEBUG} and print "--DEBUG: $_\t",defined( $opt{$_})?$opt{$_}:"undef","\n" for sort keys %opt;
   my ($run_digits,$run_unit) = $opt{RUN_FOR} =~m/^(\d+)([dhms]?)$/i;
   $run_digits or die "ERROR:'RUN_FOR' option incorrectly specified($opt{RUN_FOR}). Use: 1d 3h 30s or just a number of seconds";
   $run_unit ||= "s"; # Default to seconds  
@@ -895,11 +895,13 @@ sub Create_and_run_views_for_ysql{
 sub Initialize_SQLITE_Output{
     my ($self) = @_;
 	$!=undef;
+	my $output_option = "|-"; # Default is to fork & pipe to SQLITE 
 	if ($opt{OUTPUT}){
 		if ($opt{OUTPUT} =~/^STDOUT$/i){ # Send SQL to stdout
 			die "ERROR: Cannot specify DB and OUTPUT=STDOUT together\n" if $opt{DB};
-			$opt{DB} = " ";
-			$opt{SQLITE} = "cat";
+			$opt{DB} = "\*STDOUT";
+			$opt{SQLITE} = "";
+			$output_option = ">&"; # Append to STDOUT
 		}else{
 			die "ERROR: The only valid OUTPUT option is STDOUT in --analyze mode. use --DB.\n";
 		}
@@ -915,7 +917,7 @@ sub Initialize_SQLITE_Output{
 	-e $self->{SQLITE_FILENAME} and die "ERROR: $self->{SQLITE_FILENAME} already exists. Use --db to specify a different file.\n";
 	print "--Populating Sqlite($sqlite_version) database '$self->{SQLITE_FILENAME}'...\n";
 	
-	open($self->{OUTPUT_FH}, "|-", "$opt{SQLITE} $self->{SQLITE_FILENAME}") 
+	open($self->{OUTPUT_FH}, $output_option, ($opt{SQLITE} ? "$opt{SQLITE} " : "") . $self->{SQLITE_FILENAME}) 
 	     or die "ERROR: Cannot fork sqlite to open $self->{SQLITE_FILENAME}";
 	print {$self->{OUTPUT_FH}} <<"__SQL1__";
 CREATE TABLE IF NOT EXISTS kv_store(type text,key text, value text);
