@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.26";
+our $VERSION = "1.27";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -1122,6 +1122,7 @@ sub Initialize_query_type{
 			 ));
 	$self->boundary();
 	$self->{TYPE_INITIALIZED}{$type} = 1;
+	$self->{TYPE_KEYS}{$type} = [sort(keys %$q)];
 	$self->header("text/csv","_SECTION_: MONITOR_DATA");
 	$self->{IN_CSV_SECTION} = 1;
 }
@@ -1138,7 +1139,7 @@ sub WriteQuery{
 	                     . ".." . substr($sanitized_query,-($opt{MAX_QUERY_LEN}/2));
   }
   $q->{query} = qq|"$sanitized_query"|;
-  print { $self->{OUTPUT_FH} } join(",", $type, $ts, map( {$q->{$_}} sort keys %$q)),"\n";
+  print { $self->{OUTPUT_FH} } join(",", $type, $ts, map( {$q->{$_}||""} @{ $self->{TYPE_KEYS}{$type} })),"\n";
 }
 
 sub Close{
