@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.27";
+our $VERSION = "1.28";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -24,10 +24,10 @@ use HTTP::Tiny;
 
 my %option_specs=( # Specifies info for globals saved in %opt. TYPE=>undef means these are INTERNAL, not settable.
     API_TOKEN     =>{TYPE=>'=s', DEFAULT=> $ENV{API_TOKEN}, HELP=>"From User profile."},
-    YBA_HOST      =>{TYPE=>'=s', DEFAULT=> $ENV{YBA_HOST},  HELP=>"From User profile."},
+    YBA_HOST      =>{TYPE=>'=s', DEFAULT=> $ENV{YBA_HOST},  HELP=>"From User profile. Include 'https://' if applicapible"},
     CUST_UUID     =>{TYPE=>'=s', DEFAULT=> $ENV{CUST_UUID}, HELP=>"From User profile."},  
     UNIV_UUID     =>{TYPE=>'=s', DEFAULT=> $ENV{UNIV_UUID}, HELP=>"From User profile."},
-	HOSTNAME      =>{TYPE=>undef,DEFAULT=>do{chomp(local $_=qx|hostname|); $_} },
+    HOSTNAME      =>{TYPE=>undef,DEFAULT=>do{chomp(local $_=qx|hostname|); $_} },
     STARTTIME     =>{TYPE=>undef,DEFAULT=> unixtime_to_printable(time(),"YYYY-MM-DD HH:MM")},
     STARTTIME_TZ  =>{TYPE=>undef,DEFAULT=> unixtime_to_printable(time(),"YYYY-MM-DD HH:MM","Include tz offset")},
     INTERVAL_SEC  =>{TYPE=>'=i', DEFAULT=> 5, HELP=>"Interval (Seconds) between  query snapshots"},
@@ -285,11 +285,7 @@ sub Initialize{
 
   $YBA_API = Web::Interface::->new();
 
-  # Get universe name ..
-  eval { $opt{UNIVERSE} = $YBA_API->Get("") };
-  if ($@  or  $opt{UNIVERSE}{error}){
-	  die "ERROR: Unable to `get` Universe info for $opt{UNIV_UUID}:$@";
-  }
+  Get_Universe_Name_with_retry(3);
 
   $opt{DEBUG} and print "--DEBUG:UNIV: $_\t","=>",$opt{UNIVERSE}{$_},"\n" for qw|name creationDate universeUUID version |;
   #my ($universe_name) =  $json_string =~m/,"name":"([^"]+)"/;
@@ -438,6 +434,31 @@ sub daemonize {
    return $pid; # Will always return "0", since this is the child process.
  }
  #-----------------------------------------------------------------------------
+sub Get_Universe_Name_with_retry{
+  my ($retry_count) = @_;
+  --$retry_count <=0 and die "ERROR: Too many failed attempts";
+  eval { $opt{UNIVERSE} = $YBA_API->Get("") };
+  if ($@  or  $opt{UNIVERSE}{error}){
+    # Fall through and handle retry
+  }else{
+    return; # All is well - we got the info in $opt{UNIVERSE}
+  }
+  warn "--WARNING $retry_count: Unable to `get` Universe info for $opt{UNIV_UUID}:$@";
+  # See if http was specified or empty - retry with https
+  if ($opt{YBA_HOST} =~m/^https/i){
+     die "ERROR: https spec: $opt{YBA_HOST} failed.";
+  }
+  if ($opt{YBA_HOST} =~m/^http\W/i){
+    $opt{YBA_HOST} = "https" . substr($opt{YBA_HOST},4);
+  }else{
+    # "http(s) was not specified
+    $opt{YBA_HOST} = "https://" . $opt{YBA_HOST};
+  }
+  warn "--INFO: Retrying connection with HTTPS to $opt{YBA_HOST}";
+  $YBA_API = Web::Interface::->new(); # Reset this global, forcing use of new URL 
+  return Get_Universe_Name_with_retry($retry_count);
+}
+#-----------------------------------------------------------------------------
  sub Get_Table_Details{
     # Get tables + Details - Moved after Daemonizing because it takes too long for user to wait for it 
    print "-- ",unixtime_to_printable(time)," Getting tables and details...\n"; # Goes to nohup.out 
