@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.28";
+our $VERSION = "1.29";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -353,7 +353,7 @@ sub Initialize{
   }
   # Close open file handles that may be leftover from main loop outputs
   $output->Close(0); # Not the "Final" close 
-  print "--End main loop test.\n";
+  print "--End main loop test. Output file will be '$opt{OUTPUT}'.\n";
 }
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
@@ -623,6 +623,7 @@ sub Handle_MONITOR_DATA {
 	    s/'/~/g ;
 	}
 	my $type = shift @values;
+	return unless scalar(@values) >=  scalar(@{ $self->{FIELDS}{$type} }) ; # Make sure we have sufficient @values 
 	print {$self->{OUTPUT_FH}} "INSERT INTO $type VALUES('",
 	        join("','",@values),      "');\n"; 
 };
@@ -1160,7 +1161,8 @@ sub WriteQuery{
 	                     . ".." . substr($sanitized_query,-($opt{MAX_QUERY_LEN}/2));
   }
   $q->{query} = qq|"$sanitized_query"|;
-  print { $self->{OUTPUT_FH} } join(",", $type, $ts, map( {$q->{$_}||""} @{ $self->{TYPE_KEYS}{$type} })),"\n";
+  print { $self->{OUTPUT_FH} } join(",", $type, $ts, map( {defined($q->{$_}) ? $q->{$_} :""} 
+      @{ $self->{TYPE_KEYS}{$type} })),"\n";
 }
 
 sub Close{
