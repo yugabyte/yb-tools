@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.21";
+our $VERSION = "1.29";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -24,10 +24,10 @@ use HTTP::Tiny;
 
 my %option_specs=( # Specifies info for globals saved in %opt. TYPE=>undef means these are INTERNAL, not settable.
     API_TOKEN     =>{TYPE=>'=s', DEFAULT=> $ENV{API_TOKEN}, HELP=>"From User profile."},
-    YBA_HOST      =>{TYPE=>'=s', DEFAULT=> $ENV{YBA_HOST},  HELP=>"From User profile."},
+    YBA_HOST      =>{TYPE=>'=s', DEFAULT=> $ENV{YBA_HOST},  HELP=>"From User profile. Include 'https://' if applicapible"},
     CUST_UUID     =>{TYPE=>'=s', DEFAULT=> $ENV{CUST_UUID}, HELP=>"From User profile."},  
     UNIV_UUID     =>{TYPE=>'=s', DEFAULT=> $ENV{UNIV_UUID}, HELP=>"From User profile."},
-	HOSTNAME      =>{TYPE=>undef,DEFAULT=>do{chomp(local $_=qx|hostname|); $_} },
+    HOSTNAME      =>{TYPE=>undef,DEFAULT=>do{chomp(local $_=qx|hostname|); $_} },
     STARTTIME     =>{TYPE=>undef,DEFAULT=> unixtime_to_printable(time(),"YYYY-MM-DD HH:MM")},
     STARTTIME_TZ  =>{TYPE=>undef,DEFAULT=> unixtime_to_printable(time(),"YYYY-MM-DD HH:MM","Include tz offset")},
     INTERVAL_SEC  =>{TYPE=>'=i', DEFAULT=> 5, HELP=>"Interval (Seconds) between  query snapshots"},
@@ -73,6 +73,8 @@ if ($opt{ANALYZE}){
 }
 
 daemonize();
+Get_Table_Details();
+$opt{ENDTIME_EPOCH} += time(); # Previously, just had nbr of seconds. Now set the stopwatch.
 
 #------------- M a i n    L o o p --------------------------
 while (not ($quit_daemon  or my $this_iter_ts=time() > $opt{ENDTIME_EPOCH} )){  # Infinite loop ...
@@ -171,8 +173,11 @@ sub Get_RPCZ_from_nodes{
 				for my $item(@$item_array){
 					my $info= {query => join(";",map{$_->{sql_string}}
 					                              @{$item->{cql_details}{call_details}}),
+                               params => join(";",map{unpack("H*", $_->{params}||"")} # Store as HEX-string 
+					                              @{$item->{cql_details}{call_details}}),
 					           type=>$item->{cql_details}{type},
 					           elapsed_millis => $item->{elapsed_millis},
+							   sql_id => $item->{cql_details}{call_details}[0]{sql_id},
 							   nodeName=>$n->{nodeName}};
 					next unless length($info->{query}) > 1;
 					$info->{remote_ip} = $c->{remote_ip};
@@ -186,6 +191,7 @@ sub Get_RPCZ_from_nodes{
             my $ts = time();
 	        for my $c (@{$q->{connections}}){
 		        next unless $c->{query};
+                $c->{database} ||= ""; # Avoid 'Uninitialized String..' 
 				next if $c->{database} eq "postgres"  or $c->{database} eq "system_platform"; #has too many columns 
 				$c->{host} = $n->{nodeName};
 				$opt{DEBUG} and $loop_count<50 and PrintDeep($c,"DEBUG:got ysql \@$ts:"), print "\n";
@@ -265,13 +271,13 @@ sub Initialize{
         }
     }
   }
-  $opt{DEBUG} and print "DEBUG: $_\t",defined( $opt{$_})?$opt{$_}:"undef","\n" for sort keys %opt;
+  $opt{DEBUG} and print "--DEBUG: $_\t",defined( $opt{$_})?$opt{$_}:"undef","\n" for sort keys %opt;
   my ($run_digits,$run_unit) = $opt{RUN_FOR} =~m/^(\d+)([dhms]?)$/i;
   $run_digits or die "ERROR:'RUN_FOR' option incorrectly specified($opt{RUN_FOR}). Use: 1d 3h 30s or just a number of seconds";
   $run_unit ||= "s"; # Default to seconds  
   my %unit_idx= (d=>24*3600,  m => 60 , h => 3600 ,s => 1); 
   $unit_idx{uc $_} = $unit_idx{$_} for keys %unit_idx;
-  $opt{ENDTIME_EPOCH} = time() + $run_digits * $unit_idx{$run_unit};
+  $opt{ENDTIME_EPOCH} = $run_digits * $unit_idx{$run_unit}; # Temporarily hold nbr of seconds to run. Add time() later..
 
   if ($opt{ANALYZE}){
 	  return; # no more initialization needed   
@@ -279,8 +285,7 @@ sub Initialize{
 
   $YBA_API = Web::Interface::->new();
 
-  # Get universe name ..
-  $opt{UNIVERSE} = $YBA_API->Get("");
+  Get_Universe_Name_with_retry(3);
 
   $opt{DEBUG} and print "--DEBUG:UNIV: $_\t","=>",$opt{UNIVERSE}{$_},"\n" for qw|name creationDate universeUUID version |;
   #my ($universe_name) =  $json_string =~m/,"name":"([^"]+)"/;
@@ -315,24 +320,6 @@ sub Initialize{
   $opt{DEBUG} and print "--DEBUG:Getting Dump Entities...\n";  
   $YBA_API->Get("/proxy/$ml_node->{private_ip}:$master_http_port/dump-entities","BASE_URL_UNIVERSE");
   $output->Write_Section(time(),"DUMPENTITIES",undef,$YBA_API->{json_string},"text/json");
-  # Get tables + Details
-  print "-- Getting tables and details...\n";
-  my $tbl_start_time = time();
-  my $tbl_count      = 0;
-  my $tbl_count_prev = 0;
-  my $tables = $YBA_API->Get("/tables") || []; # Need this because entities does not give table ID
-  for my $tbl(@$tables){
-	  my $tbl_header = join("\n",map{"$_: $tbl->{$_}"} sort keys %$tbl);
-      my $desc = $YBA_API->Get("/tables/$tbl->{tableUUID}"); # Get table description 
-      $output->Write_Section(time(),"TABLEDESC",$tbl_header,$YBA_API->{json_string},"text/json");
-	  if ( ++$tbl_count % 100 == 0  or  (time() - $tbl_start_time) % 10 ==0){
-		  next unless $tbl_count - $tbl_count_prev > 4; # Avoid frequent updates 
-		  print "-- .. processed $tbl_count out of ",scalar(@$tables)," tables after " ,
-		       (time() - $tbl_start_time), " seconds.\n";
-		  $tbl_count_prev = $tbl_count;
-	  }
-  }
-  print "-- Details for ",scalar(@$tables), " tables saved.\n";
   
   if ($opt{USETESTDATA}){
 	 print "--Writing ONE record of test data, then exiting...\n";
@@ -366,7 +353,7 @@ sub Initialize{
   }
   # Close open file handles that may be leftover from main loop outputs
   $output->Close(0); # Not the "Final" close 
-  print "--End main loop test.\n";  
+  print "--End main loop test. Output file will be '$opt{OUTPUT}'.\n";
 }
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
@@ -401,7 +388,7 @@ sub daemonize {
     # 	The child itself forks and it then exits right away, so its child is taken over by init and can't be a zombie.
     warn (unixtime_to_printable(time()) 
 	     . " Daemonizing. Expected to run in background until "
-		 .  unixtime_to_printable($opt{ENDTIME_EPOCH}). "\n");
+		 .  unixtime_to_printable($opt{ENDTIME_EPOCH} + time()). " + time for Table info initialization(~2 min).\n");
     my $pid = fork ();
     if ($pid < 0) {
       die "first fork failed: $!";
@@ -444,8 +431,53 @@ sub daemonize {
    umask 0; # Clear the file creation mask
    #foreach (0 .. (POSIX::sysconf (&POSIX::_SC_OPEN_MAX) || 1024))
    #   { POSIX::close $_ } # Close all open file descriptors
-
    return $pid; # Will always return "0", since this is the child process.
+ }
+ #-----------------------------------------------------------------------------
+sub Get_Universe_Name_with_retry{
+  my ($retry_count) = @_;
+  --$retry_count <=0 and die "ERROR: Too many failed attempts";
+  eval { $opt{UNIVERSE} = $YBA_API->Get("") };
+  if ($@  or  $opt{UNIVERSE}{error}){
+    # Fall through and handle retry
+  }else{
+    return; # All is well - we got the info in $opt{UNIVERSE}
+  }
+  warn "--WARNING $retry_count: Unable to `get` Universe info for $opt{UNIV_UUID}:$@";
+  # See if http was specified or empty - retry with https
+  if ($opt{YBA_HOST} =~m/^https/i){
+     die "ERROR: https spec: $opt{YBA_HOST} failed.";
+  }
+  if ($opt{YBA_HOST} =~m/^http\W/i){
+    $opt{YBA_HOST} = "https" . substr($opt{YBA_HOST},4);
+  }else{
+    # "http(s) was not specified
+    $opt{YBA_HOST} = "https://" . $opt{YBA_HOST};
+  }
+  warn "--INFO: Retrying connection with HTTPS to $opt{YBA_HOST}";
+  $YBA_API = Web::Interface::->new(); # Reset this global, forcing use of new URL 
+  return Get_Universe_Name_with_retry($retry_count);
+}
+#-----------------------------------------------------------------------------
+ sub Get_Table_Details{
+    # Get tables + Details - Moved after Daemonizing because it takes too long for user to wait for it 
+   print "-- ",unixtime_to_printable(time)," Getting tables and details...\n"; # Goes to nohup.out 
+   my $tbl_start_time = time();
+   my $tbl_count      = 0;
+   my $tbl_count_prev = 0;
+   my $tables = $YBA_API->Get("/tables") || []; # Need this because entities does not give table ID
+   for my $tbl(@$tables){
+  	  my $tbl_header = join("\n",map{"$_: $tbl->{$_}"} sort keys %$tbl);
+       my $desc = $YBA_API->Get("/tables/$tbl->{tableUUID}"); # Get table description 
+       $output->Write_Section(time(),"TABLEDESC",$tbl_header,$YBA_API->{json_string},"text/json");
+  	  if ( ++$tbl_count % 100 == 0  or  (time() - $tbl_start_time) % 10 ==0){
+  		  next unless $tbl_count - $tbl_count_prev > 4; # Avoid frequent updates 
+  		  print "-- .",unixtime_to_printable(time)," . processed $tbl_count out of ",scalar(@$tables)," tables after " ,
+  		       (time() - $tbl_start_time), " seconds.\n";
+  		  $tbl_count_prev = $tbl_count;
+  	  }
+   }
+   print "-- ",unixtime_to_printable(time)," Details for ",scalar(@$tables), " tables saved.\n";
  }
 #------------------------------------------------------------------------------
 sub unixtime_to_printable{
@@ -591,6 +623,7 @@ sub Handle_MONITOR_DATA {
 	    s/'/~/g ;
 	}
 	my $type = shift @values;
+	return unless scalar(@values) >=  scalar(@{ $self->{FIELDS}{$type} }) ; # Make sure we have sufficient @values 
 	print {$self->{OUTPUT_FH}} "INSERT INTO $type VALUES('",
 	        join("','",@values),      "');\n"; 
 };
@@ -609,6 +642,7 @@ sub Handle_Event_Data{
 sub Handle_ENTITIES_Data{
 	my ($self,$dispatch_type,$body ) = @_;
 	$opt{DEBUG} and print "--DEBUG:IN: ",(caller(0))[3]," handler type $dispatch_type\n";
+	return if $self->{SECTION_PROCESSED}{DUMPENTITIES}; # Already processed - Don't allow dups.
 	return unless $dispatch_type eq "Body" and $body;
 	# We get a giant JSON dump of entities .. parse it 
 	#{"keyspaces":[{"keyspace_id":"..","keyspace_name":"system","keyspace_type":"ycql"},
@@ -668,9 +702,16 @@ sub Handle_Table_Description{
 	}
 	if ( $dispatch_type eq "Body" and $body){
         # Process body JSON
-		#tableUUID":"...","tableType":"YQL_TABLE_TYPE","tableDetails":{"tableName":"veh_elemnt","keyspace":"vdf","ttlInSeconds":-1,
-		# "columns":[{"columnOrder":0,"name":"vin_nbr","type":"VARCHAR","isPartitionKey":true,"isClusteringKey":false,"sortOrder":"NONE",
-		#     "partitionKey":true,"clusteringKey":false},...
+		my $bj = JSON::Tiny::decode_json($body);
+
+		#
+		#tablecol(tableid TEXT PRIMARY KEY, isPartitionKey INTEGER, isClusteringKey INTEGER, columnOrder TEXT, sortOrder TEXT, 
+        #                           name TEXT, type TEXT, partitionKey TEXT, clusteringKey TEXT);
+        for my $c (@{$bj->{tableDetails}{columns}}){
+           print {$self->{OUTPUT_FH}} "INSERT INTO tablecol VALUES('", $bj->{tableUUID},"'",
+                 map ({",'" .$c->{$_} . "'"} qw|isPartitionKey isClusteringKey columnOrder sortOrder name type partitionKey clusteringKey|),
+                 ");\n";
+        };
 		delete $self->{TABLE_HDR};
 	}
 
@@ -740,6 +781,7 @@ sub Parse_Body_Record{
 	  print {$self->{OUTPUT_FH}} "END TRANSACTION; -- $self->{PIECENBR} : ",
 	          $self->{INPUT}{general_header}{_SECTION_}, "\n";
 	  $self->{PIECENBR}++;
+	  $self->{SECTION_PROCESSED}{ $self->{INPUT}{general_header}{_SECTION_} } ++; # How many of these are processed 
 	  return;
    }   
    $opt{DEBUG} and print "--DEBUG:GOT Piece:",substr($rec,0,200),"..\n";
@@ -763,11 +805,13 @@ sub Process_file_and_create_Sqlite{
 	}
 	
     $self->Initialize_SQLITE_Output();
-	
-	$self->{INPUT}->parse($self, \&Parse_Body_Record);
-	close $self->{INPUT_FH};
-	print {$self->{OUTPUT_FH}} "SELECT 'All input records processed.';\n";
-
+	# Incomplete file or bad JSON may cause the next parse to fail:
+	eval { $self->{INPUT}->parse($self, \&Parse_Body_Record) };
+    if ($@){
+       print {$self->{OUTPUT_FH}} "SELECT '-- ERROR Parsing input:$@ --';\n";
+	}else{
+       print {$self->{OUTPUT_FH}} "SELECT 'All input records processed.';\n";
+    }
 	$self->{TYPE_EXISTS}{ycql} and $self->Create_and_run_views_for_ycql();
 	$self->{TYPE_EXISTS}{ysql} and $self->Create_and_run_views_for_ysql();
 	close $self->{OUTPUT_FH};
@@ -875,11 +919,13 @@ sub Create_and_run_views_for_ysql{
 sub Initialize_SQLITE_Output{
     my ($self) = @_;
 	$!=undef;
+	my $output_option = "|-"; # Default is to fork & pipe to SQLITE 
 	if ($opt{OUTPUT}){
 		if ($opt{OUTPUT} =~/^STDOUT$/i){ # Send SQL to stdout
 			die "ERROR: Cannot specify DB and OUTPUT=STDOUT together\n" if $opt{DB};
-			$opt{DB} = " ";
-			$opt{SQLITE} = "cat";
+			$opt{DB} = "\*STDOUT";
+			$opt{SQLITE} = "";
+			$output_option = ">&"; # Append to STDOUT
 		}else{
 			die "ERROR: The only valid OUTPUT option is STDOUT in --analyze mode. use --DB.\n";
 		}
@@ -895,7 +941,7 @@ sub Initialize_SQLITE_Output{
 	-e $self->{SQLITE_FILENAME} and die "ERROR: $self->{SQLITE_FILENAME} already exists. Use --db to specify a different file.\n";
 	print "--Populating Sqlite($sqlite_version) database '$self->{SQLITE_FILENAME}'...\n";
 	
-	open($self->{OUTPUT_FH}, "|-", "$opt{SQLITE} $self->{SQLITE_FILENAME}") 
+	open($self->{OUTPUT_FH}, $output_option, ($opt{SQLITE} ? "$opt{SQLITE} " : "") . $self->{SQLITE_FILENAME}) 
 	     or die "ERROR: Cannot fork sqlite to open $self->{SQLITE_FILENAME}";
 	print {$self->{OUTPUT_FH}} <<"__SQL1__";
 CREATE TABLE IF NOT EXISTS kv_store(type text,key text, value text);
@@ -909,7 +955,8 @@ CREATE TABLE IF NOT EXISTS keyspaces(id TEXT PRIMARY KEY, name TEXT, type TEXT);
 CREATE TABLE IF NOT EXISTS tables(id TEXT PRIMARY KEY, keyspace TEXT, keyspace_id TEXT, name TEXT,state TEXT,uuid TEXT,tableType TEXT, 
                 relationType TEXT,sizeBytes NUMERIC, walSizeBytes NUMERIC, isIndexTable INTEGER,pgSchemaName TEXT, ttlInSeconds INTEGER);
 -- {"tableUUID":"000033..","keySpace":"yugabyte","tableType":"PGSQL_TABLE_TYPE","tableName":"addresses","relationType":"USER_TABLE_RELATION","sizeBytes":0.0,"walSizeBytes":1.8874368E7,"isIndexTable":false,"pgSchemaName"
-CREATE TABLE IF NOT EXISTS tabledesc(id TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS tablecol(tableid TEXT, isPartitionKey INTEGER, isClusteringKey INTEGER, columnOrder TEXT, sortOrder TEXT, 
+                                    name TEXT, type TEXT, partitionKey TEXT, clusteringKey TEXT);
 CREATE TABLE IF NOT EXISTS tablets(id TEXT, table_id TEXT ,state TEXT,type TEXT,server_uuid TEXT,addr TEXT,leader TEXT); -- Multiple tablet replicas w same ID
 CREATE TABLE IF NOT EXISTS namespaces(namespaceUUID TEXT, name TEXT, tableType TEXT); -- YSQL 
 CREATE TABLE IF NOT EXISTS tabletmetric(timestamp INTEGER, node_uuid TEXT, tablet_id TEXT, metric_name TEXT, metric_value NUMERIC);
@@ -974,7 +1021,7 @@ sub Get{
 		$self->{json_string} = qx|$self->{curl_base_cmd} --url $url$endpoint|;
 		if ($?){
 		   print "ERROR: curl get '$endpoint' failed: $?\n";
-		   $output->Write_Section(time(),"EVENT","MSG:ERROR: curl get '$endpoint' failed: $?",
+		   $output and $output->Write_Section(time(),"EVENT","MSG:ERROR: curl get '$endpoint' failed: $?",
                        undef,"text/event");
 		   return {error=>$?};
 		}
@@ -1097,6 +1144,7 @@ sub Initialize_query_type{
 			 ));
 	$self->boundary();
 	$self->{TYPE_INITIALIZED}{$type} = 1;
+	$self->{TYPE_KEYS}{$type} = [sort(keys %$q)];
 	$self->header("text/csv","_SECTION_: MONITOR_DATA");
 	$self->{IN_CSV_SECTION} = 1;
 }
@@ -1113,7 +1161,8 @@ sub WriteQuery{
 	                     . ".." . substr($sanitized_query,-($opt{MAX_QUERY_LEN}/2));
   }
   $q->{query} = qq|"$sanitized_query"|;
-  print { $self->{OUTPUT_FH} } join(",", $type, $ts, map( {$q->{$_}} sort keys %$q)),"\n";
+  print { $self->{OUTPUT_FH} } join(",", $type, $ts, map( {defined($q->{$_}) ? $q->{$_} :""} 
+      @{ $self->{TYPE_KEYS}{$type} })),"\n";
 }
 
 sub Close{
