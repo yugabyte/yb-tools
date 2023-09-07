@@ -5,7 +5,6 @@ import (
 )
 
 func main() {
-
 	// executes cobra for command line interaction
 	cmd.Execute()
 }
