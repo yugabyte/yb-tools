@@ -2,6 +2,7 @@
 ##########################################################################
 ## Tablet Report Parser
 ##    Parses the "tablet report" created by yugatool, and creates a sqlite DB.
+##    It can also parse "dump-entities" output, and "tablet-info" output.
 ## See KB: https://yugabyte.zendesk.com/knowledge/articles/12124512476045/en-us
 
 # Run instructions:
@@ -10,7 +11,7 @@
 # (See https://support.yugabyte.com/hc/en-us/articles/6111093115405-How-to-use-the-Yugatool-utility)
 #
 #		export MASTERS=10.183.11.69:7100,10.184.7.181:7100,10.185.8.17:7100
-#		export TLS_CONFIG="--cacert /opt/yugabyte/certs/SchwabCA.crt"
+#		export TLS_CONFIG="--cacert /opt/yugabyte/certs/MyCA.crt"
 #		export TLS_CONFIG="$TLS_CONFIG --skiphostverification"
 #
 #		./yugatool cluster_info \
@@ -21,27 +22,11 @@
 #
 #       You can also use the "-o json" option. This code accepts that output also.
 
-# 2: Run THIS script  - which reads the tablet report and generates SQL.
-#    Feed the generated SQL into sqlite3:
+# 2: Run THIS script  - which reads the tablet report and generates SQL,
+#    and feeds the generated SQL into sqlite3:
 
 #        $ perl tablet_report_parser.pl tablet-report.out[.gz]
 
-# 3: Run Analysis using SQLITE ---
-
-#         $ sqlite3 -header -column tablet-report.out.sqlite
-#         SQLite version 3.31.1 2020-01-27 19:55:54
-#         Enter ".help" for usage hints.
-#         sqlite> select count(*) from leaderless;
-#         count(*)
-#         ----------
-#         2321
-#         sqlite> select *  from leaderless limit 3;
-#         tablet_uuid    table_name    node_uuid     status                        ip
-#         -------------  ------------  ------------  ----------------------------  -----------
-#         67da88ffc8a54  custacce      5a720d3bc58f  NO_MAJORITY_REPLICATED_LEASE  10.xxx.yyy.z
-#         31a7580dba224  packetdoc     5a720d3bc58f  NO_MAJORITY_REPLICATED_LEASE  10.xxx.yyy.z
-#         9795475a798d4  packetx       5a720d3bc58f  NO_MAJORITY_REPLICATED_LEASE  10.xxx.yyy.z
-#         sqlite>
 #
 # EXTRAS:
 #   * Input files can be gzip compressed (must end with .gz)
@@ -52,7 +37,7 @@
 #   * Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
 #         ./yugatool -m $MASTERS $TLS_CONFIG tablet_info $TABLET_UUID > $TABLET_UUID.txt 
 ##########################################################################
-our $VERSION = "0.38";
+our $VERSION = "0.40";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -70,7 +55,8 @@ my %opt=(
 	HOSTNAME    => $ENV{HOST} || $ENV{HOSTNAME} || $ENV{NAME} || qx|hostname|,
 	JSON        => 0, # Auto set to 1 when  "JSON" discovered. default is Reading "table" style.
 	AUTORUN_SQLITE => -t STDOUT , # If STDOUT is NOT redirected, we automatically run sqlite3
-	SQLITE_ERROR   => (qx|sqlite3 -version|=~m/([^\s]+)/  ?  0 : "Could not run SQLITE3: $!"), # Checks if sqlite3 can run 
+	SQLITE_ERROR   => (qx|sqlite3 -version|=~m/([^\s]+)/  ?  0 : "Could not run SQLITE3: $!"), # Checks if sqlite3 can run
+	PROCESSED_TYPES=> {TABLET_REPORT => 0, ENTITIES => 0, TABLET_INFO => 0}, # Stats 
 );
 my %ANSICOLOR = (
 	ENCLOSE        => sub{"\e[$_[1]m$_[0]\e[0m"},
@@ -132,11 +118,15 @@ if (-t STDIN and not @ARGV){
 my ($SQL_OUTPUT_FH, $output_sqlite_dbfilename); # Output file handle to feed to SQLITE
 my @more_input_specified = @ARGV;
 @ARGV=(); # Zap it -we will specify each file to feed into <>
+if ($more_input_specified[0] =~/\-+he?l?p?/i){
+   print  $USAGE,"\n\n";
+   exit 1;
+}
 
 while (my $inputfilename = shift @more_input_specified){
 	# User has specified and argument (Default usage) - we will process it as a filename
 	print "SELECT 'Processing $inputfilename....' as info;\n"; 
-	-f $inputfilename or die "ERROR: No file '$inputfilename'";
+	-f $inputfilename or die "ERROR: No file '$inputfilename'. try --help";
 	if ($inputfilename =~/\.gz$/){# Input is compressed
 		print "SELECT '$ANSICOLOR{GREEN} $inputfilename appears to be a compressed file.",
 		         "$ANSICOLOR{BRIGHT_GREEN} Auto-gunzipping it on the fly...$ANSICOLOR{NORMAL}' as INFO;\n";
@@ -153,13 +143,15 @@ while (my $inputfilename = shift @more_input_specified){
 		print "SELECT '   ... processing as an ENTITIES file..' as info;\n"; 
 		my $entities = entities_parser::->new();
 		$entities->Ingest_decode_and_Generate(); # Read from stdin
+		$opt{PROCESSED_TYPES}{ENTITIES} ++;
 	}elsif ($inputfilename =~/\w{32}\.\w{3,4}$/){
 		print "SELECT '   ... processing as an TABLET INFO file..' as info;\n"; 
 		my $tabletinfo = Tablet_Info::->new();
-
+        $opt{PROCESSED_TYPES}{TABLET_INFO}++;
 	}else{
 		print "SELECT '   ... processing as a TABLET REPORT input ..' as info;\n"; 
 		Process_tablet_report();
+		$opt{PROCESSED_TYPES}{TABLET_REPORT}++;
 	}
 	#close STDIN; # Causes errors if closed. Works fine leaving parent STDIN open.
 }
@@ -178,6 +170,7 @@ CREATE VIEW table_detail AS
 	 FROM tablet GROUP BY namespace,table_name;
 CREATE VIEW tablets_per_node AS
     SELECT node_uuid,min(ip) as node_ip,min(zone) as zone,  count(*) as tablet_count,
+           sum(CASE WHEN node_uuid = leader THEN 1 ELSE 0 END) as leaders,
            count(DISTINCT table_name) as table_count	
 	FROM tablet,cluster 
 	WHERE cluster.type='TSERVER' and cluster.uuid=node_uuid 
@@ -332,8 +325,8 @@ my %entity = (
 	MASTER  => {REGEX=>'^\[ Masters \]',       		 HANDLER=>\&Parse_Master_line},
 	TSERVER => {REGEX=>'^\[ Tablet Servers \]',		 HANDLER=>\&Parse_Tserver_line },
 	TABLET  => {REGEX=>'^\[ Tablet Report: ', 
-	            HDR_EXTRACT => sub{$_[0] =~m/\[host:"([^"]+)"\s+port:(\d+)\] \((\w+)/},
-				HDR_KEYS    => [qw|HOST PORT NODE_UUID|],
+	            HDR_EXTRACT => sub{$_[0] =~m/\[host:"([^"]+)"\s+port:(\d+)(.*?)\] \((\w+)/},
+				HDR_KEYS    => [qw|HOST PORT EXTRA_INFO NODE_UUID|], # EXTRA_INFO could have another IP/PORT (YB-managed)
 				HANDLER=>\&Parse_Tablet_line,
 				LINE_REGEX =>
                  	qr| ^\s(?<tablet_uuid>(\w{32}))\s{3}
@@ -419,6 +412,8 @@ __MAIN_COMPLETE__
 }
 #---------------------------------------------------------------------------------------------
 my $tmpfile = "/tmp/tablet-report-analysis-settings$$";
+my $extra_tablet_reports="";
+$opt{PROCESSED_TYPES}{ENTITIES} and $extra_tablet_reports = ",extra_Tablets_summary/detail";
 
 print << "__ENDING_STUFF__";
 SELECT '--- Completed. Available REPORT-NAMEs ---';
@@ -441,7 +436,7 @@ CREATE VIEW summary_report AS
 	   SELECT count(*) || ' tables have unbalanced tablet sizes (see "unbalanced_tables")' 
 	   from unbalanced_tables 
 	UNION
-	   SELECT count(*) || ' Zones have unbalanced tablets (See "region_zone_tablets")'
+	   SELECT count(*) || ' Zones have unbalanced tablets (See "region_zone_tablets$extra_tablet_reports")'
 	    from  region_zone_tablets WHERE balanced='NO'
 	;
 SELECT '','--- Summary Report ---'
@@ -481,6 +476,7 @@ exit 0;
 sub Setup_Output_Processing{
 	my ($inputfilename) = @_;
 	$inputfilename=~/\.json$/i and $inputfilename=substr($inputfilename,0,-5); # Drop the ".json" 
+	$inputfilename=~/\.out$/i and $inputfilename=substr($inputfilename,0,-4); # Drop the ".out"
 	$output_sqlite_dbfilename = $inputfilename . ".sqlite";
 	if (not $opt{AUTORUN_SQLITE}){
 		return; # No output processing needed-this has been setup manually
@@ -577,7 +573,7 @@ sub Parse_Tablet_line{
     if ($save_val{namespace} eq "RUNNING"  or  $save_val{namespace} eq "NOT_STARTED"){
 	   # We have mis-interpreted this line because NAMESPACE wa missing - re-interpret without namespace
        $line =~m/^\s(?<tablet_uuid>(\w{32}))\s{3}
-					(?<tablename>(\w+))\s+
+					(?<tablename>([\w\-]+))\s+
 					(?<table_uuid>(\w{32})?)\s* # This exists only if --show_table_uuid is set
 					# NOTE: <namespace> has been REMOVED from this regex
 					(?<state>(\w+))\s+
@@ -587,7 +583,7 @@ sub Parse_Tablet_line{
 					(?<sst_size>(\-?\d+))  \s  (?<sst_unit>(\w+)) \s+  # "0 bytes"|"485 kB"|"12 MB"
 					(?<wal_size>(\-?\d+))  \s  (?<wal_unit>(\w+)) \s+
 					(?<cterm>([\[\]\d]+))\s*    # This could be "[]" or a number.. 
-					(?<cidx>([\[\]\d]+))\s+
+					(?<cidx>([\[\]\d\-]+))\s+
 					(?<leader>([\[\]\w]+))\s+
 					(?<lease_status>([\[\]\w]+)?) 
                   /x or die "ERROR parsing tablet line#$.";					
@@ -985,7 +981,7 @@ sub Parse_Tserver_line{
 sub Parse_Tablet_line{
 	my ($d,$t) = @_;
 	my ($host_name, $host_port,$host_uuid) 
-	   = $d->{msg} =~m/\[host:"([^"]+)"\s+port:(\d+)\] \((\w+)/;
+	   = $d->{msg} =~m/\[host:"([^"]+)"\s+port:(\d+).*?\] \((\w+)/;
 
 	my %values;
 	@values{ qw|tablet_uuid tablename table_uuid namespace  state status  
@@ -1064,6 +1060,19 @@ CREATE TABLE ENT_KEYSPACE (id TEXT PRIMARY KEY,name,type);
 CREATE TABLE ENT_TABLE (id TEXT PRIMARY KEY, keyspace_id,state, table_name);
 CREATE TABLE ENT_TABLET (id TEXT ,table_id,state,is_leader,server_uuid,server_addr,type);
 
+CREATE VIEW IF NOT EXISTS extra_Tablets_detail as 
+    SELECT 'entities' as source, server_uuid as node, id as tablet from ENT_TABLET
+    EXCEPT
+    SELECT 'entities' as source,node_uuid,tablet_uuid FROM tablet
+   UNION ALL
+    SELECT 'tserv' as source, node_uuid,tablet_uuid FROM tablet
+    EXCEPT
+    SELECT 'tserv' as source, server_uuid as node,id as tablet from ENT_TABLET;
+
+CREATE VIEW IF NOT EXISTS extra_Tablets_summary as 
+   SELECT source,node,ip,region,count(*) FROM extra_Tablets_detail,cluster 
+   WHERE node=uuid
+   GROUP BY source,node,ip,region;
 __CREATE_TABLES__
 
 	main::Set_Transaction(1,"Entity Keyspaces");
