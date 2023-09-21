@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.02";
+our $VERSION = "0.03";
 my $HELP_TEXT = << "__HELPTEXT__";
     moses.pl  Version $VERSION
     ===============
@@ -19,6 +19,8 @@ use HTTP::Tiny;
  package Tablet;
  package Web::Interface;
  package JSON::Tiny;
+ package OutputMechanism;
+ package DatabaseClass;
 }; # Pre-declare 
 
 my %opt = (
@@ -45,33 +47,38 @@ Get_and_Parse_tablets_from_tserver();
 exit 0;
 #----------------------------------------------------------------------------------------------
 sub Get_and_Parse_tablets_from_tserver{
-  #open my $f,"<","../data/tablets.html" or die "ERROR: Cant open tablets:$!";
-  #my $html_raw = do{local $/=undef;<$f>};
-  #close $f;
-  #print substr($html_raw,0,300),"\n";
-  my $html_raw;
-  #$YBA_API->get-tablets
-  my $row   = 0;
-  my $html  = HTML::TagParser->new( $html_raw );
-  my $table = $html->getElementsByTagName("table");
-  #  <tr><th>Namespace</th><th>Table name</th><th>Table UUID</th><th>Tablet ID</th><th>Partition</th><th>State</th>
-  #      <th>Hidden</th><th>Num SST Files</th><th>On-disk size</th><th>RaftConfig</th><th>Last status</th></tr>
-  my $tr = my $header= $table->firstChild();  # Header row
-  Tablet::->SetFieldNames( map {$_->innerText() } @{$header->childNodes()} );
-  
 
-  my (@tabs, %leaders);
-  while ( $tr = $tr->nextSibling() ){
-    my $t =  Tablet::->new($tr);
-    #$t->Print();
-    #print "\n";
-    #last if $row++ > 5;
-    $leaders{$t->{RAFTCONFIG}{LEADER}} ++;
-    push @tabs, $t;
+  for my $n (@{ $opt{NODES} }){
+      next unless $n->{isTserver};
+      if ( $n->{state} ne  'Live'){
+         print "-- Node $n->{nodeName} $n->{nodeUuid} is $n->{state} .. skipping\n";
+         next;
+      }
+
+      print "-- Processing tablets on $n->{nodeName} $n->{nodeUuid} (Idx $n->{nodeIdx})...\n";
+      my $html_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/tablets?raw","BASE_URL_UNIVERSE",1); # RAW
+      my $row   = 0;
+      my $html  = HTML::TagParser->new( $html_raw );
+      my $table = $html->getElementsByTagName("table");
+      #  <tr><th>Namespace</th><th>Table name</th><th>Table UUID</th><th>Tablet ID</th><th>Partition</th><th>State</th>
+      #      <th>Hidden</th><th>Num SST Files</th><th>On-disk size</th><th>RaftConfig</th><th>Last status</th></tr>
+      my $tr = my $header= $table->firstChild();  # Header row
+      Tablet::->SetFieldNames( map {$_->innerText() } @{$header->childNodes()} );
+      
+      
+      my (@tabs, %leaders);
+      while ( $tr = $tr->nextSibling() ){
+      	my $t =  Tablet::->new($tr);
+      	#$t->Print();
+      	#print "\n";
+      	#last if $row++ > 5;
+      	$leaders{$t->{RAFTCONFIG}{LEADER}} ++;
+      	push @tabs, $t;
+      }
+      
+      print "Found ",scalar(@tabs)," tablets\n";
+      print "$leaders{$_}\t tablets on leader $_\n" for sort keys %leaders;
   }
-  
-  print "Found ",scalar(@tabs)," tablets\n";
-  print "$leaders{$_}\t tablets on leader $_\n" for sort keys %leaders;
 
 }
 #----------------------------------------------------------------------------------------------
@@ -129,12 +136,21 @@ sub Initialize{
    $opt{DEBUG} and print "--DEBUG:UNIV: $_\t","=>",$opt{UNIV_DETAILS}{$_},"\n" for qw|name creationDate universeUUID version |;
   #my ($universe_name) =  $json_string =~m/,"name":"([^"]+)"/;
   if ($opt{UNIV_DETAILS}{name}){
-	 print "--UNIVERSE: ", $opt{UNIV_DETAILS}{name}," on ", $opt{UNIV_DETAILS}{universeDetails}{clusters}[0]{userIntent}{providerType}, " ver ",$opt{UNIV_DETAILS}{universeDetails}{clusters}[0]{userIntent}{ybSoftwareVersion},"\n";
+     print "--UNIVERSE: ", $opt{UNIV_DETAILS}{name}," on ", $opt{UNIV_DETAILS}{universeDetails}{clusters}[0]{userIntent}{providerType},
+           " ver ",$opt{UNIV_DETAILS}{universeDetails}{clusters}[0]{userIntent}{ybSoftwareVersion},"\n";
   }else{
      die "ERROR: Universe info not found \n";
   }
   $opt{NODES} = Extract_nodes_From_Universe($opt{UNIV_DETAILS});
-   1;
+  # Find Master/Leader 
+  $opt{MASTER_LEADER}      = $YBA_API->Get("/leader")->{privateIP};
+  $opt{DEBUG} and print "--DEBUG:Master/Leader JSON:",$YBA_API->{json_string},". IP is ",$opt{MASTER_LEADER},".\n";
+  my ($ml_node) = grep {$_->{private_ip} eq $opt{MASTER_LEADER}} @{ $opt{NODES} } or die "ERROR : No Master/Leader NODE found for $opt{MASTER_LEADER}";
+  my $master_http_port = $opt{UNIV_DETAILS}{universeDetails}{communicationPorts}{masterHttpPort} or die "ERROR: Master HTTP port not found in univ JSON";
+  # Get dump_entities JSON from MASTER_LEADER
+  $opt{DEBUG} and print "--DEBUG:Getting Dump Entities...\n";  
+  $YBA_API->Get("/proxy/$ml_node->{private_ip}:$master_http_port/dump-entities","BASE_URL_UNIVERSE");
+  # Analyze & save $YBA_API->{json_string} 
 }
 #----------------------------------------------------------------------------------------------
 sub Extract_nodes_From_Universe{
@@ -153,6 +169,181 @@ sub Extract_nodes_From_Universe{
     }
     return [@node];	
 }
+###############################################################################
+############### C L A S S E S                             #####################
+###############################################################################
+BEGIN{
+package OutputMechanism;
+use warnings;
+use strict;
+sub new{
+  my ($class, %att) = @_;
+	die "ERROR:No output filename/DB specified" unless $att{FILENAME} or $att{TO_STDOUT} or $att{DBFILE};
+	my $self = {recordcount=>0, %att};
+	if ($att{GZIP}){
+	    open $self->{OUTPUT_FH} , "|/bin/gzip > $att{FILENAME}" or die "ERROR:Could not open output gz $att{FILENAME} :$!";
+  }elsif ( $self->{TO_STDOUT} ){
+      # STDOUT is already open . Nothing needed
+  }elsif ( $att{DBFILE} ){ # Request to actually create the sqlite db to this file
+      open $self->{OUTPUT_FH} , "|$att{SQLITE} $att{DBFILE}" or die "ERROR:Could not open output SQLITE $att{DBFILE} :$!";
+	}else{
+		# Non-gzip output requested - just write to simple file handle
+		open $self->{OUTPUT_FH} , ">", $att{FILENAME} or die "ERROR:Could not open output file $att{FILENAME} :$!";
+	}
+    return bless $self, $class;
+}
+sub send{
+   my  ($self,@msg) = @_;
+   if ( $self->{TO_STDOUT} ){
+       print  "$_\n" for @msg; 
+   }else{
+       print {$self->{OUTPUT_FH}}  "$_\n" for @msg;
+   }
+   $self->{recordcount}+=$#msg + 1;
+}
+sub close{
+   my  ($self) = @_;
+   return 0 if $self->{TO_STDOUT}; # STDOUT will auto-close
+   close $self->{OUTPUT_FH};
+   chmod 0644, grep {defined}  $self->{FILENAME} , $self->{DBFILE};
+}
+1;
+}
+#=====================================================================================
+######################################################################################
+BEGIN{
+package DatabaseClass;
+use warnings;
+use strict;
+our $SCHEMA_VERSION = "1.0";
+
+my $next_unique_number = int(rand(999)); # Starting at random
+
+my %DBINFO =(
+    LOG  => { FIELDS=>[qw|timestamp level message|],
+       CREATE=> <<"     __LOG__",
+       CREATE TABLE  IF NOT EXISTS LOG(
+       id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+       timestamp INTEGER NOT NULL,
+       level INTEGER,
+       message TEXT
+       );
+     __LOG__
+     DROPPABLE => 0,
+    },
+    NODE => { FIELDS => [qw|ipaddr macaddr nodes hfscreatetime systemid timestamp HOSTNAME ISSOURCEGRID|],
+      CREATE=> <<"     __GRID__",
+       CREATE TABLE  IF NOT EXISTS node(
+       id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+       ipaddr TEXT NOT NULL,
+       macaddr TEXT,
+       nodes INTEGER,
+       hfscreatetime INTEGER NOT NULL,
+       systemid TEXT,
+       timestamp INTEGER,
+       HOSTNAME TEXT,
+       ISSOURCEGRID INTEGER
+       );
+       CREATE UNIQUE INDEX IF NOT EXISTS by_gridid ON GRID (id);
+       CREATE UNIQUE INDEX IF NOT EXISTS by_sysid  ON GRID (systemid);
+     __GRID__
+     DROPPABLE => 1,
+    },TAABLE => {
+       CREATE=><<"     __DOMAIN__",
+       CREATE TABLE  IF NOT EXISTS domain(
+       id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+       gridid INTEGER NOT NULL REFERENCES GRID(id) ON DELETE CASCADE,
+       name     TEXT NOT NULL,
+	   cid      TEXT,
+       parentid INTEGER,
+       CONTACTINFO TEXT
+       );
+       CREATE UNIQUE INDEX IF NOT EXISTS by_domainid ON DOMAIN (id);  
+       CREATE UNIQUE INDEX IF NOT EXISTS by_gridid ON DOMAIN (gridid,id); 
+       CREATE UNIQUE INDEX IF NOT EXISTS by_domain_name ON DOMAIN (name,gridid);  
+     __DOMAIN__
+     DROPPABLE => 1,
+    }, 
+    
+);
+
+
+sub new {
+    my ($class,%att) = @_;
+    $opt{DEBUG} and print "--- Creating NEW DatabaseClass object\n";
+    $class = ref $class if ref $class;
+    $att{OUTPUTOBJ} or die "ERROR: OUTPUTOBJ attribute not specified";
+
+    my $self = bless \%att , $class;
+    $opt{SQLFILENAME} ||="";
+    $self->putsql("-- Generating $opt{SQLFILENAME} by $0 $VERSION on $opt{LOCALHOST} by " . ($ENV{USER}||$ENV{USERNAME}) . " on " . scalar(localtime(time)));
+    $self->putsql("PRAGMA SCHEMA_VERSION=$SCHEMA_VERSION;");
+    $self->putsql("PRAGMA foreign_keys = ON;");
+    $self->putsql("PRAGMA recursive_triggers = TRUE;");
+	$opt{DEBUG} and sleep 3; # Allow for debugger break 
+    for my $table(sort keys %DBINFO){ # Note: $table is UPPER-CASE only(in data)
+      if ($self->{DROPTABLES}){
+          $opt{DEBUG} and print "--DEBUG: Dropping indexes for $table.\n";
+          my @index_names = $DBINFO{$table}{CREATE} =~/CREATE\s+\w*\s*INDEX .+\s(\w+)\s+ON\s+\w+\s+\(/ig;
+          $opt{DEBUG} and print "--DEBUG: Dropping @index_names\n";  
+          $self->putsql("DROP INDEX IF EXISTS $_;") for @index_names;
+          $self->putsql("DROP TABLE IF EXISTS $table;") if $DBINFO{$table}{DROPPABLE};
+
+          my $field_count = 999; # Prevent this from  looping
+          while ($DBINFO{$table}{CREATE}=~/(\w+)\s+(\w+).*$/mg){
+               if (uc($2) eq "TEXT"){
+                  $self->{VALUE_QUOTER}{$table}{uc $1} = sub{defined $_[0] ? return "'$_[0]'" : return 'NULL'};
+                  $opt{DEBUG} and print "-- Table \[$table] field ($1) created TEXT sub ",uc($1),"\n";
+               }elsif (uc($2) eq "INTEGER"){
+                  $self->{VALUE_QUOTER}{$table}{uc $1} = sub{defined $_[0] ? return $_[0] : return 'NULL'};
+                  $opt{DEBUG} and print "-- Table \[$table] field ($1) created INTEGER sub ",uc($1),"\n";
+               }
+               last if $field_count-- < 0;
+          } 
+      }
+      $self->putsql ($DBINFO{$table}{CREATE});
+    }
+    $self->putsql(DB_Views());
+    my $t = time();
+    $self->putlog($_,7,$t) for (
+         "--STARTUP --",
+         "PROG_VERSION $VERSION",
+         "SCHEMA_VERSION $SCHEMA_VERSION",
+         "LOCALHOST $opt{LOCALHOST}",
+         "USER " .($ENV{USER}||$ENV{USERNAME}),
+         "DATE " .  $opt{STARTTIME}->ymd() . " ". $opt{STARTTIME}->hms()
+         );
+    for (sort keys %opt){
+        my $val = defined ($opt{$_})? $opt{$_} : "*Not Defined*";
+        ref $val eq "ARRAY" and $val = join(",", @$val);
+        $_=~/\bpassword|AP\b/i and $val="*****";
+        $self->putlog("PROG_OPTION $_=$val",7,$t) ;
+    }
+    # Note - tricky SQLITE date function call below - funny quoting required, to fool 'putlog'
+    $self->putlog("Database Population start '||datetime('now')||'",4, q|strftime('%s','now')|);
+    return $self;
+  }
+  
+###############################################################################
+sub putsql{
+  my ($self,$txt) = @_;
+  defined $txt or return;
+  #print $sqlf "$txt\n";
+  $self->{OUTPUTOBJ}->send ($txt) ; # SEND will append the "\n"
+  $self->{SQLOUTPUTRECORDCOUNT}++;
+}
+###############################################################################
+sub putlog{
+  my ($self, $txt,$level, $unixtime) = @_;
+    defined $txt or return;
+  $level ||=7; # Info
+  $unixtime ||= time();
+  $self->putsql("INSERT INTO LOG (timestamp,level,message) VALUES("
+       . $unixtime .",$level,'$txt');" );
+}
+1;  
+} # End of package DatabaseClass
+###############################################################################
 ##########################################################################################################
 BEGIN{
 package Tablet;
@@ -296,7 +487,7 @@ if ( $opt{YBA_HOST} =~m{^(http\w?://)}i ){
 }
 
 sub Get{
-    my ($self, $endpoint, $base) = @_;
+    my ($self, $endpoint, $base, $raw) = @_;
     $self->{json_string}= "";
     my $url = $base ? $self->{$base} : $self->{BASE_URL_API_CUSTOMER};
     if ($self->{HTTPCONNECT} eq "curl"){
@@ -313,6 +504,9 @@ sub Get{
           return {error=> $self->{raw_response}->{status}};
        }
        $self->{json_string} = $self->{raw_response}{content};
+    }
+	if ($raw){
+       return $self->{response} = $self->{json_string}; # Do not decode
     }
     $self->{response} = JSON::Tiny::decode_json( $self->{json_string} );
     return $self->{response};
