@@ -1,11 +1,11 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.03";
+our $VERSION = "0.04";
 my $HELP_TEXT = << "__HELPTEXT__";
-    moses.pl  Version $VERSION
-    ===============
+    It's a me, moses.pl  Version $VERSION
+               ========
  Get and analyze info on all tablets in the system.
- collect gzipped JSON file for offline analysis
+ Collect gzipped SQL file for offline analysis, or analyze right here.
 
 __HELPTEXT__
 use strict;
@@ -21,10 +21,11 @@ use HTTP::Tiny;
  package JSON::Tiny;
  package OutputMechanism;
  package DatabaseClass;
-}; # Pre-declare 
+}; # Pre-declare local modules 
 
 my %opt = (
    STARTTIME            => scalar (Time::Piece::->localtime()),
+   CURRENT_TIME         => scalar (Time::Piece::->localtime()),
    DEBUG                => 0,
    HELP                 => 0,
    LOCALHOST            => ($ENV{HOSTNAME} || do{chomp(local $_=qx|hostname|); $_}),
@@ -36,13 +37,33 @@ my %opt = (
    HTTPCONNECT          => 'tiny',
    CURL                 => 'curl',
    UNIVERSE             => undef,
+   TO_STDOUT            => 0,
+   SQLFILENAME          => undef,
+   GZIP                 => 1,
+   DBFILE               => undef,
+   SQLITE               => "/usr/bin/sqlite3",
+   DROPTABLES           => 1,
 );
 
 #---- Start ---
-my ($YBA_API);
+my ($YBA_API, $OutputObject, $db);
+print  TimeDelta($opt{STARTTIME}->ymd() . " : Moses version $VERSION \@$opt{LOCALHOST} starting tablet info..."), "\n";
 Initialize();
 
 Get_and_Parse_tablets_from_tserver();
+
+#---- Wrapup code -----
+$db->putlog (TimeDelta("$OutputObject->{recordcount} SQL stmts generated"));
+
+#$db->Insert_Post_Population_SQL();
+$db->putlog(TimeDelta("Database Population completed after ", $opt{STARTTIME}));
+    # Note - tricky SQLITE date function call below - funny quoting required, to fool 'putlog'
+$db->putlog("Database Population completed '||datetime('now')||'",4, q|strftime('%s','now')|);
+
+$OutputObject->close();
+my $finalfile = $opt{SQLFILENAME} || $opt{DBFILE} || "STDOUT";
+print TimeDelta("COMPLETED. '$finalfile' Created (with " . $OutputObject->{recordcount}
+                ." SQL stmts)" , $opt{STARTTIME}),"\n";
 
 exit 0;
 #----------------------------------------------------------------------------------------------
@@ -54,8 +75,9 @@ sub Get_and_Parse_tablets_from_tserver{
          print "-- Node $n->{nodeName} $n->{nodeUuid} is $n->{state} .. skipping\n";
          next;
       }
-
-      print "-- Processing tablets on $n->{nodeName} $n->{nodeUuid} (Idx $n->{nodeIdx})...\n";
+      my $notifyTime = time(); 
+	  my $tabletCount = 0;
+      print TimeDelta("Processing tablets on $n->{nodeName} $n->{nodeUuid} (Idx $n->{nodeIdx})..."),"\n";
       my $html_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/tablets?raw","BASE_URL_UNIVERSE",1); # RAW
       my $row   = 0;
       my $html  = HTML::TagParser->new( $html_raw );
@@ -63,21 +85,27 @@ sub Get_and_Parse_tablets_from_tserver{
       #  <tr><th>Namespace</th><th>Table name</th><th>Table UUID</th><th>Tablet ID</th><th>Partition</th><th>State</th>
       #      <th>Hidden</th><th>Num SST Files</th><th>On-disk size</th><th>RaftConfig</th><th>Last status</th></tr>
       my $tr = my $header= $table->firstChild();  # Header row
-      Tablet::->SetFieldNames( map {$_->innerText() } @{$header->childNodes()} );
-      
-      
+      Tablet::->SetFieldNames( my @fields = map {$_->innerText() } @{$header->childNodes()} );
+      $db->CreateTable("TABLET", 'node_uuid',map {tr/ -/__/; $_} @fields); # Need to flatten... 
+      $db->putsql("BEGIN TRANSACTION;");
+    
       my (@tabs, %leaders);
       while ( $tr = $tr->nextSibling() ){
       	my $t =  Tablet::->new($tr);
-      	#$t->Print();
-      	#print "\n";
-      	#last if $row++ > 5;
+        $tabletCount++;
+
       	$leaders{$t->{RAFTCONFIG}{LEADER}} ++;
-      	push @tabs, $t;
+        $db->Insert_Tablet($t, $n->{nodeUuid});
+        #push @tabs, $t;
+        if ((time() - $notifyTime) > 10) {
+           $notifyTime = time();
+           print "-- ",Time::Piece::->new($notifyTime)->hms," $tabletCount tablets processed\n";
+        }
       }
       
-      print "Found ",scalar(@tabs)," tablets\n";
-      print "$leaders{$_}\t tablets on leader $_\n" for sort keys %leaders;
+      $db->putsql("END TRANSACTION;");
+      print TimeDelta("Found $tabletCount tablets on $n->{nodeName}"),"\n";
+      print "$leaders{$_}\t leaders  on $_\n" for sort keys %leaders;
   }
 
 }
@@ -85,10 +113,10 @@ sub Get_and_Parse_tablets_from_tserver{
 
 #----------------------------------------------------------------------------------------------
 sub Initialize{
-    print "-- ",$opt{STARTTIME}," Starting $0 version $VERSION  PID $$ on $opt{LOCALHOST}\n";
 
     GetOptions (\%opt, qw[DEBUG! HELP! VERSION!
                         API_TOKEN=s YBA_HOST=s UNIVERSE=s
+                        GZIP! SQLFILENAME=s TO_STDOUT! DBFILE=s SQLITE=s DROPTABLES!
                         HTTPCONNECT=s CURL=s]
                ) or die "ERROR: Invalid command line option(s). Try --help.";
     if ($opt{DEBUG}){
@@ -136,8 +164,8 @@ sub Initialize{
    $opt{DEBUG} and print "--DEBUG:UNIV: $_\t","=>",$opt{UNIV_DETAILS}{$_},"\n" for qw|name creationDate universeUUID version |;
   #my ($universe_name) =  $json_string =~m/,"name":"([^"]+)"/;
   if ($opt{UNIV_DETAILS}{name}){
-     print "--UNIVERSE: ", $opt{UNIV_DETAILS}{name}," on ", $opt{UNIV_DETAILS}{universeDetails}{clusters}[0]{userIntent}{providerType},
-           " ver ",$opt{UNIV_DETAILS}{universeDetails}{clusters}[0]{userIntent}{ybSoftwareVersion},"\n";
+     print TimeDelta(join("", "UNIVERSE: ", $opt{UNIV_DETAILS}{name}," on ", $opt{UNIV_DETAILS}{universeDetails}{clusters}[0]{userIntent}{providerType},
+           " ver ",$opt{UNIV_DETAILS}{universeDetails}{clusters}[0]{userIntent}{ybSoftwareVersion})),"\n";
   }else{
      die "ERROR: Universe info not found \n";
   }
@@ -147,10 +175,35 @@ sub Initialize{
   $opt{DEBUG} and print "--DEBUG:Master/Leader JSON:",$YBA_API->{json_string},". IP is ",$opt{MASTER_LEADER},".\n";
   my ($ml_node) = grep {$_->{private_ip} eq $opt{MASTER_LEADER}} @{ $opt{NODES} } or die "ERROR : No Master/Leader NODE found for $opt{MASTER_LEADER}";
   my $master_http_port = $opt{UNIV_DETAILS}{universeDetails}{communicationPorts}{masterHttpPort} or die "ERROR: Master HTTP port not found in univ JSON";
+  
+  #--- Initialize SQL output, create tables -----
+  if ($opt{DBFILE} and $opt{DBFILE} eq "1"){
+   ($opt{DBFILE} and $opt{DBFILE} eq "1") and $opt{DBFILE} = undef; # So we auto-generate the name
+   $opt{DBFILE} ||= join(".", $opt{STARTTIME}->ymd(),$opt{LOCALHOST},"tabletInfo","sqlite");
+  }
+  if ($opt{TO_STDOUT}){
+     $opt{GZIP}   and warn "--WARNING: UN-Setting GZIP because 'TO_STDOUT' is set.\n";
+     $opt{DBFILE} and die  "ERROR:DBFILE is not compatible with TO_STDOUT";
+     $opt{GZIP} = 0;
+  }elsif ($opt{DBFILE}){
+     $opt{GZIP} = 0;
+     $opt{SQLFILENAME} and die "ERROR:DBFILE is not compatible with SQLFILENAME";
+  }else{
+     $opt{SQLFILENAME} ||= join(".", $opt{STARTTIME}->ymd(),$opt{LOCALHOST},"replinfo","sql",
+                                 $opt{GZIP}?"gz":());
+  }
+  $OutputObject = OutputMechanism::->new (FILENAME=>  $opt{SQLFILENAME}, GZIP=>$opt{GZIP}, 
+                            TO_STDOUT=>$opt{TO_STDOUT}, DBFILE=>$opt{DBFILE}, 
+                            SQLITE=>$opt{SQLITE});
+  $db = DatabaseClass::->new(OUTPUTOBJ=>$OutputObject, DROPTABLES=>$opt{DROPTABLES});
+  
+  # Put Univ and node info into DB
+  $db->Insert_nodes($opt{NODES});
+  
   # Get dump_entities JSON from MASTER_LEADER
-  $opt{DEBUG} and print "--DEBUG:Getting Dump Entities...\n";  
+  $opt{DEBUG} and print TimeDelta("DEBUG:Getting Dump Entities..."),"\n";  
   $YBA_API->Get("/proxy/$ml_node->{private_ip}:$master_http_port/dump-entities","BASE_URL_UNIVERSE");
-  # Analyze & save $YBA_API->{json_string} 
+  # Analyze & save DUMP ENTITIES contained in  $YBA_API->{json_string} 
 }
 #----------------------------------------------------------------------------------------------
 sub Extract_nodes_From_Universe{
@@ -169,6 +222,29 @@ sub Extract_nodes_From_Universe{
     }
     return [@node];	
 }
+#----------------------------------------------------------------------------------------------
+sub TimeDelta{
+  my ($msg, $start_time) = @_;
+  
+  my $prev_time = $start_time || $opt{CURRENT_TIME};
+  $opt{CURRENT_TIME} = scalar (Time::Piece::->localtime());
+  my $delta = $opt{CURRENT_TIME} - $prev_time;
+
+  my $returnmsg = "-- " . $opt{CURRENT_TIME}->hms() . " " . $msg;
+  # The leading "--" is REQUIRED , because that makes this a SQL comment, and all output is SQL
+  return $returnmsg if $delta < 61;
+
+  if ($delta->can('pretty')){
+     return $returnmsg . " (after " . $delta->pretty() . ")";
+  }
+  if ($delta->can('hours')){
+     $returnmsg .=  sprintf('(after %02d:%02d:%02d)',$delta->hours, $delta->minutes % 60, $delta->seconds %60);
+  }else{
+     $returnmsg .= " after $delta seconds";
+  }
+  return   $returnmsg;
+}
+
 ###############################################################################
 ############### C L A S S E S                             #####################
 ###############################################################################
@@ -231,9 +307,9 @@ my %DBINFO =(
      __LOG__
      DROPPABLE => 0,
     },
-    NODE => { FIELDS => [qw|ipaddr macaddr nodes hfscreatetime systemid timestamp HOSTNAME ISSOURCEGRID|],
+    GRIDXX => { FIELDS => [qw|ipaddr macaddr nodes hfscreatetime systemid timestamp HOSTNAME ISSOURCEGRID|],
       CREATE=> <<"     __GRID__",
-       CREATE TABLE  IF NOT EXISTS node(
+       CREATE TABLE  IF NOT EXISTS xxxnode(
        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
        ipaddr TEXT NOT NULL,
        macaddr TEXT,
@@ -244,13 +320,11 @@ my %DBINFO =(
        HOSTNAME TEXT,
        ISSOURCEGRID INTEGER
        );
-       CREATE UNIQUE INDEX IF NOT EXISTS by_gridid ON GRID (id);
-       CREATE UNIQUE INDEX IF NOT EXISTS by_sysid  ON GRID (systemid);
      __GRID__
      DROPPABLE => 1,
     },TAABLE => {
        CREATE=><<"     __DOMAIN__",
-       CREATE TABLE  IF NOT EXISTS domain(
+       CREATE TABLE  IF NOT EXISTS xxxdomain(
        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
        gridid INTEGER NOT NULL REFERENCES GRID(id) ON DELETE CASCADE,
        name     TEXT NOT NULL,
@@ -258,9 +332,9 @@ my %DBINFO =(
        parentid INTEGER,
        CONTACTINFO TEXT
        );
-       CREATE UNIQUE INDEX IF NOT EXISTS by_domainid ON DOMAIN (id);  
-       CREATE UNIQUE INDEX IF NOT EXISTS by_gridid ON DOMAIN (gridid,id); 
-       CREATE UNIQUE INDEX IF NOT EXISTS by_domain_name ON DOMAIN (name,gridid);  
+       --CREATE UNIQUE INDEX IF NOT EXISTS by_domainid ON DOMAIN (id);  
+       --CREATE UNIQUE INDEX IF NOT EXISTS by_gridid ON DOMAIN (gridid,id); 
+       --CREATE UNIQUE INDEX IF NOT EXISTS by_domain_name ON DOMAIN (name,gridid);  
      __DOMAIN__
      DROPPABLE => 1,
     }, 
@@ -270,7 +344,7 @@ my %DBINFO =(
 
 sub new {
     my ($class,%att) = @_;
-    $opt{DEBUG} and print "--- Creating NEW DatabaseClass object\n";
+    $opt{DEBUG} and print "---DEBUG: Creating NEW DatabaseClass object\n";
     $class = ref $class if ref $class;
     $att{OUTPUTOBJ} or die "ERROR: OUTPUTOBJ attribute not specified";
 
@@ -280,7 +354,7 @@ sub new {
     $self->putsql("PRAGMA SCHEMA_VERSION=$SCHEMA_VERSION;");
     $self->putsql("PRAGMA foreign_keys = ON;");
     $self->putsql("PRAGMA recursive_triggers = TRUE;");
-	$opt{DEBUG} and sleep 3; # Allow for debugger break 
+    $opt{DEBUG} and sleep 3; # Allow for debugger break 
     for my $table(sort keys %DBINFO){ # Note: $table is UPPER-CASE only(in data)
       if ($self->{DROPTABLES}){
           $opt{DEBUG} and print "--DEBUG: Dropping indexes for $table.\n";
@@ -303,7 +377,7 @@ sub new {
       }
       $self->putsql ($DBINFO{$table}{CREATE});
     }
-    $self->putsql(DB_Views());
+    ##$self->putsql(DB_Views());
     my $t = time();
     $self->putlog($_,7,$t) for (
          "--STARTUP --",
@@ -340,6 +414,25 @@ sub putlog{
   $unixtime ||= time();
   $self->putsql("INSERT INTO LOG (timestamp,level,message) VALUES("
        . $unixtime .",$level,'$txt');" );
+}
+
+sub CreateTable{
+  my ($self,$name,@fields) = @_;
+  $self->putsql("CREATE TABLE IF NOT EXISTS $name (" .
+        join(",",@fields) . ");");
+}
+sub Insert_nodes{
+  my ($self,$nodes) = @_;
+$self->CreateTable("NODE", sort keys %{$nodes->[0]} );
+  for my $n(@$nodes){
+    $self->putsql("INSERT INTO NODE VALUES('" .
+                 join("','", map{$n->{$_}} sort keys %$n ). "');");
+  }
+}
+
+sub Insert_Tablet{
+  my ($self,$t,$node_uuid) = @_;
+  $self->putsql("INSERT into TABLET VALUES('$node_uuid'," . $t->GetFieldValuesAsQuotedString() . ");");
 }
 1;  
 } # End of package DatabaseClass
@@ -428,9 +521,18 @@ sub Print{
    }
    print "\n";
 }
+
 sub SetFieldNames{
-  my ($class,@names_raw) = @_;
+  my ($class,@names_raw, $db) = @_;
   @fields = map {tr/ //d; uc $_} @names_raw;
+  return unless $db;
+  $db->putsql("CREATE TABLE TABLET(" .
+    join(",",@fields) . ");");
+}
+
+sub GetFieldValuesAsQuotedString{
+  my ($self) = @_;
+  return join(",", map {"'". $self->{$_} . "'"} @fields);
 }
 1;
 } # End of Tablet
