@@ -11,8 +11,6 @@ __HELPTEXT__
 use strict;
 use warnings;
 use Getopt::Long;
-use Time::Piece;
-use Time::Seconds;
 use HTTP::Tiny;
 
 {
@@ -24,8 +22,9 @@ use HTTP::Tiny;
 }; # Pre-declare local modules 
 
 my %opt = (
-   STARTTIME            => scalar (Time::Piece::->localtime()),
-   CURRENT_TIME         => scalar (Time::Piece::->localtime()),
+   STARTTIME_PRINTABLE  => unixtime_to_printable(time(),"YYYY-MM-DD HH:MM","Include tz offset"),
+   STARTTIME            => time(),
+   CURRENT_TIME         => time(),
    DEBUG                => 0,
    HELP                 => 0,
    LOCALHOST            => ($ENV{HOSTNAME} || do{chomp(local $_=qx|hostname|); $_}),
@@ -43,11 +42,12 @@ my %opt = (
    DBFILE               => undef,
    SQLITE               => "/usr/bin/sqlite3",
    DROPTABLES           => 1,
+   TZOFFSET             => undef, # Set by unixtime_to_printable
 );
 
 #---- Start ---
 my ($YBA_API, $OutputObject, $db);
-print  TimeDelta($opt{STARTTIME}->ymd() . " : Moses version $VERSION \@$opt{LOCALHOST} starting tablet info..."), "\n";
+print  $opt{STARTTIME_PRINTABLE}, " : Moses version $VERSION \@$opt{LOCALHOST} starting ...", "\n";
 Initialize();
 
 Get_and_Parse_tablets_from_tservers();
@@ -75,7 +75,7 @@ sub Get_and_Parse_tablets_from_tservers{
          print "-- Node $n->{nodeName} $n->{nodeUuid} is $n->{state} .. skipping\n";
          next;
       }
-      my $notifyTime = time(); 
+
       my $tabletCount = 0;
       print TimeDelta("Processing tablets on $n->{nodeName} $n->{nodeUuid} (Idx $n->{nodeIdx})..."),"\n";
       my $html_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/tablets?raw","BASE_URL_UNIVERSE",1); # RAW
@@ -103,10 +103,6 @@ sub Get_and_Parse_tablets_from_tservers{
           $tabletCount++;
           $leaders{$t->{LEADER}} ++;
           $db->Insert_Tablet($t, $n->{nodeUuid});
-          if ((time() - $notifyTime) > 10) {
-             $notifyTime = time();
-             print "-- ",Time::Piece::->new($notifyTime)->hms," $tabletCount tablets processed\n";
-          }
       }
       close $f;
       $db->putsql("END TRANSACTION; -- tserver $n->{nodeName}");
@@ -187,7 +183,7 @@ sub Initialize{
   #--- Initialize SQL output, create tables -----
   if ($opt{DBFILE} and $opt{DBFILE} eq "1"){
    ($opt{DBFILE} and $opt{DBFILE} eq "1") and $opt{DBFILE} = undef; # So we auto-generate the name
-   $opt{DBFILE} ||= join(".", $opt{STARTTIME}->ymd(),$opt{LOCALHOST},"tabletInfo","sqlite");
+   $opt{DBFILE} ||= join(".", unixtime_to_printable($opt{STARTTIME},"YYYY-MM-DD"),$opt{LOCALHOST},"tabletInfo","sqlite");
   }
   if ($opt{TO_STDOUT}){
      $opt{GZIP}   and warn "--WARNING: UN-Setting GZIP because 'TO_STDOUT' is set.\n";
@@ -197,7 +193,7 @@ sub Initialize{
      $opt{GZIP} = 0;
      $opt{SQLFILENAME} and die "ERROR:DBFILE is not compatible with SQLFILENAME";
   }else{
-     $opt{SQLFILENAME} ||= join(".", $opt{STARTTIME}->ymd(),$opt{LOCALHOST},"replinfo","sql",
+     $opt{SQLFILENAME} ||= join(".", unixtime_to_printable($opt{STARTTIME},"YYYY-MM-DD"),$opt{LOCALHOST},"tabletInfo","sql",
                                  $opt{GZIP}?"gz":());
   }
   $OutputObject = OutputMechanism::->new (FILENAME=>  $opt{SQLFILENAME}, GZIP=>$opt{GZIP}, 
@@ -278,26 +274,39 @@ sub Extract_nodes_From_Universe{
     }
     return [@node];	
 }
+#------------------------------------------------------------------------------------------------
+sub unixtime_to_printable{
+	my ($unixtime,$format, $showTZ) = @_;
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($unixtime);
+	$opt{TZOFFSET} ||= do{my $tz = (localtime time)[8] * 60 - POSIX::mktime(gmtime 0) / 60;
+                                      	sprintf "%+03d:%02d", $tz / 60, abs($tz) % 60};
+	if (not defined $format  or  $format eq "YYYY-MM-DD HH:MM:SS"){
+       return sprintf("%04d-%02d-%02d %02d:%02d:%02d", $year+1900, $mon+1, $mday, $hour, $min, $sec)
+	        . ($showTZ? " " . $opt{TZOFFSET} : "");
+	}
+	if ($format eq "YYYY-MM-DD HH:MM"){
+       return sprintf("%04d-%02d-%02d %02d:%02d", $year+1900, $mon+1, $mday, $hour, $min)
+	          . ($showTZ? " " . $opt{TZOFFSET} : "");
+	}	
+	if ($format eq "YYYY-MM-DD"){
+		  return sprintf("%04d-%02d-%02d", $year+1900, $mon+1, $mday)
+		         . ($showTZ? " " . $opt{TZOFFSET} : "");
+	}
+	die "ERROR: Unsupported format:'$format' ";
+}
 #----------------------------------------------------------------------------------------------
 sub TimeDelta{
   my ($msg, $start_time) = @_;
   
   my $prev_time = $start_time || $opt{CURRENT_TIME};
-  $opt{CURRENT_TIME} = scalar (Time::Piece::->localtime());
+  $opt{CURRENT_TIME} = time();
   my $delta = $opt{CURRENT_TIME} - $prev_time;
 
-  my $returnmsg = "-- " . $opt{CURRENT_TIME}->hms() . " " . $msg;
+  my $returnmsg = "-- " . unixtime_to_printable($opt{CURRENT_TIME}) . " " . $msg;
   # The leading "--" is REQUIRED , because that makes this a SQL comment, and all output is SQL
   return $returnmsg if $delta < 61;
 
-  if ($delta->can('pretty')){
-     return $returnmsg . " (after " . $delta->pretty() . ")";
-  }
-  if ($delta->can('hours')){
-     $returnmsg .=  sprintf('(after %02d:%02d:%02d)',$delta->hours, $delta->minutes % 60, $delta->seconds %60);
-  }else{
-     $returnmsg .= " after $delta seconds";
-  }
+  $returnmsg .= " after " . sprintf("%d minutes %d seconds",$delta / 60, $delta % 60);
   return   $returnmsg;
 }
 
@@ -441,7 +450,7 @@ sub new {
          "SCHEMA_VERSION $SCHEMA_VERSION",
          "LOCALHOST $opt{LOCALHOST}",
          "USER " .($ENV{USER}||$ENV{USERNAME}),
-         "DATE " .  $opt{STARTTIME}->ymd() . " ". $opt{STARTTIME}->hms()
+         "DATE " .  main::unixtime_to_printable(time())
          );
     for (sort keys %opt){
         my $val = defined ($opt{$_})? $opt{$_} : "*Not Defined*";
