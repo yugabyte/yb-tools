@@ -1,17 +1,23 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.06";
+our $VERSION = "0.07";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
  Get and analyze info on all tablets in the system.
  Collect gzipped SQL file for offline analysis, or analyze right here.
-
+ 
+ Run options:
+   --YBA_HOST         [=] <YBA hostname or IP> (Required)
+   --API_TOKEN        [=] <API access token>   (Required)
+   --UNIVERSE         [=] <Universe Name>  (Required. Can be partial, sufficient to be Unique)
+   --HTTPCONNECT      [=] [curl | tiny]    (Optional. Whether to use 'curl' or HTTP::Tiny(Default))
 __HELPTEXT__
 use strict;
 use warnings;
 use Getopt::Long;
 use HTTP::Tiny;
+use POSIX;
 
 {
  package Tablet;
@@ -133,9 +139,6 @@ sub Initialize{
     }
     if ($opt{HELP}){
       warn $HELP_TEXT;
-      warn "\n  --RUN Options:\n",
-          map({"      $_ (@{$DatabaseClass::view_names{$_}{ALT}}): $DatabaseClass::view_names{$_}{TEXT}\n "} 
-              grep {$DatabaseClass::view_names{$_}} sort keys %DatabaseClass::view_names), "\n";
       exit 0;
     }
     $opt{VERSION} and exit 1; # Version request already fulfilled.
@@ -184,7 +187,7 @@ sub Initialize{
   #--- Initialize SQL output, create tables -----
   if ($opt{DBFILE} and $opt{DBFILE} eq "1"){
    ($opt{DBFILE} and $opt{DBFILE} eq "1") and $opt{DBFILE} = undef; # So we auto-generate the name
-   $opt{DBFILE} ||= join(".", unixtime_to_printable($opt{STARTTIME},"YYYY-MM-DD"),$opt{LOCALHOST},"tabletInfo","sqlite");
+   $opt{DBFILE} ||= join(".", unixtime_to_printable($opt{STARTTIME},"YYYY-MM-DD"),$opt{LOCALHOST},"tabletInfo",$opt{UNIV_DETAILS}{name},"sqlite");
   }
   if ($opt{TO_STDOUT}){
      $opt{GZIP}   and warn "--WARNING: UN-Setting GZIP because 'TO_STDOUT' is set.\n";
@@ -194,8 +197,8 @@ sub Initialize{
      $opt{GZIP} = 0;
      $opt{SQLFILENAME} and die "ERROR:DBFILE is not compatible with SQLFILENAME";
   }else{
-     $opt{SQLFILENAME} ||= join(".", unixtime_to_printable($opt{STARTTIME},"YYYY-MM-DD"),$opt{LOCALHOST},"tabletInfo","sql",
-                                 $opt{GZIP}?"gz":());
+     $opt{SQLFILENAME} ||= join(".", unixtime_to_printable($opt{STARTTIME},"YYYY-MM-DD"),$opt{LOCALHOST},"tabletInfo",
+                                $opt{UNIV_DETAILS}{name},"sql", $opt{GZIP}?"gz":());
   }
   $OutputObject = OutputMechanism::->new (FILENAME=>  $opt{SQLFILENAME}, GZIP=>$opt{GZIP}, 
                             TO_STDOUT=>$opt{TO_STDOUT}, DBFILE=>$opt{DBFILE}, 
@@ -204,6 +207,8 @@ sub Initialize{
   
   # Put Univ and node info into DB
   $db->Insert_nodes($opt{NODES});
+  $db->CreateTable("gflags",qw|type key  value|);
+  Extract_gflags_and_Region_info($opt{UNIV_DETAILS});
   
   # Extract Region info from nodes and store it
   
@@ -287,6 +292,35 @@ sub Extract_nodes_From_Universe{
     return [@node];	
 }
 #------------------------------------------------------------------------------------------------
+sub Extract_gflags_and_Region_info{
+	my ($univ_hash) = @_;
+	for my $k (qw|universeName provider providerType replicationFactor numNodes ybSoftwareVersion enableYCQL
+             	enableYSQL enableYEDIS nodePrefix |){
+	   next unless defined ( my $v= $univ_hash->{universeDetails}{clusters}[0]{userIntent}{$k} );
+	   $db->putsql("INSERT INTO gflags VALUES ('CLUSTER','$k','$v');");
+	}
+	for my $flagtype (qw|masterGFlags tserverGFlags |){
+	   next unless my $flag = $univ_hash->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
+	   for my $k(sort keys %$flag){
+		  my $v = $flag->{$k}; 
+	      $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
+	   }
+	}
+	my $self; # Deal with fixing this later ... 
+	for my $region (@{ $univ_hash->{universeDetails} {clusters} [0]{placementInfo}{cloudList}[0]{regionList} }){
+		my $preferred = 0;
+		my $az_node_count = 0;
+		for my $az ( @{ $region->{azList} } ){
+			$az->{isAffinitized} and $preferred++;
+			$az_node_count += $az->{numNodesInAZ};
+		}
+		$self->{REGION}{$region->{name}}{PREFERRED}     = $preferred;
+		$self->{REGION}{$region->{name}}{UUID}          = $region->{uuid};
+		$self->{REGION}{$region->{name}}{AZ_NODE_COUNT} = $az_node_count;
+		$opt{DEBUG} and print "--DEBUG:REGION $region->{name}: PREFERRED=$preferred, $az_node_count nodes, $region->{uuid}.\n";
+	}
+}
+#------------------------------------------------------------------------------------------------
 sub unixtime_to_printable{
 	my ($unixtime,$format, $showTZ) = @_;
 	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($unixtime);
@@ -299,9 +333,13 @@ sub unixtime_to_printable{
 	if ($format eq "YYYY-MM-DD HH:MM"){
        return sprintf("%04d-%02d-%02d %02d:%02d", $year+1900, $mon+1, $mday, $hour, $min)
 	          . ($showTZ? " " . $opt{TZOFFSET} : "");
-	}	
+	}
 	if ($format eq "YYYY-MM-DD"){
 		  return sprintf("%04d-%02d-%02d", $year+1900, $mon+1, $mday)
+		         . ($showTZ? " " . $opt{TZOFFSET} : "");
+	}
+	if ($format eq "HMS"){
+		  return sprintf("%02d:%02d:%02d", $hour,$min,$sec)
 		         . ($showTZ? " " . $opt{TZOFFSET} : "");
 	}
 	die "ERROR: Unsupported format:'$format' ";
@@ -314,7 +352,7 @@ sub TimeDelta{
   $opt{CURRENT_TIME} = time();
   my $delta = $opt{CURRENT_TIME} - $prev_time;
 
-  my $returnmsg = "-- " . unixtime_to_printable($opt{CURRENT_TIME}) . " " . $msg;
+  my $returnmsg = "-- " . unixtime_to_printable($opt{CURRENT_TIME},"HMS") . " " . $msg;
   # The leading "--" is REQUIRED , because that makes this a SQL comment, and all output is SQL
   return $returnmsg if $delta < 61;
 
@@ -705,12 +743,12 @@ if ( $opt{YBA_HOST} =~m{^(http\w?://)}i ){
           return $self;
     }
     if ($self->{HTTP_PREFIX}=~/^https/i){
-       my ($ok, $why) = HTTP::Tiny->can_ssl();
-       if (not $ok){
-          print "ERROR: HTTPS requested , but perl modules are insufficient:\n$why\n";
-          print "You can avoid this error, if you use the (less efficient) '--HTTPCONNECT=curl' option\n";
-          die "ERROR: HTTP::Tiny module dependencies not satisfied for HTTPS.";
-       }           
+       my ($ok, $why) = eval { HTTP::Tiny->can_ssl() };
+       if ($@ or not $ok){
+             print "--WARNING: HTTP::Tiny does not support SSL.  Switching to curl.\n:";
+             $opt{HTTPCONNECT} = "curl";
+             return $class->new(); # recurse
+       }
     }
     $self->{HT} = HTTP::Tiny->new( default_headers => {
                          'X-AUTH-YW-API-TOKEN' => $opt{API_TOKEN},
