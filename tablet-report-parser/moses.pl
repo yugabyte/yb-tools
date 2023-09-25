@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.05";
+our $VERSION = "0.06";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
@@ -56,9 +56,10 @@ Get_and_Parse_tablets_from_tservers();
 $db->putlog (TimeDelta("$OutputObject->{recordcount} SQL stmts generated"));
 
 #$db->Insert_Post_Population_SQL();
-$db->putlog(TimeDelta("Database Population completed after ", $opt{STARTTIME}));
+$db->putlog(TimeDelta("Database Population completed in " . (time() -  $opt{STARTTIME}) . " sec."));
     # Note - tricky SQLITE date function call below - funny quoting required, to fool 'putlog'
 $db->putlog("Database Population completed '||datetime('now')||'",4, q|strftime('%s','now')|);
+$db->Create_Views();
 
 $OutputObject->close();
 my $finalfile = $opt{SQLFILENAME} || $opt{DBFILE} || "STDOUT";
@@ -72,12 +73,12 @@ sub Get_and_Parse_tablets_from_tservers{
   for my $n (@{ $opt{NODES} }){
       next unless $n->{isTserver};
       if ( $n->{state} ne  'Live'){
-         print "-- Node $n->{nodeName} $n->{nodeUuid} is $n->{state} .. skipping\n";
+         print "-- Node $n->{nodeName} $n->{Tserver_UUID} is $n->{state} .. skipping\n";
          next;
       }
 
       my $tabletCount = 0;
-      print TimeDelta("Processing tablets on $n->{nodeName} $n->{nodeUuid} (Idx $n->{nodeIdx})..."),"\n";
+      print TimeDelta("Processing tablets on $n->{nodeName} $n->{Tserver_UUID} (Idx $n->{nodeIdx})..."),"\n";
       my $html_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/tablets?raw","BASE_URL_UNIVERSE",1); # RAW
 
       # Open the html text as a file . Read it using "</tr>\n" as the line ending, to get one <tr>(tablet) at a time 
@@ -102,20 +103,20 @@ sub Get_and_Parse_tablets_from_tservers{
           my $t = Tablet::->new_from_tr($_);
           $tabletCount++;
           $leaders{$t->{LEADER}} ++;
-          $db->Insert_Tablet($t, $n->{nodeUuid});
+          $db->Insert_Tablet($t, $n->{Tserver_UUID});
       }
       close $f;
       $db->putsql("END TRANSACTION; -- tserver $n->{nodeName}");
-	  $db->putlog("Found $tabletCount tablets on $n->{nodeName}");
-      print TimeDelta("Found $tabletCount tablets on $n->{nodeName}"),"\n";
-      print "$leaders{$_}\t leaders  on $_\n" for sort keys %leaders;
+	  $db->putlog("Found $tabletCount tablets on $n->{nodeName}:"
+	       . join (", ",map{ " $leaders{$_} leaders  on $_" } sort keys %leaders));
+      print TimeDelta("Found $tabletCount tablets on $n->{nodeName}:"
+         . join (", ",map{ " $leaders{$_} leaders  on $_" } sort keys %leaders)),"\n";
   }
   
   $db->putsql("CREATE UNIQUE INDEX tablet_idx ON tablet (node_uuid,tablet_uuid);");
 }
 #----------------------------------------------------------------------------------------------
 
-#----------------------------------------------------------------------------------------------
 sub Initialize{
 
     GetOptions (\%opt, qw[DEBUG! HELP! VERSION!
@@ -204,6 +205,8 @@ sub Initialize{
   # Put Univ and node info into DB
   $db->Insert_nodes($opt{NODES});
   
+  # Extract Region info from nodes and store it
+  
   # Get dump_entities JSON from MASTER_LEADER
   $opt{DEBUG} and print TimeDelta("DEBUG:Getting Dump Entities..."),"\n";  
   my $entities = $YBA_API->Get("/proxy/$ml_node->{private_ip}:$master_http_port/dump-entities","BASE_URL_UNIVERSE");
@@ -240,6 +243,8 @@ sub Handle_ENTITIES_Data{
 		       . join("','", $t->{table_id}, $t->{keyspace_id},  $t->{table_name}, $t->{state})
 			   . "');");
 	}
+	
+	my %node_by_ip;
     for my $t (@{ $bj->{tablets} }){
 	 	my $replicas = $t->{replicas} ; # AOH
 	 	my $l        = $t->{leader} || "";
@@ -247,12 +252,19 @@ sub Handle_ENTITIES_Data{
 		   $db->putsql( "INSERT INTO ent_tablets VALUES('"
 		       . join("','", $t->{tablet_id}, $t->{table_id}, $t->{state}, $r->{type}, $r->{server_uuid},$r->{addr},$l )
 			   . "');");
+           my ($node_ip) = $r->{addr} =~/([\d\.]+)/ or next;
+           next if $node_by_ip{$node_ip}; # Already setup 
+           $node_by_ip{$node_ip} = $r->{server_uuid}; # Tserver UUID 
 		}
 	}
 	$opt{DEBUG} and printf "--DEBUG: %d Keyspaces, %d tables, %d tablets\n", 
 	                     scalar(@{ $bj->{keyspaces} }),scalar(@{ $bj->{tables} }), scalar(@{ $bj->{tablets} });
-    # Fixup Node UUIDs : These are not in the Universe JSON - so we update from tablets 
-	$db->putsql( "UPDATE NODE "
+    
+    # Fixup Node UUIDs : The ones in the Universe JSON are useless - so we update from tablets with TSERVER uuid 
+    for my $n (@{ $opt{NODES} }){
+       $n->{Tserver_UUID} = $node_by_ip{$n->{private_ip}}; # update in-mem info
+    }
+    $db->putsql( "UPDATE NODE "
                . "SET nodeUuid=(select server_uuid FROM ent_tablets "
                . "WHERE  substr(addr,1,instr(addr,\":\")-1) = private_ip limit 1);\n");
     $db->putsql("END TRANSACTION; -- Entities");
@@ -499,6 +511,56 @@ sub Insert_Tablet{
   my ($self,$t,$node_uuid) = @_;
   $self->putsql("INSERT into TABLET VALUES('$node_uuid'," . 
                 $t->Get_csv_quoted_values() . ");");
+}
+
+sub Create_Views{
+  my ($self) = @_;
+  $self->putsql(<<"__SQL__");
+  CREATE VIEW version_info AS 
+    SELECT '$0' as program, '$VERSION' as version, '$opt{STARTTIME_PRINTABLE}' AS run_on, '$opt{LOCALHOST}' as host;
+
+  CREATE VIEW tablets_per_node AS 
+    SELECT node_uuid,min(public_ip) as node_ip,min(region ) as region,  count(*) as tablet_count,
+           sum(CASE WHEN private_ip = leader THEN 1 ELSE 0 END) as leaders,
+           count(DISTINCT table_name) as table_count
+	FROM tablet,node 
+	WHERE isTserver  and node.nodeuuid=node_uuid 
+	GROUP BY node_uuid
+	ORDER BY tablet_count;
+
+  CREATE VIEW tablet_replica_detail AS
+    SELECT t.namespace,t.table_name,t.table_uuid,t.tablet_uuid,
+	count(DISTINCT LEADER) as leader_count, count(*) as replicas
+	from tablet t
+	GROUP BY t.namespace,t.table_name,t.table_uuid,t.tablet_uuid;
+
+  CREATE VIEW tablet_replica_summary AS
+     SELECT replicas,count(*) as tablet_count FROM  tablet_replica_detail GROUP BY replicas;
+
+  CREATE VIEW leaderless AS 
+     SELECT t.tablet_uuid, replicas,t.namespace,t.table_name,node_uuid,private_ip ,leader_count
+	 from tablet t,node ,tablet_replica_detail trd
+	 WHERE  node.isTserver  AND nodeuuid=node_uuid
+	       AND  t.tablet_uuid=trd.tablet_uuid  
+		   AND trd.leader_count !=1;
+
+  CREATE VIEW delete_leaderless_be_careful AS 
+    SELECT '\$HOME/tserver/bin/yb-ts-cli delete_tablet '|| tablet_uuid ||' -certs_dir_name \$TLSDIR -server_address '||private_ip ||':9100  \$REASON_tktnbr'
+	   AS generated_delete_command
+     FROM leaderless;
+
+--  Based on  yb-ts-cli unsafe_config_change <tablet_id> <peer1> (undocumented)
+--  https://phorge.dev.yugabyte.com/D12312
+  CREATE VIEW UNSAFE_Leader_create AS
+        SELECT  '\$HOME/tserver/bin/yb-ts-cli --server_address='|| private_ip ||':'||tserverrpcport 
+        || ' unsafe_config_change ' || t.tablet_uuid
+		|| ' ' || node_uuid
+		|| ' -certs_dir_name \$TLSDIR;sleep 30;' AS cmd_to_run
+	 from tablet t,node ,tablet_replica_detail trd
+	 WHERE  node.isTserver  AND nodeuuid=node_uuid
+	       AND  t.tablet_uuid=trd.tablet_uuid  
+		   AND trd.leader_count !=1;
+__SQL__
 }
 1;  
 } # End of package DatabaseClass
