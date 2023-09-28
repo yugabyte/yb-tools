@@ -1,17 +1,22 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.07";
+our $VERSION = "0.08";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
  Get and analyze info on all tablets in the system.
- Collect gzipped SQL file for offline analysis, or analyze right here.
+ By default, output will be piped to sqlite3 to create a sqlite3 database,
+ and run default reports.
  
  Run options:
    --YBA_HOST         [=] <YBA hostname or IP> (Required)
    --API_TOKEN        [=] <API access token>   (Required)
    --UNIVERSE         [=] <Universe Name>  (Required. Can be partial, sufficient to be Unique)
+   --GZIP             (Use this if you want to create a sql.gz for export, instead of a sqlite DB)
+   **ADVANCED options**
    --HTTPCONNECT      [=] [curl | tiny]    (Optional. Whether to use 'curl' or HTTP::Tiny(Default))
+   
+    If STDOUT is redirected, it can be sent to  a SQL file, or gzipped, and collected for offline analysis.
 __HELPTEXT__
 use strict;
 use warnings;
@@ -23,7 +28,6 @@ use POSIX;
  package Tablet;
  package Web::Interface;
  package JSON::Tiny;
- package OutputMechanism;
  package DatabaseClass;
 }; # Pre-declare local modules 
 
@@ -42,35 +46,34 @@ my %opt = (
    HTTPCONNECT          => 'tiny',
    CURL                 => 'curl',
    UNIVERSE             => undef,
-   TO_STDOUT            => 0,
-   SQLFILENAME          => undef,
-   GZIP                 => 1,
-   DBFILE               => undef,
+   DBFILE               => undef, # Name of the output sqlite DB file 
    SQLITE               => "/usr/bin/sqlite3",
+   GZIP                 => 0,
    DROPTABLES           => 1,
    TZOFFSET             => undef, # Set by unixtime_to_printable
+   AUTORUN_SQLITE       => -t STDOUT , # If STDOUT is NOT redirected, we automatically run sqlite3
+   STATUS_MSG_TO_STDERR => 0,
 );
 
 #---- Start ---
-my ($YBA_API, $OutputObject, $db);
-print  $opt{STARTTIME_PRINTABLE}, " : Moses version $VERSION \@$opt{LOCALHOST} starting ...", "\n";
+my ($YBA_API,$SQL_OUTPUT_FH, $db);
+warn "-- ", $opt{STARTTIME_PRINTABLE}, " : Moses version $VERSION \@$opt{LOCALHOST} starting ...", "\n";
 Initialize();
 
 Get_and_Parse_tablets_from_tservers();
 
 #---- Wrapup code -----
-$db->putlog (TimeDelta("$OutputObject->{recordcount} SQL stmts generated"));
+$db->putlog (TimeDelta("$db->{SQLOUTPUTRECORDCOUNT} SQL stmts generated"));
 
 #$db->Insert_Post_Population_SQL();
 $db->putlog(TimeDelta("Database Population completed in " . (time() -  $opt{STARTTIME}) . " sec."));
     # Note - tricky SQLITE date function call below - funny quoting required, to fool 'putlog'
-$db->putlog("Database Population completed '||datetime('now')||'",4, q|strftime('%s','now')|);
+$db->putlog("Database Population (SQL loading) completed (UTC)'||datetime('now')||'",4, q|strftime('%s','now')|);
 $db->Create_Views();
+$SQL_OUTPUT_FH and close ($SQL_OUTPUT_FH);
 
-$OutputObject->close();
-my $finalfile = $opt{SQLFILENAME} || $opt{DBFILE} || "STDOUT";
-print TimeDelta("COMPLETED. '$finalfile' Created (with " . $OutputObject->{recordcount}
-                ." SQL stmts)" , $opt{STARTTIME}),"\n";
+warn TimeDelta("COMPLETED. '$opt{DBFILE}' Created " , $opt{STARTTIME}),"\n";
+$opt{DBFILE}=~/sqlite$/ and warn "\t RUN: sqlite3 -header -column $opt{DBFILE}\n";
 
 exit 0;
 #----------------------------------------------------------------------------------------------
@@ -79,12 +82,12 @@ sub Get_and_Parse_tablets_from_tservers{
   for my $n (@{ $opt{NODES} }){
       next unless $n->{isTserver};
       if ( $n->{state} ne  'Live'){
-         print "-- Node $n->{nodeName} $n->{Tserver_UUID} is $n->{state} .. skipping\n";
+         warn "-- Node $n->{nodeName} $n->{Tserver_UUID} is $n->{state} .. skipping\n";
          next;
       }
 
       my $tabletCount = 0;
-      print TimeDelta("Processing tablets on $n->{nodeName} $n->{Tserver_UUID} (Idx $n->{nodeIdx})..."),"\n";
+      print "SELECT '", TimeDelta("Processing tablets on $n->{nodeName} $n->{Tserver_UUID} (Idx $n->{nodeIdx})..."),"';\n";
       my $html_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/tablets?raw","BASE_URL_UNIVERSE",1); # RAW
 
       # Open the html text as a file . Read it using "</tr>\n" as the line ending, to get one <tr>(tablet) at a time 
@@ -115,8 +118,8 @@ sub Get_and_Parse_tablets_from_tservers{
       $db->putsql("END TRANSACTION; -- tserver $n->{nodeName}");
 	  $db->putlog("Found $tabletCount tablets on $n->{nodeName}:"
 	       . join (", ",map{ " $leaders{$_} leaders  on $_" } sort keys %leaders));
-      print TimeDelta("Found $tabletCount tablets on $n->{nodeName}:"
-         . join (", ",map{ " $leaders{$_} leaders  on $_" } sort keys %leaders)),"\n";
+      print "SELECT '",TimeDelta("Found $tabletCount tablets on $n->{nodeName}:"
+         . join (", ",map{ " $leaders{$_} leaders  on $_" } sort keys %leaders)),"';\n";
   }
   
   $db->putsql("CREATE UNIQUE INDEX tablet_idx ON tablet (node_uuid,tablet_uuid);");
@@ -127,7 +130,7 @@ sub Initialize{
 
     GetOptions (\%opt, qw[DEBUG! HELP! VERSION!
                         API_TOKEN=s YBA_HOST=s UNIVERSE=s
-                        GZIP! SQLFILENAME=s TO_STDOUT! DBFILE=s SQLITE=s DROPTABLES!
+                        GZIP! DBFILE=s SQLITE=s GZIP! DROPTABLES!
                         HTTPCONNECT=s CURL=s]
                ) or die "ERROR: Invalid command line option(s). Try --help.";
     if ($opt{DEBUG}){
@@ -158,6 +161,7 @@ sub Initialize{
       $opt{DEBUG} and print "--DEBUG: Universe: $u->{name}\t $u->{universeUUID}\n";
       if ($opt{UNIVERSE}  and  $u->{name} =~/$opt{UNIVERSE}/i){
          print "-- Selected Universe $u->{name}\t $u->{universeUUID}\n";
+		 $opt{STATUS_MSG_TO_STDERR} and warn "-- Selected Universe $u->{name}\t $u->{universeUUID}\n";
          $YBA_API->Set_Value("UNIV_UUID",$u->{universeUUID});
          last;
       }
@@ -184,26 +188,10 @@ sub Initialize{
   my ($ml_node) = grep {$_->{private_ip} eq $opt{MASTER_LEADER}} @{ $opt{NODES} } or die "ERROR : No Master/Leader NODE found for $opt{MASTER_LEADER}";
   my $master_http_port = $opt{UNIV_DETAILS}{universeDetails}{communicationPorts}{masterHttpPort} or die "ERROR: Master HTTP port not found in univ JSON";
   
-  #--- Initialize SQL output, create tables -----
-  if ($opt{DBFILE} and $opt{DBFILE} eq "1"){
-   ($opt{DBFILE} and $opt{DBFILE} eq "1") and $opt{DBFILE} = undef; # So we auto-generate the name
-   $opt{DBFILE} ||= join(".", unixtime_to_printable($opt{STARTTIME},"YYYY-MM-DD"),$opt{LOCALHOST},"tabletInfo",$opt{UNIV_DETAILS}{name},"sqlite");
-  }
-  if ($opt{TO_STDOUT}){
-     $opt{GZIP}   and warn "--WARNING: UN-Setting GZIP because 'TO_STDOUT' is set.\n";
-     $opt{DBFILE} and die  "ERROR:DBFILE is not compatible with TO_STDOUT";
-     $opt{GZIP} = 0;
-  }elsif ($opt{DBFILE}){
-     $opt{GZIP} = 0;
-     $opt{SQLFILENAME} and die "ERROR:DBFILE is not compatible with SQLFILENAME";
-  }else{
-     $opt{SQLFILENAME} ||= join(".", unixtime_to_printable($opt{STARTTIME},"YYYY-MM-DD"),$opt{LOCALHOST},"tabletInfo",
-                                $opt{UNIV_DETAILS}{name},"sql", $opt{GZIP}?"gz":());
-  }
-  $OutputObject = OutputMechanism::->new (FILENAME=>  $opt{SQLFILENAME}, GZIP=>$opt{GZIP}, 
-                            TO_STDOUT=>$opt{TO_STDOUT}, DBFILE=>$opt{DBFILE}, 
-                            SQLITE=>$opt{SQLITE});
-  $db = DatabaseClass::->new(OUTPUTOBJ=>$OutputObject, DROPTABLES=>$opt{DROPTABLES});
+  #--- Initialize SQL output -----
+  Setup_Output_Processing(); # Figure out if we are piping to sqlite etc.. 
+
+  $db = DatabaseClass::->new(OUTPUTOBJ=>undef, DROPTABLES=>$opt{DROPTABLES});
   
   # Put Univ and node info into DB
   $db->Insert_nodes($opt{NODES});
@@ -217,6 +205,43 @@ sub Initialize{
   my $entities = $YBA_API->Get("/proxy/$ml_node->{private_ip}:$master_http_port/dump-entities","BASE_URL_UNIVERSE");
   # Analyze & save DUMP ENTITIES contained in  $YBA_API->{json_string} 
   Handle_ENTITIES_Data($entities);
+}
+#----------------------------------------------------------------------------------------------
+sub Setup_Output_Processing{
+	if (not $opt{AUTORUN_SQLITE}){
+		$opt{DBFILE} = "STDOUT";
+		$opt{STATUS_MSG_TO_STDERR} = 1; 
+		return; # No output processing needed-this has been setup manually
+	}
+	if (! $opt{GZIP}){
+		my $SQLITE_ERROR  = (qx|$opt{SQLITE} -version|=~m/([^\s]+)/  ?  0 : "Could not run SQLITE3: $!"); # Checks if sqlite3 can run
+		if ($SQLITE_ERROR){
+			warn "WARNING: $SQLITE_ERROR\n\t Creating compressed SQL (not a sqlite database)";
+			$opt{GZIP} = 1;
+		}
+	}
+    $opt{DBFILE} ||= join(".", unixtime_to_printable($opt{STARTTIME},"YYYY-MM-DD"),$opt{LOCALHOST},"tabletInfo",
+                                $opt{UNIV_DETAILS}{name}, $opt{GZIP}?"sql.gz":'sqlite');
+	my $output_sqlite_dbfilename = $opt{DBFILE};
+	if (-e $output_sqlite_dbfilename){
+		my $mtime     = (stat  $output_sqlite_dbfilename)[9];
+		my $rename_to = $output_sqlite_dbfilename .".". unixtime_to_printable($mtime,"YYYY-MM-DD-HH-MM") ;
+		if  (-e $rename_to){
+			die "ERROR:Files $output_sqlite_dbfilename and  $rename_to already exist. Please cleanup!";
+		} 
+		warn "WARNING: Renaming Existing file $output_sqlite_dbfilename to $rename_to.\n";
+		rename $output_sqlite_dbfilename, $rename_to or die "ERROR:cannot rename: $!";
+		sleep 2; # Allow time to read the message 
+	}
+	if ($opt{GZIP}){
+		$opt{STATUS_MSG_TO_STDERR} = 1;
+		open ($SQL_OUTPUT_FH, "|-", "gzip -c > $output_sqlite_dbfilename")
+		     or die "ERROR: Could not start gzip : $!";
+	}else{
+		open ($SQL_OUTPUT_FH, "|-", "$opt{SQLITE} $output_sqlite_dbfilename")
+			or die "ERROR: Could not start sqlite3 : $!";
+	}
+	select $SQL_OUTPUT_FH; # All subsequent "print" goes to this file handle.
 }
 #----------------------------------------------------------------------------------------------
 sub Handle_ENTITIES_Data{
@@ -342,6 +367,10 @@ sub unixtime_to_printable{
 		  return sprintf("%02d:%02d:%02d", $hour,$min,$sec)
 		         . ($showTZ? " " . $opt{TZOFFSET} : "");
 	}
+	if ($format eq "YYYY-MM-DD-HH-MM"){
+       return sprintf("%04d-%02d-%02d-%02d-%02d", $year+1900, $mon+1, $mday, $hour, $min)
+	          . ($showTZ? " " . $opt{TZOFFSET} : "");
+	}	
 	die "ERROR: Unsupported format:'$format' ";
 }
 #----------------------------------------------------------------------------------------------
@@ -357,50 +386,14 @@ sub TimeDelta{
   return $returnmsg if $delta < 61;
 
   $returnmsg .= " after " . sprintf("%d minutes %d seconds",$delta / 60, $delta % 60);
+  $opt{STATUS_MSG_TO_STDERR} and warn "$msg\n";
   return   $returnmsg;
 }
 
 ###############################################################################
 ############### C L A S S E S                             #####################
 ###############################################################################
-BEGIN{
-package OutputMechanism;
-use warnings;
-use strict;
-sub new{
-  my ($class, %att) = @_;
-	die "ERROR:No output filename/DB specified" unless $att{FILENAME} or $att{TO_STDOUT} or $att{DBFILE};
-	my $self = {recordcount=>0, %att};
-	if ($att{GZIP}){
-	    open $self->{OUTPUT_FH} , "|/bin/gzip > $att{FILENAME}" or die "ERROR:Could not open output gz $att{FILENAME} :$!";
-  }elsif ( $self->{TO_STDOUT} ){
-      # STDOUT is already open . Nothing needed
-  }elsif ( $att{DBFILE} ){ # Request to actually create the sqlite db to this file
-      open $self->{OUTPUT_FH} , "|$att{SQLITE} $att{DBFILE}" or die "ERROR:Could not open output SQLITE $att{DBFILE} :$!";
-	}else{
-		# Non-gzip output requested - just write to simple file handle
-		open $self->{OUTPUT_FH} , ">", $att{FILENAME} or die "ERROR:Could not open output file $att{FILENAME} :$!";
-	}
-    return bless $self, $class;
-}
-sub send{
-   my  ($self,@msg) = @_;
-   if ( $self->{TO_STDOUT} ){
-       print  "$_\n" for @msg; 
-   }else{
-       print {$self->{OUTPUT_FH}}  "$_\n" for @msg;
-   }
-   $self->{recordcount}+=$#msg + 1;
-}
-sub close{
-   my  ($self) = @_;
-   return 0 if $self->{TO_STDOUT}; # STDOUT will auto-close
-   close $self->{OUTPUT_FH};
-   chmod 0644, grep {defined}  $self->{FILENAME} , $self->{DBFILE};
-}
-1;
-}
-#=====================================================================================
+
 ######################################################################################
 BEGIN{
 package DatabaseClass;
@@ -461,11 +454,10 @@ sub new {
     my ($class,%att) = @_;
     $opt{DEBUG} and print "---DEBUG: Creating NEW DatabaseClass object\n";
     $class = ref $class if ref $class;
-    $att{OUTPUTOBJ} or die "ERROR: OUTPUTOBJ attribute not specified";
 
     my $self = bless \%att , $class;
-    $opt{SQLFILENAME} ||="";
-    $self->putsql("-- Generating $opt{SQLFILENAME} by $0 $VERSION on $opt{LOCALHOST} by " . ($ENV{USER}||$ENV{USERNAME}) . " on " . scalar(localtime(time)));
+
+    $self->putsql("-- Generating $opt{DBFILE} by $0 $VERSION on $opt{LOCALHOST} by " . ($ENV{USER}||$ENV{USERNAME}) . " on " . scalar(localtime(time)));
     $self->putsql("PRAGMA SCHEMA_VERSION=$SCHEMA_VERSION;");
     $self->putsql("PRAGMA foreign_keys = ON;");
     $self->putsql("PRAGMA recursive_triggers = TRUE;");
@@ -518,7 +510,7 @@ sub putsql{
   my ($self,$txt) = @_;
   defined $txt or return;
   #print $sqlf "$txt\n";
-  $self->{OUTPUTOBJ}->send ($txt) ; # SEND will append the "\n"
+  print $txt,"\n" ;
   $self->{SQLOUTPUTRECORDCOUNT}++;
 }
 ###############################################################################
