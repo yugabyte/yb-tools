@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.29";
+our $VERSION = "1.30";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -575,7 +575,7 @@ sub Handle_UNIVERSE_JSON{
 	for my $flagtype (qw|masterGFlags tserverGFlags |){
 	   next unless my $flag = $bj->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
 	   for my $k(sort keys %$flag){
-		  my $v = $flag->{$k}; 
+		    (my $v = $flag->{$k}) =~tr/'/~/;
 	      print {$self->{OUTPUT_FH}} "INSERT INTO kv_store VALUES ('$flagtype','$k','$v');\n";
 	   }
 	}
