@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.08";
+our $VERSION = "0.09";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
@@ -15,6 +15,7 @@ my $HELP_TEXT = << "__HELPTEXT__";
    --GZIP             (Use this if you want to create a sql.gz for export, instead of a sqlite DB)
    **ADVANCED options**
    --HTTPCONNECT      [=] [curl | tiny]    (Optional. Whether to use 'curl' or HTTP::Tiny(Default))
+   --FOLLOWER_LAG_MINIMUM [=] <value> (ms)(collect tablet follower lag for values >= this value(default 1000))
    
     If STDOUT is redirected, it can be sent to  a SQL file, or gzipped, and collected for offline analysis.
 __HELPTEXT__
@@ -45,7 +46,7 @@ my %opt = (
    VERSION              => 0,
    HTTPCONNECT          => 'tiny',
    CURL                 => 'curl',
-   UNIVERSE             => undef,
+   UNIVERSE             => undef, # Via Cmd line option 
    DBFILE               => undef, # Name of the output sqlite DB file 
    SQLITE               => "/usr/bin/sqlite3",
    GZIP                 => 0,
@@ -53,6 +54,9 @@ my %opt = (
    TZOFFSET             => undef, # Set by unixtime_to_printable
    AUTORUN_SQLITE       => -t STDOUT , # If STDOUT is NOT redirected, we automatically run sqlite3
    STATUS_MSG_TO_STDERR => 0,
+   FOLLOWER_LAG_MINIMUM => 1000, # Collect follower lag if GEQ this value 
+   REGION               => {},    # Will be populated later 
+   UNIV_DETAILS         => undef, # Will be populated later 
 );
 
 #---- Start ---
@@ -103,7 +107,7 @@ sub Get_and_Parse_tablets_from_tservers{
       $db->CreateTable("TABLET","node_uuid", 
                        map {$Tablet::is_numeric{$_}? "$_ INTEGER":$_}
                          @Tablet::db_fields);
-      $db->putsql("BEGIN TRANSACTION; -- tserver $n->{nodeName}");
+      $db->putsql("BEGIN TRANSACTION; --Tablets for tserver $n->{nodeName}");
 
       Tablet::SetFieldNames(@fields);
       
@@ -115,7 +119,8 @@ sub Get_and_Parse_tablets_from_tservers{
           $db->Insert_Tablet($t, $n->{Tserver_UUID});
       }
       close $f;
-      $db->putsql("END TRANSACTION; -- tserver $n->{nodeName}");
+      Collect_Follower_Lag_metrics($n);
+      $db->putsql("END TRANSACTION; --Tablets for  tserver $n->{nodeName}");
 	  $db->putlog("Found $tabletCount tablets on $n->{nodeName}:"
 	       . join (", ",map{ " $leaders{$_} leaders  on $_" } sort keys %leaders));
       print "SELECT '",TimeDelta("Found $tabletCount tablets on $n->{nodeName}:"
@@ -125,13 +130,37 @@ sub Get_and_Parse_tablets_from_tservers{
   $db->putsql("CREATE UNIQUE INDEX tablet_idx ON tablet (node_uuid,tablet_uuid);");
 }
 #----------------------------------------------------------------------------------------------
+sub Collect_Follower_Lag_metrics{
+   my ($n) = @_;
+   my $lags = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/metrics?metrics=follower_lag_ms","BASE_URL_UNIVERSE");
+   my $ts = time();
 
+	 #$db->putsql($ts,"TABLETMETRIC","NODE:$n->{nodeUuid}\nmetric:follower_lag_ms"
+	#	              ,$YBA_API->{json_string},"text/json");
+  my $bj = JSON::Tiny::decode_json($YBA_API->{json_string});
+   # Put stuff into tablemetrics table 
+	for my $metricInfo (@$bj){
+	   for my $m( @{$metricInfo->{metrics}} ){
+      next unless $m->{value} >= $opt{FOLLOWER_LAG_MINIMUM};
+	     $db->putsql("INSERT INTO TABLETMETRIC VALUES("
+	           #timestamp INTEGER, node-uuid , tablet_id TEXT, metric_name TEXT, metric_value NUMERIC
+                  . $ts
+                  . qq|,"$n->{Tserver_UUID}"|  # Node UUID 
+                  . qq|,"$metricInfo->{id}"| # Tablet ID
+                  . qq|,"$m->{name}"| 
+                  . qq|,| . $m->{value}
+                  . ");");
+	   }
+	}
+
+}
+#----------------------------------------------------------------------------------------------
 sub Initialize{
 
     GetOptions (\%opt, qw[DEBUG! HELP! VERSION!
                         API_TOKEN=s YBA_HOST=s UNIVERSE=s
                         GZIP! DBFILE=s SQLITE=s GZIP! DROPTABLES!
-                        HTTPCONNECT=s CURL=s]
+                        HTTPCONNECT=s CURL=s FOLLOWER_LAG_MINIMUM=i]
                ) or die "ERROR: Invalid command line option(s). Try --help.";
     if ($opt{DEBUG}){
       print "-- ","DEBUG: Option $_\t="
@@ -205,6 +234,11 @@ sub Initialize{
   my $entities = $YBA_API->Get("/proxy/$ml_node->{private_ip}:$master_http_port/dump-entities","BASE_URL_UNIVERSE");
   # Analyze & save DUMP ENTITIES contained in  $YBA_API->{json_string} 
   Handle_ENTITIES_Data($entities);
+
+  $db->CreateTable("tabletmetric","timestamp INTEGER","node_uuid TEXT","tablet_id TEXT",
+                   "metric_name TEXT","metric_value NUMERIC");
+  $db->CreateTable("metrics",qw|name node_uuid tablet_uuid|,"value NUMERIC"); # non-tablet metrics 
+  Get_Node_Metrics();
 }
 #----------------------------------------------------------------------------------------------
 sub Setup_Output_Processing{
@@ -331,7 +365,7 @@ sub Extract_gflags_and_Region_info{
 	      $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
 	   }
 	}
-	my $self; # Deal with fixing this later ... 
+
 	for my $region (@{ $univ_hash->{universeDetails} {clusters} [0]{placementInfo}{cloudList}[0]{regionList} }){
 		my $preferred = 0;
 		my $az_node_count = 0;
@@ -339,11 +373,80 @@ sub Extract_gflags_and_Region_info{
 			$az->{isAffinitized} and $preferred++;
 			$az_node_count += $az->{numNodesInAZ};
 		}
-		$self->{REGION}{$region->{name}}{PREFERRED}     = $preferred;
-		$self->{REGION}{$region->{name}}{UUID}          = $region->{uuid};
-		$self->{REGION}{$region->{name}}{AZ_NODE_COUNT} = $az_node_count;
+		$opt{REGION}{$region->{name}}{PREFERRED}     = $preferred;
+		$opt{REGION}{$region->{name}}{UUID}          = $region->{uuid};
+		$opt{REGION}{$region->{name}}{AZ_NODE_COUNT} = $az_node_count;
 		$opt{DEBUG} and print "--DEBUG:REGION $region->{name}: PREFERRED=$preferred, $az_node_count nodes, $region->{uuid}.\n";
 	}
+}
+#------------------------------------------------------------------------------------------------
+sub Get_Node_Metrics{
+  my %post_process;
+  
+  my %metric_handler=(
+     ql_read_latency    => sub{my ($m,$table,$val)=$_[1]=~/^(\w+)\{table_id="(\w+).+?\s(\d+)/;
+                               $post_process{$m}{$_[0]}{$table}=$val;},
+     server_uptime_ms   => sub{my ($m,$val)=$_[1]=~/^(\w+).+?\s(\d+)/;save_metric($m,$_[0],0,$val)},
+  );
+  my $regex = "^(" . join("|^",keys(%metric_handler)). ")";
+  $regex = qr|$regex|;
+  $db->putsql("BEGIN TRANSACTION; -- Node Metrics");
+
+  for my $n (@{ $opt{NODES} }){
+    next unless $n->{state} eq  'Live';
+    if ($n->{isTserver}){
+       my $metrics_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/prometheus-metrics?reset_histograms=false",
+                                       "BASE_URL_UNIVERSE",1); # RAW
+       Read_this_buffer_w_callback(\$metrics_raw,
+         sub{
+            my ($metric) = $_[0]=~$regex or return;
+            $metric_handler{$metric} -> ($n->{Tserver_UUID},$_[0]);
+         }
+       );
+    }
+    if ($n->{isMaster}){
+       my $metrics_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{masterHttpPort}/prometheus-metrics?reset_histograms=false",
+                                       "BASE_URL_UNIVERSE",1); # RAW
+       Read_this_buffer_w_callback(\$metrics_raw,
+         sub{
+            my ($metric) = $_[0]=~$regex or return;
+            $metric_handler{$metric} -> ($n->{nodeUuid},$_[0]); # Note - we do not have master-UUID 
+         }
+       );
+    }
+  }
+  
+  for my $sum_key (grep {m/_sum$/} keys(%post_process)){
+     my ($metric_base_name) = $sum_key=~m/^(\w+)_sum$/; # get the base 
+     my $count_metric_name = "${metric_base_name}_count";
+     my $count_metric = $post_process{$count_metric_name}  or next;
+     for my $node_uuid (keys %{ $post_process{$sum_key} }){
+        next unless $count_metric->{$node_uuid};
+        for my $table_uuid (keys %{$count_metric->{$node_uuid}}){
+          my $count   = $count_metric->{$node_uuid}{$table_uuid} or next;
+          my $avg_val = $post_process{$sum_key}{$node_uuid}{$table_uuid} / $count;
+          save_metric($metric_base_name."_avg", $node_uuid, $table_uuid,sprintf('%.2f',$avg_val));
+        } 
+     }
+  }
+
+  $db->putsql("END TRANSACTION; -- Node metrics");
+
+}
+#------------------------------------------------------------------------------------------------
+sub save_metric{
+  my ($metric,$node_uuid,$table_uuid,$value)=@_;
+  $db->putsql("INSERT INTO METRICS VALUES('$metric','$node_uuid','$table_uuid',$value);");
+}
+#------------------------------------------------------------------------------------------------
+sub Read_this_buffer_w_callback{
+   my ($buf_ref, $callback, $delim) = @_;
+   open my $f,"<",$buf_ref or die "Cannot open buffer as file:$!";
+   $delim and local $/=$delim;
+   while(<$f>){
+      $callback->($_);
+   }
+   close $f;
 }
 #------------------------------------------------------------------------------------------------
 sub unixtime_to_printable{
@@ -530,7 +633,8 @@ sub CreateTable{
 }
 sub Insert_nodes{
   my ($self,$nodes) = @_;
-$self->CreateTable("NODE", sort keys %{$nodes->[0]} );
+  $self->CreateTable("NODE", sort keys %{$nodes->[0]} );
+  $self->putsql("-- NOTE: nodeUUID value is later updated to be TSERVER_UUID");
   for my $n(@$nodes){
     $self->putsql("INSERT INTO NODE VALUES('" .
                  join("','", map{$n->{$_}} sort keys %$n ). "');");
@@ -758,14 +862,14 @@ sub Get{
     if ($self->{HTTPCONNECT} eq "curl"){
         $self->{json_string} = qx|$self->{curl_base_cmd} --url $url$endpoint|;
         if ($?){
-           print "ERROR: curl get '$endpoint' failed: $?\n";
+           warn "ERROR: curl get '$endpoint' failed: $?\n";
            return {error=>$?};
         }
     }else{ # HTTP::Tiny
        $self->{raw_response} = $self->{HT}->get($url . $endpoint);
        if (not $self->{raw_response}->{success}){
-          print "ERROR: Get '$endpoint' failed with status=$self->{raw_response}->{status}: $self->{raw_response}->{reason}\n\tURL:$url$endpoint\n";
-          $self->{raw_response}->{status} == 599 and print "\t(599)Content:$self->{raw_response}{content};\n";
+          warn "ERROR: Get '$endpoint' failed with status=$self->{raw_response}->{status}: $self->{raw_response}->{reason}\n\tURL:$url$endpoint\n";
+          $self->{raw_response}->{status} == 599 and warn "\t(599)Content:$self->{raw_response}{content};\n";
           return {error=> $self->{raw_response}->{status}};
        }
        $self->{json_string} = $self->{raw_response}{content};
