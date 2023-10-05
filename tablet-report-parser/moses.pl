@@ -1,12 +1,13 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.09";
+our $VERSION = "0.10";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
  Get and analyze info on all tablets in the system.
  By default, output will be piped to sqlite3 to create a sqlite3 database,
  and run default reports.
+ Moses also collects a snapshot of metrics (tables, tablet lag).
  
  Run options:
    --YBA_HOST         [=] <YBA hostname or IP> (Required)
@@ -30,6 +31,7 @@ use POSIX;
  package Web::Interface;
  package JSON::Tiny;
  package DatabaseClass;
+ package UniverseClass;
 }; # Pre-declare local modules 
 
 my %opt = (
@@ -60,7 +62,7 @@ my %opt = (
 );
 
 #---- Start ---
-my ($YBA_API,$SQL_OUTPUT_FH, $db);
+my ($YBA_API,$SQL_OUTPUT_FH, $db, $universe);
 warn "-- ", $opt{STARTTIME_PRINTABLE}, " : Moses version $VERSION \@$opt{LOCALHOST} starting ...", "\n";
 Initialize();
 
@@ -83,7 +85,7 @@ exit 0;
 #----------------------------------------------------------------------------------------------
 sub Get_and_Parse_tablets_from_tservers{
 
-  for my $n (@{ $opt{NODES} }){
+  for my $n (@{ $universe->{NODES} }){
       next unless $n->{isTserver};
       if ( $n->{state} ne  'Live'){
          warn "-- Node $n->{nodeName} $n->{Tserver_UUID} is $n->{state} .. skipping\n";
@@ -115,7 +117,7 @@ sub Get_and_Parse_tablets_from_tservers{
           next unless m/<td>/;
           my $t = Tablet::->new_from_tr($_);
           $tabletCount++;
-          $leaders{$t->{LEADER}} ++;
+          $t->{LEADER} and $leaders{$t->{LEADER}} ++;
           $db->Insert_Tablet($t, $n->{Tserver_UUID});
       }
       close $f;
@@ -187,10 +189,9 @@ sub Initialize{
    
    $opt{UNIVERSE_LIST} = $YBA_API->Get("/customers/$YBA_API->{CUST_UUID}/universes","BASE_URL_API_V1");
    for my $u (@{$opt{UNIVERSE_LIST}}){
-      $opt{DEBUG} and print "--DEBUG: Universe: $u->{name}\t $u->{universeUUID}\n";
+      $opt{DEBUG} and print "--DEBUG: Scanning Universe: $u->{name}\t $u->{universeUUID}\n";
       if ($opt{UNIVERSE}  and  $u->{name} =~/$opt{UNIVERSE}/i){
-         print "-- Selected Universe $u->{name}\t $u->{universeUUID}\n";
-		 $opt{STATUS_MSG_TO_STDERR} and warn "-- Selected Universe $u->{name}\t $u->{universeUUID}\n";
+         $opt{DEBUG} and print  "-- Selected Universe $u->{name}\t $u->{universeUUID}\n";
          $YBA_API->Set_Value("UNIV_UUID",$u->{universeUUID});
          last;
       }
@@ -200,22 +201,21 @@ sub Initialize{
        warn "\t$_->{name}\n"  for (@{$opt{UNIVERSE_LIST}});
        die "ERROR: --UNIVERSE ($opt{UNIVERSE}) incorrect or unspecified\n";
    }
-   # -- Universe  Node details -
-   $opt{UNIV_DETAILS} =  $YBA_API->Get(""); # Huge Univ JSON 
-   $opt{DEBUG} and print "--DEBUG:UNIV: $_\t","=>",$opt{UNIV_DETAILS}{$_},"\n" for qw|name creationDate universeUUID version |;
-  #my ($universe_name) =  $json_string =~m/,"name":"([^"]+)"/;
-  if ($opt{UNIV_DETAILS}{name}){
-     print TimeDelta(join("", "UNIVERSE: ", $opt{UNIV_DETAILS}{name}," on ", $opt{UNIV_DETAILS}{universeDetails}{clusters}[0]{userIntent}{providerType},
-           " ver ",$opt{UNIV_DETAILS}{universeDetails}{clusters}[0]{userIntent}{ybSoftwareVersion})),"\n";
+   # -- Universe  details -
+   $universe = UniverseClass::->new($YBA_API) ; # $YBA_API->Get(""); # Huge Univ JSON 
+  
+  if ($universe->{name}){
+     print TimeDelta(join("", "UNIVERSE: ", $universe->{name}," on ", $universe->{universeDetails}{clusters}[0]{userIntent}{providerType},
+           " ver ",$universe->{universeDetails}{clusters}[0]{userIntent}{ybSoftwareVersion})),"\n";
   }else{
      die "ERROR: Universe info not found \n";
   }
-  $opt{NODES} = Extract_nodes_From_Universe($opt{UNIV_DETAILS});
+  #$opt{NODES} = $universe->Extract_nodes_From_Universe();
   # Find Master/Leader 
   $opt{MASTER_LEADER}      = $YBA_API->Get("/leader")->{privateIP};
   $opt{DEBUG} and print "--DEBUG:Master/Leader JSON:",$YBA_API->{json_string},". IP is ",$opt{MASTER_LEADER},".\n";
-  my ($ml_node) = grep {$_->{private_ip} eq $opt{MASTER_LEADER}} @{ $opt{NODES} } or die "ERROR : No Master/Leader NODE found for $opt{MASTER_LEADER}";
-  my $master_http_port = $opt{UNIV_DETAILS}{universeDetails}{communicationPorts}{masterHttpPort} or die "ERROR: Master HTTP port not found in univ JSON";
+  my ($ml_node) = grep {$_->{private_ip} eq $opt{MASTER_LEADER}} @{ $universe->{NODES} } or die "ERROR : No Master/Leader NODE found for $opt{MASTER_LEADER}";
+  my $master_http_port = $universe->{universeDetails}{communicationPorts}{masterHttpPort} or die "ERROR: Master HTTP port not found in univ JSON";
   
   #--- Initialize SQL output -----
   Setup_Output_Processing(); # Figure out if we are piping to sqlite etc.. 
@@ -223,9 +223,9 @@ sub Initialize{
   $db = DatabaseClass::->new(OUTPUTOBJ=>undef, DROPTABLES=>$opt{DROPTABLES});
   
   # Put Univ and node info into DB
-  $db->Insert_nodes($opt{NODES});
+  $db->Insert_nodes($universe->{NODES});
   $db->CreateTable("gflags",qw|type key  value|);
-  Extract_gflags_and_Region_info($opt{UNIV_DETAILS});
+  Extract_gflags_and_Region_info($universe);
   
   # Extract Region info from nodes and store it
   
@@ -238,6 +238,10 @@ sub Initialize{
   $db->CreateTable("tabletmetric","timestamp INTEGER","node_uuid TEXT","tablet_id TEXT",
                    "metric_name TEXT","metric_value NUMERIC");
   $db->CreateTable("metrics",qw|name node_uuid tablet_uuid|,"value NUMERIC"); # non-tablet metrics 
+  
+  # Since we have SELECTed the sqlite file handle, we need funny-looking "print" statements
+  # to get SQLITE to display our "progress" messages. (Old SQLITE does not support ".print", so we use SELECTs)
+  print "SELECT '",  TimeDelta("Getting Node Metrics..."),"';\n";
   Get_Node_Metrics();
 }
 #----------------------------------------------------------------------------------------------
@@ -255,7 +259,7 @@ sub Setup_Output_Processing{
 		}
 	}
     $opt{DBFILE} ||= join(".", unixtime_to_printable($opt{STARTTIME},"YYYY-MM-DD"),$opt{LOCALHOST},"tabletInfo",
-                                $opt{UNIV_DETAILS}{name}, $opt{GZIP}?"sql.gz":'sqlite');
+                                $universe->{name}, $opt{GZIP}?"sql.gz":'sqlite');
 	my $output_sqlite_dbfilename = $opt{DBFILE};
 	if (-e $output_sqlite_dbfilename){
 		my $mtime     = (stat  $output_sqlite_dbfilename)[9];
@@ -325,7 +329,7 @@ sub Handle_ENTITIES_Data{
 	                     scalar(@{ $bj->{keyspaces} }),scalar(@{ $bj->{tables} }), scalar(@{ $bj->{tablets} });
     
     # Fixup Node UUIDs : The ones in the Universe JSON are useless - so we update from tablets with TSERVER uuid 
-    for my $n (@{ $opt{NODES} }){
+    for my $n (@{ $universe->{NODES} }){
        $n->{Tserver_UUID} = $node_by_ip{$n->{private_ip}}; # update in-mem info
     }
     $db->putsql( "UPDATE NODE "
@@ -333,23 +337,7 @@ sub Handle_ENTITIES_Data{
                . "WHERE  substr(addr,1,instr(addr,\":\")-1) = private_ip limit 1);\n");
     $db->putsql("END TRANSACTION; -- Entities");
 }
-#----------------------------------------------------------------------------------------------
-sub Extract_nodes_From_Universe{
-    my ($univ_hash, $callback) = @_;
-	
-	my @node;
-	my $count=0;
-	for my $n (@{  $univ_hash->{universeDetails}{nodeDetailsSet} }){
-       push @node, my $thisnode = {map({$_=>$n->{$_}||''} qw|nodeIdx nodeName nodeUuid azUuid isMaster
-                                  	   isTserver ysqlServerHttpPort yqlServerHttpPort state tserverHttpPort 
-									   tserverRpcPort masterHttpPort masterRpcPort nodeExporterPort|),
-	                              map({$_=>$n->{cloudInfo}{$_}} qw|private_ip public_ip az region |) };
-       $thisnode->{$_} =~tr/-//d for grep {/uuid/i} keys %$thisnode;
-       $callback and $callback->($thisnode, $count);
-       $count++;
-    }
-    return [@node];	
-}
+
 #------------------------------------------------------------------------------------------------
 sub Extract_gflags_and_Region_info{
 	my ($univ_hash) = @_;
@@ -361,7 +349,7 @@ sub Extract_gflags_and_Region_info{
 	for my $flagtype (qw|masterGFlags tserverGFlags |){
 	   next unless my $flag = $univ_hash->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
 	   for my $k(sort keys %$flag){
-		  my $v = $flag->{$k}; 
+		    (my $v = $flag->{$k}) =~tr/'/~/; # Zap potential single quote in gflag value 
 	      $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
 	   }
 	}
@@ -384,7 +372,7 @@ sub Get_Node_Metrics{
   my %post_process;
   
   my %metric_handler=(
-     ql_read_latency    => sub{my ($m,$table,$val)=$_[1]=~/^(\w+)\{table_id="(\w+).+?\s(\d+)/;
+     ql_read_latency    => sub{my ($m,$table,$val)=$_[1]=~/^(\w+)\{table_id="(\w+).+?\s(\d+)/ or return;
                                $post_process{$m}{$_[0]}{$table}=$val;},
      server_uptime_ms   => sub{my ($m,$val)=$_[1]=~/^(\w+).+?\s(\d+)/;save_metric($m,$_[0],0,$val)},
   );
@@ -392,7 +380,7 @@ sub Get_Node_Metrics{
   $regex = qr|$regex|;
   $db->putsql("BEGIN TRANSACTION; -- Node Metrics");
 
-  for my $n (@{ $opt{NODES} }){
+  for my $n (@{ $universe->{NODES} }){
     next unless $n->{state} eq  'Live';
     if ($n->{isTserver}){
        my $metrics_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/prometheus-metrics?reset_histograms=false",
@@ -799,7 +787,7 @@ sub SetFieldNames{ # Class method
 
 sub Get_csv_quoted_values{
    my ($self) = @_;
-   return join (",", map {$is_numeric{$_} ? $self->{$_}||0 : "'$self->{$_}'"} @db_fields);
+   return join (",", map {defined($self->{$_}) or $self->{$_}=""; $is_numeric{$_} ? $self->{$_}||0 : "'$self->{$_}'"} @db_fields);
 }
 1;
 } # End of Tablet
@@ -891,6 +879,63 @@ sub Set_Value{
 
 } # End of  package Web::Interface;  
 #==============================================================================
+BEGIN{
+package UniverseClass;
+
+use strict;
+use warnings;
+
+sub new{
+  my ($class, $yba_api) = @_;
+  $yba_api or die "YBA API Parameter is required";
+  my $self = $yba_api->Get(""); # Perl-ized Huge Univ JSON
+  $self->{JSON_STRING} = $yba_api->{raw_response}; # Raw JSON string 
+  $opt{DEBUG} and print "--DEBUG:UNIV: $_\t","=>",$self->{$_},"\n" for qw|name creationDate universeUUID version |;
+  _Extract_nodes($self);
+  return bless $self, $class;
+}
+
+#----------------------------------------------------------------------------------------------
+sub _Extract_nodes{
+    my ($self) = @_;
+	
+  $self->{NODES} = [];
+	my $count=0;
+	for my $n (@{  $self->{universeDetails}{nodeDetailsSet} }){
+       push @{ $self->{NODES} }, my $thisnode = {map({$_=>$n->{$_}||''} qw|nodeIdx nodeName nodeUuid azUuid isMaster
+                                  	   isTserver ysqlServerHttpPort yqlServerHttpPort state tserverHttpPort 
+									   tserverRpcPort masterHttpPort masterRpcPort nodeExporterPort|),
+	                              map({$_=>$n->{cloudInfo}{$_}} qw|private_ip public_ip az region |) };
+       $thisnode->{$_} =~tr/-//d for grep {/uuid/i} keys %$thisnode;
+       $count++;
+    }
+    return $self->{NODES};	
+}
+
+sub GetFlags_with_callback{
+  my ($self, $callback,$escape_quote) = @_;
+  	for my $flagtype (qw|masterGFlags tserverGFlags |){
+	   next unless my $flag = $self->{UNIV}->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
+	   for my $k(sort keys %$flag){
+		    my $v = $flag->{$k};
+        $escape_quote and $v =~tr/'/~/; # Zap potential single quote in gflag value 
+	      # $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
+        $callback->($flagtype,$k,$v)
+	   }
+	}
+}
+
+sub GetFlags_JSON{
+  my ($self) = @_;
+  	for my $flagtype (qw|masterGFlags tserverGFlags |){
+	   next unless my $flag = $self->{UNIV}->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
+
+	}
+}
+
+1;
+} # End of  package UniverseClass
+#============================================================================== 
 BEGIN{
 package JSON::Tiny;
 
