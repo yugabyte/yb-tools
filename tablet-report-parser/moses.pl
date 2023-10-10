@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.10";
+our $VERSION = "0.11";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
@@ -17,6 +17,7 @@ my $HELP_TEXT = << "__HELPTEXT__";
    **ADVANCED options**
    --HTTPCONNECT      [=] [curl | tiny]    (Optional. Whether to use 'curl' or HTTP::Tiny(Default))
    --FOLLOWER_LAG_MINIMUM [=] <value> (ms)(collect tablet follower lag for values >= this value(default 1000))
+   --CONFIG_FILE_NAME [=] <name-of-file-containing-options> (Also --CONFIG_FILE_PATH)
    
     If STDOUT is redirected, it can be sent to  a SQL file, or gzipped, and collected for offline analysis.
 __HELPTEXT__
@@ -57,8 +58,8 @@ my %opt = (
    AUTORUN_SQLITE       => -t STDOUT , # If STDOUT is NOT redirected, we automatically run sqlite3
    STATUS_MSG_TO_STDERR => 0,
    FOLLOWER_LAG_MINIMUM => 1000, # Collect follower lag if GEQ this value 
-   REGION               => {},    # Will be populated later 
-   UNIV_DETAILS         => undef, # Will be populated later 
+   CONFIG_FILE_PATH     => "/home/yugabyte/",
+   CONFIG_FILE_NAME     => '.yba*.rc', 
 );
 
 #---- Start ---
@@ -122,6 +123,7 @@ sub Get_and_Parse_tablets_from_tservers{
       }
       close $f;
       Collect_Follower_Lag_metrics($n);
+      Get_Node_Metrics($n);
       $db->putsql("END TRANSACTION; --Tablets for  tserver $n->{nodeName}");
 	  $db->putlog("Found $tabletCount tablets on $n->{nodeName}:"
 	       . join (", ",map{ " $leaders{$_} leaders  on $_" } sort keys %leaders));
@@ -137,20 +139,18 @@ sub Collect_Follower_Lag_metrics{
    my $lags = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/metrics?metrics=follower_lag_ms","BASE_URL_UNIVERSE");
    my $ts = time();
 
-	 #$db->putsql($ts,"TABLETMETRIC","NODE:$n->{nodeUuid}\nmetric:follower_lag_ms"
-	#	              ,$YBA_API->{json_string},"text/json");
   my $bj = JSON::Tiny::decode_json($YBA_API->{json_string});
-   # Put stuff into tablemetrics table 
+   # Put stuff into metrics table 
 	for my $metricInfo (@$bj){
 	   for my $m( @{$metricInfo->{metrics}} ){
       next unless $m->{value} >= $opt{FOLLOWER_LAG_MINIMUM};
-	     $db->putsql("INSERT INTO TABLETMETRIC VALUES("
+	     $db->putsql("INSERT INTO metrics VALUES("
 	           #timestamp INTEGER, node-uuid , tablet_id TEXT, metric_name TEXT, metric_value NUMERIC
-                  . $ts
+                  . qq|'$m->{name}'|
                   . qq|,"$n->{Tserver_UUID}"|  # Node UUID 
+                  . qq|,"tablet"|
                   . qq|,"$metricInfo->{id}"| # Tablet ID
-                  . qq|,"$m->{name}"| 
-                  . qq|,| . $m->{value}
+                  . qq|,$m->{value}|
                   . ");");
 	   }
 	}
@@ -162,8 +162,35 @@ sub Initialize{
     GetOptions (\%opt, qw[DEBUG! HELP! VERSION!
                         API_TOKEN=s YBA_HOST=s UNIVERSE=s
                         GZIP! DBFILE=s SQLITE=s GZIP! DROPTABLES!
-                        HTTPCONNECT=s CURL=s FOLLOWER_LAG_MINIMUM=i]
+                        HTTPCONNECT=s CURL=s FOLLOWER_LAG_MINIMUM=i
+                        CONFIG_FILE_PATH=s CONFIG_FILE_NAME=s]
                ) or die "ERROR: Invalid command line option(s). Try --help.";
+
+    if ($opt{HELP}){
+      warn $HELP_TEXT;
+      exit 0;
+    }
+    $opt{VERSION} and exit 1; # Version request already fulfilled.
+    
+    #Process Config file(s) and extract APT_TOKEN, Univ etc..
+    my @conf_files = glob "$opt{CONFIG_FILE_PATH}/$opt{CONFIG_FILE_NAME}"; # Try specified path...
+    @conf_files or @conf_files = glob "./$opt{CONFIG_FILE_NAME}"; # Try current path
+    for my $cfile_name (@conf_files){
+        $opt{DEBUG} and print "--DEBUG: Reading $cfile_name\n";
+        open my $f, "<", $cfile_name or die "ERROR: Opening $cfile_name:$!";
+        while(<$f>){
+           my ($key,$val) = m/\b(\w+)\s*=\s*["']?([\w\-:\.\/]+)['"]?/;
+           next unless exists $opt{uc $key};
+           $opt{uc $key} ||= $val; # Cmd-line overrides file info 
+        }
+        close $f;
+    }
+
+    for my $k (keys %opt){
+       next if $opt{$k} ;     # Already has a value
+       next unless $ENV{$k} ; #Env exists 
+       $opt{$k} = $ENV{$k};   # Use Env value as last resort 
+    }
     if ($opt{DEBUG}){
       print "-- ","DEBUG: Option $_\t="
           .(defined $opt{$_} ? ref $opt{$_} eq "ARRAY"? join (",",@{$opt{$_}}): $opt{$_}
@@ -171,11 +198,6 @@ sub Initialize{
           .";\n" 
           for sort keys %opt;
     }
-    if ($opt{HELP}){
-      warn $HELP_TEXT;
-      exit 0;
-    }
-    $opt{VERSION} and exit 1; # Version request already fulfilled.
     # Initialize connection to YBA 
     $YBA_API = Web::Interface::->new();
    eval { $opt{YBA_JSON} = $YBA_API->Get("/customers","BASE_URL_API_V1") };
@@ -220,29 +242,24 @@ sub Initialize{
   #--- Initialize SQL output -----
   Setup_Output_Processing(); # Figure out if we are piping to sqlite etc.. 
 
-  $db = DatabaseClass::->new(OUTPUTOBJ=>undef, DROPTABLES=>$opt{DROPTABLES});
+  $db = DatabaseClass::->new(DROPTABLES=>$opt{DROPTABLES});
   
   # Put Univ and node info into DB
   $db->Insert_nodes($universe->{NODES});
   $db->CreateTable("gflags",qw|type key  value|);
-  Extract_gflags_and_Region_info($universe);
-  
-  # Extract Region info from nodes and store it
+  $opt{DEBUG} and print "SELECT '",TimeDelta("DEBUG:Extracting gflags..."),"';\n";
+  Extract_gflags($universe);
   
   # Get dump_entities JSON from MASTER_LEADER
-  $opt{DEBUG} and print TimeDelta("DEBUG:Getting Dump Entities..."),"\n";  
+  $opt{DEBUG} and print "SELECT '",TimeDelta("DEBUG:Getting Dump Entities..."),"';\n";  
   my $entities = $YBA_API->Get("/proxy/$ml_node->{private_ip}:$master_http_port/dump-entities","BASE_URL_UNIVERSE");
   # Analyze & save DUMP ENTITIES contained in  $YBA_API->{json_string} 
   Handle_ENTITIES_Data($entities);
 
-  $db->CreateTable("tabletmetric","timestamp INTEGER","node_uuid TEXT","tablet_id TEXT",
-                   "metric_name TEXT","metric_value NUMERIC");
-  $db->CreateTable("metrics",qw|name node_uuid tablet_uuid|,"value NUMERIC"); # non-tablet metrics 
-  
+  $db->CreateTable("metrics",qw|metric_name node_uuid entity_name entity_uuid|,"value NUMERIC");
+
   # Since we have SELECTed the sqlite file handle, we need funny-looking "print" statements
   # to get SQLITE to display our "progress" messages. (Old SQLITE does not support ".print", so we use SELECTs)
-  print "SELECT '",  TimeDelta("Getting Node Metrics..."),"';\n";
-  Get_Node_Metrics();
 }
 #----------------------------------------------------------------------------------------------
 sub Setup_Output_Processing{
@@ -279,6 +296,7 @@ sub Setup_Output_Processing{
 		open ($SQL_OUTPUT_FH, "|-", "$opt{SQLITE} $output_sqlite_dbfilename")
 			or die "ERROR: Could not start sqlite3 : $!";
 	}
+  # close STDOUT; # Don't close it - because it causes warnings later, as FH#1 can be reused
 	select $SQL_OUTPUT_FH; # All subsequent "print" goes to this file handle.
 }
 #----------------------------------------------------------------------------------------------
@@ -339,7 +357,7 @@ sub Handle_ENTITIES_Data{
 }
 
 #------------------------------------------------------------------------------------------------
-sub Extract_gflags_and_Region_info{
+sub Extract_gflags{
 	my ($univ_hash) = @_;
 	for my $k (qw|universeName provider providerType replicationFactor numNodes ybSoftwareVersion enableYCQL
              	enableYSQL enableYEDIS nodePrefix |){
@@ -354,54 +372,37 @@ sub Extract_gflags_and_Region_info{
 	   }
 	}
 
-	for my $region (@{ $univ_hash->{universeDetails} {clusters} [0]{placementInfo}{cloudList}[0]{regionList} }){
-		my $preferred = 0;
-		my $az_node_count = 0;
-		for my $az ( @{ $region->{azList} } ){
-			$az->{isAffinitized} and $preferred++;
-			$az_node_count += $az->{numNodesInAZ};
-		}
-		$opt{REGION}{$region->{name}}{PREFERRED}     = $preferred;
-		$opt{REGION}{$region->{name}}{UUID}          = $region->{uuid};
-		$opt{REGION}{$region->{name}}{AZ_NODE_COUNT} = $az_node_count;
-		$opt{DEBUG} and print "--DEBUG:REGION $region->{name}: PREFERRED=$preferred, $az_node_count nodes, $region->{uuid}.\n";
-	}
 }
 #------------------------------------------------------------------------------------------------
 sub Get_Node_Metrics{
+  my ($n) = @_; # NODE 
   my %post_process;
   
   my %metric_handler=(
      ql_read_latency    => sub{my ($m,$table,$val)=$_[1]=~/^(\w+)\{table_id="(\w+).+?\s(\d+)/ or return;
                                $post_process{$m}{$_[0]}{$table}=$val;},
+     log_append_latency => sub{my ($m,$table,$val)=$_[1]=~/^(\w+)\{table_id="(\w+).+?\s(\d+)/ or return;
+                               $post_process{$m}{$_[0]}{$table}=$val;},
+     ql_write_latency   => sub{my ($m,$table,$val)=$_[1]=~/^(\w+)\{table_id="(\w+).+?\s(\d+)/ or return;
+                               $post_process{$m}{$_[0]}{$table}=$val;},                               
      server_uptime_ms   => sub{my ($m,$val)=$_[1]=~/^(\w+).+?\s(\d+)/;save_metric($m,$_[0],0,$val)},
   );
   my $regex = "^(" . join("|^",keys(%metric_handler)). ")";
-  $regex = qr|$regex|;
-  $db->putsql("BEGIN TRANSACTION; -- Node Metrics");
 
-  for my $n (@{ $universe->{NODES} }){
-    next unless $n->{state} eq  'Live';
-    if ($n->{isTserver}){
-       my $metrics_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/prometheus-metrics?reset_histograms=false",
-                                       "BASE_URL_UNIVERSE",1); # RAW
-       Read_this_buffer_w_callback(\$metrics_raw,
-         sub{
-            my ($metric) = $_[0]=~$regex or return;
-            $metric_handler{$metric} -> ($n->{Tserver_UUID},$_[0]);
-         }
-       );
-    }
-    if ($n->{isMaster}){
-       my $metrics_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{masterHttpPort}/prometheus-metrics?reset_histograms=false",
-                                       "BASE_URL_UNIVERSE",1); # RAW
-       Read_this_buffer_w_callback(\$metrics_raw,
-         sub{
-            my ($metric) = $_[0]=~$regex or return;
-            $metric_handler{$metric} -> ($n->{nodeUuid},$_[0]); # Note - we do not have master-UUID 
-         }
-       );
-    }
+  if ($n->{isTserver}){
+      my $metrics_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/prometheus-metrics?reset_histograms=false",
+                                      "BASE_URL_UNIVERSE",1); # RAW
+
+      while($metrics_raw=~/$regex(.+$)/mg){
+        $metric_handler{$1}-> ($n->{Tserver_UUID},"$1$2");
+      }
+  }
+  if ($n->{isMaster}){
+      my $metrics_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{masterHttpPort}/prometheus-metrics?reset_histograms=false",
+                                      "BASE_URL_UNIVERSE",1); # RAW
+      while($metrics_raw=~/$regex(.+$)/mg){
+        $metric_handler{$1}-> ("Master-idx-".$n->{nodeIdx},"$1$2");
+      }       
   }
   
   for my $sum_key (grep {m/_sum$/} keys(%post_process)){
@@ -418,13 +419,11 @@ sub Get_Node_Metrics{
      }
   }
 
-  $db->putsql("END TRANSACTION; -- Node metrics");
-
 }
 #------------------------------------------------------------------------------------------------
 sub save_metric{
   my ($metric,$node_uuid,$table_uuid,$value)=@_;
-  $db->putsql("INSERT INTO METRICS VALUES('$metric','$node_uuid','$table_uuid',$value);");
+  $db->putsql("INSERT INTO METRICS VALUES('$metric','$node_uuid','TABLE','$table_uuid',$value);");
 }
 #------------------------------------------------------------------------------------------------
 sub Read_this_buffer_w_callback{
@@ -682,6 +681,16 @@ sub Create_Views{
 	 WHERE  node.isTserver  AND nodeuuid=node_uuid
 	       AND  t.tablet_uuid=trd.tablet_uuid  
 		   AND trd.leader_count !=1;
+
+SELECT '-- The following reports are available --';
+.tables
+SELECT '-- S u m m a r y--';
+
+ select   (SELECT count(*) from node) ||' Nodes;  ' 
+       || (SELECT count(*) from tablet)||' Tablets ('
+       || (SELECT count(*)  from leaderless) || ' Leaderless). '
+       || (select count(*) from metrics) || ' metrics.';
+ select tablet_count ||' tablets have '||replicas || ' replicas.' from tablet_replica_summary;
 __SQL__
 }
 1;  
@@ -839,7 +848,11 @@ if ( $opt{YBA_HOST} =~m{^(http\w?://)}i ){
                          'Content-Type'      => 'application/json',
                          # 'max_size'        => 5*1024*1024, # 5MB 
                       });
-
+    if ($HTTP::Tiny::VERSION < 0.05){
+       print "--WARNING: HTTP::Tiny version ", $HTTP::Tiny::VERSION, " is too old. Using CURL\n";
+       $opt{HTTPCONNECT} = "curl";
+       return $class->new(); # recurse
+    }
     return $self;
 }
 
@@ -892,6 +905,18 @@ sub new{
   $self->{JSON_STRING} = $yba_api->{raw_response}; # Raw JSON string 
   $opt{DEBUG} and print "--DEBUG:UNIV: $_\t","=>",$self->{$_},"\n" for qw|name creationDate universeUUID version |;
   _Extract_nodes($self);
+  for my $region (@{ $self->{universeDetails} {clusters} [0]{placementInfo}{cloudList}[0]{regionList} }){
+      my $preferred = 0;
+      my $az_node_count = 0;
+      for my $az ( @{ $region->{azList} } ){
+          $az->{isAffinitized} and $preferred++;
+          $az_node_count += $az->{numNodesInAZ};
+      }
+      $self->{REGION}{$region->{name}}{PREFERRED}     = $preferred;
+      $self->{REGION}{$region->{name}}{UUID}          = $region->{uuid};
+      $self->{REGION}{$region->{name}}{AZ_NODE_COUNT} = $az_node_count;
+      $opt{DEBUG} and print "--DEBUG:REGION $region->{name}: PREFERRED=$preferred, $az_node_count nodes, $region->{uuid}.\n";
+	}
   return bless $self, $class;
 }
 
