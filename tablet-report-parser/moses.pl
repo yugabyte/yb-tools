@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.11";
+our $VERSION = "0.12";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
@@ -102,7 +102,7 @@ sub Get_and_Parse_tablets_from_tservers{
 
       local $/="</tr>\n";
       my $row=0;
-	  my %leaders;
+	    my %leaders;
       my $header =<$f>;
       $header or die "ERROR: Cant read header from node/tablet  HTML";
       #print "HDR: $header";
@@ -741,7 +741,7 @@ sub new_from_tr{
     my $h=0;
     my %val = map{$fields[$h++] => $_} $line=~m{<td>(.+?)</td>}gs;
     
-    ($val{TABLET_UUID}) = $val{TABLET_ID} =~m/>(\w+)</;
+    ($val{TABLET_UUID}) = $val{TABLET_ID} =~m/^(?:<.+?>)?(\w+)/; # Usually <a href>, but tombstones have only uuid
     $val{FOLLOWERS} = join ",", $val{'RAFTCONFIG'} =~m/FOLLOWER: ([^<]+)/g ; # a CSV string 
     ($val{LEADER})    =  $val{'RAFTCONFIG'} =~m/LEADER: ([^<]+)/;
     my %disk = $val{ON_DISK_SIZE} =~m/>(\w.+?): ([^<]+)/g;
