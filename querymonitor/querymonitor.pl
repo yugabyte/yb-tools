@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.13";
+our $VERSION = "1.29";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -24,10 +24,10 @@ use HTTP::Tiny;
 
 my %option_specs=( # Specifies info for globals saved in %opt. TYPE=>undef means these are INTERNAL, not settable.
     API_TOKEN     =>{TYPE=>'=s', DEFAULT=> $ENV{API_TOKEN}, HELP=>"From User profile."},
-    YBA_HOST      =>{TYPE=>'=s', DEFAULT=> $ENV{YBA_HOST},  HELP=>"From User profile."},
+    YBA_HOST      =>{TYPE=>'=s', DEFAULT=> $ENV{YBA_HOST},  HELP=>"From User profile. Include 'https://' if applicapible"},
     CUST_UUID     =>{TYPE=>'=s', DEFAULT=> $ENV{CUST_UUID}, HELP=>"From User profile."},  
     UNIV_UUID     =>{TYPE=>'=s', DEFAULT=> $ENV{UNIV_UUID}, HELP=>"From User profile."},
-	HOSTNAME      =>{TYPE=>undef,DEFAULT=>do{chomp(local $_=qx|hostname|); $_} },
+    HOSTNAME      =>{TYPE=>undef,DEFAULT=>do{chomp(local $_=qx|hostname|); $_} },
     STARTTIME     =>{TYPE=>undef,DEFAULT=> unixtime_to_printable(time(),"YYYY-MM-DD HH:MM")},
     STARTTIME_TZ  =>{TYPE=>undef,DEFAULT=> unixtime_to_printable(time(),"YYYY-MM-DD HH:MM","Include tz offset")},
     INTERVAL_SEC  =>{TYPE=>'=i', DEFAULT=> 5, HELP=>"Interval (Seconds) between  query snapshots"},
@@ -53,6 +53,8 @@ my %option_specs=( # Specifies info for globals saved in %opt. TYPE=>undef means
     USETESTDATA   =>{TYPE=>'!',  DEFAULT=> undef,   HELP=>"TESTING only !! - Do not use."},
     TZOFFSET      =>{TYPE=>undef,DEFAULT=> undef,  },# This is set inside 'unixtime_to_printable', on first use 
     RPCZ          =>{TYPE=>'!',  DEFAULT=> 1,     HELP=>"If set, get query from each node, instead of /live_queries"},
+    MASTER_LEADER =>{TYPE=>undef,DEFAULT=>undef, },  # Obtained and Used internally
+    DBINFO        =>{TYPE=>undef,DEFAULT=>undef, },  # Namespaces, tablespaces, tables, tablets .. Obtained and Used internally	
 );
 my %opt = map {$_=> $option_specs{$_}{DEFAULT}} keys %option_specs;
 
@@ -71,19 +73,26 @@ if ($opt{ANALYZE}){
 }
 
 daemonize();
+Get_Table_Details();
+$opt{ENDTIME_EPOCH} += time(); # Previously, just had nbr of seconds. Now set the stopwatch.
 
 #------------- M a i n    L o o p --------------------------
 while (not ($quit_daemon  or my $this_iter_ts=time() > $opt{ENDTIME_EPOCH} )){  # Infinite loop ...
    $loop_count++;
    my $next_iter_ts = $this_iter_ts + $opt{INTERVAL_SEC};
    Main_loop_Iteration();
+   if ($loop_count % 120 == 0  and  $output->{OUTPUT_FH}){ # After 120 loops and we have Output, get lag 
+      Save_tserver_follower_lag_metrics();
+   }
    my $sleep_sec = $next_iter_ts - time();
    $sleep_sec > 0 and  sleep($sleep_sec);
 }
 #------------- E n d  M a i n    L o o p ---------------
 # Could get here if a SIGNAL is received
 warn(unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS") ." Program $$ Completed after $loop_count iterations.\n"); 
-$output->Write_event(time(),unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS") ." Program $$ Completed after $loop_count iterations.",1); 
+$output->Write_Section(time(),"EVENT",
+                       "MSG:" . unixtime_to_printable(time(),"YYYY-MM-DD HH:MM:SS") ." Program $$ Completed after $loop_count iterations.",
+                       undef,"text/event");
 $opt{LOCK_FH} and close $opt{LOCK_FH} ;  # Should already be closed and removed by sig handler
 unlink $opt{LOCKFILE};
 $output->Close("FINAL");
@@ -108,8 +117,10 @@ sub Main_loop_Iteration{
 	
     my $ts = time();
 	if ($queries->{error}){
+		$output->Write_Section(time(),"EVENT","MSG: ERROR: GET error . counter=$error_counter",
+                       undef,"text/event");
 		$error_counter++ >= $opt{MAX_ERRORS} and $quit_daemon = 1;
-	    return $queries->{error};	
+	    return $queries->{error};
 	}
     for my $type (qw|ysql ycql|){
        for my $q (@{ $queries->{$type}{queries} }){
@@ -162,8 +173,11 @@ sub Get_RPCZ_from_nodes{
 				for my $item(@$item_array){
 					my $info= {query => join(";",map{$_->{sql_string}}
 					                              @{$item->{cql_details}{call_details}}),
+                               params => join(";",map{unpack("H*", $_->{params}||"")} # Store as HEX-string 
+					                              @{$item->{cql_details}{call_details}}),
 					           type=>$item->{cql_details}{type},
 					           elapsed_millis => $item->{elapsed_millis},
+							   sql_id => $item->{cql_details}{call_details}[0]{sql_id},
 							   nodeName=>$n->{nodeName}};
 					next unless length($info->{query}) > 1;
 					$info->{remote_ip} = $c->{remote_ip};
@@ -177,6 +191,8 @@ sub Get_RPCZ_from_nodes{
             my $ts = time();
 	        for my $c (@{$q->{connections}}){
 		        next unless $c->{query};
+                $c->{database} ||= ""; # Avoid 'Uninitialized String..' 
+				next if $c->{database} eq "postgres"  or $c->{database} eq "system_platform"; #has too many columns 
 				$c->{host} = $n->{nodeName};
 				$opt{DEBUG} and $loop_count<50 and PrintDeep($c,"DEBUG:got ysql \@$ts:"), print "\n";
 				$output->WriteQuery($ts, "ysql", $c, $c->{query});
@@ -185,7 +201,17 @@ sub Get_RPCZ_from_nodes{
    }
 
    return ;   
-}	
+}
+#------------------------------------------------------------------------------
+sub Save_tserver_follower_lag_metrics{
+	for my $n (@{ $opt{NODES} }){
+		next unless $n->{isTserver};
+		my $lags = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/metrics?metrics=follower_lag_ms","BASE_URL_UNIVERSE");
+        my $ts = time();
+		$output->Write_Section($ts,"TABLETMETRIC","NODE:$n->{nodeUuid}\nmetric:follower_lag_ms"
+		              ,$YBA_API->{json_string},"text/json");
+	}
+}
 #------------------------------------------------------------------------------
 sub SQL_Sanitize{ # Remove PII 
    my ($q) = @_;
@@ -245,13 +271,13 @@ sub Initialize{
         }
     }
   }
-  $opt{DEBUG} and print "DEBUG: $_\t",defined( $opt{$_})?$opt{$_}:"undef","\n" for sort keys %opt;
+  $opt{DEBUG} and print "--DEBUG: $_\t",defined( $opt{$_})?$opt{$_}:"undef","\n" for sort keys %opt;
   my ($run_digits,$run_unit) = $opt{RUN_FOR} =~m/^(\d+)([dhms]?)$/i;
   $run_digits or die "ERROR:'RUN_FOR' option incorrectly specified($opt{RUN_FOR}). Use: 1d 3h 30s or just a number of seconds";
   $run_unit ||= "s"; # Default to seconds  
   my %unit_idx= (d=>24*3600,  m => 60 , h => 3600 ,s => 1); 
   $unit_idx{uc $_} = $unit_idx{$_} for keys %unit_idx;
-  $opt{ENDTIME_EPOCH} = time() + $run_digits * $unit_idx{$run_unit};
+  $opt{ENDTIME_EPOCH} = $run_digits * $unit_idx{$run_unit}; # Temporarily hold nbr of seconds to run. Add time() later..
 
   if ($opt{ANALYZE}){
 	  return; # no more initialization needed   
@@ -259,8 +285,7 @@ sub Initialize{
 
   $YBA_API = Web::Interface::->new();
 
-  # Get universe name ..
-  $opt{UNIVERSE} = $YBA_API->Get("");
+  Get_Universe_Name_with_retry(3);
 
   $opt{DEBUG} and print "--DEBUG:UNIV: $_\t","=>",$opt{UNIVERSE}{$_},"\n" for qw|name creationDate universeUUID version |;
   #my ($universe_name) =  $json_string =~m/,"name":"([^"]+)"/;
@@ -271,8 +296,8 @@ sub Initialize{
   }
   $opt{NODES} = Analysis::Mode::Extract_nodes_From_Universe($opt{UNIVERSE}); 
   $opt{OUTPUT} ||= "queries." . unixtime_to_printable(time(),"YYYY-MM-DD") . ".$opt{UNIVERSE}{name}.mime.gz",
-  $output = MIME::Write::Simple::->new(UNIVERSE_JSON=>$YBA_API->{json_string}); # No I/O so far 
-  $output->Write_event(time(),"Querymonitor $VERSION Started for universe $opt{UNIVERSE}{name}",1); # Delayed write 
+  $output = MIME::Write::Simple::->new(UNIVERSE_JSON=>$YBA_API->{json_string}); # No I/O so far ; Seince we just got the UNIV info, json_string has the JSON for it.
+  $output->Write_Section(time(),"EVENT","MSG:Querymonitor $VERSION Started for universe $opt{UNIVERSE}{name}",undef,"text/event");
   my $nodestatus = $YBA_API->Get("/status");
   for my $nodename(keys %$nodestatus){
 	next unless ref($nodestatus->{$nodename}) eq "HASH";
@@ -281,16 +306,45 @@ sub Initialize{
 	print "--WARNING: NODE $nodename Status:$nodestatus->{$nodename}{node_status}; ",
 	       "Master-alive:$nodestatus->{$nodename}{master_alive}, Tserver-alive:$nodestatus->{$nodename}{tserver_alive}\n";
   }
+  # Get & store top level Namespace, Tablespace and Tables list 
+  if ($opt{UNIVERSE}{universeDetails}{clusters}[0]{userIntent}{enableYSQL}){
+     $opt{DBINFO}{NAMESPACES} = $YBA_API->Get("/namespaces"); # AOH - Endpoint may fail 
+     $output->Write_Section(time(),"NAMESPACES",undef,$YBA_API->{json_string},"text/json");
+  }
+  # Find Master/Leader 
+  $opt{MASTER_LEADER}      = $YBA_API->Get("/leader")->{privateIP};
+  $opt{DEBUG} and print "--DEBUG:Master/Leader JSON:",$YBA_API->{json_string},". IP is ",$opt{MASTER_LEADER},".\n";
+  my ($ml_node) = grep {$_->{private_ip} eq $opt{MASTER_LEADER}} @{ $opt{NODES} } or die "ERROR : No Master/Leader NODE found for $opt{MASTER_LEADER}";
+  my $master_http_port = $opt{UNIVERSE}{universeDetails}{communicationPorts}{masterHttpPort} or die "ERROR: Master HTTP port not found in univ JSON";
+  # Get dump_entities JSON from MASTER_LEADER
+  $opt{DEBUG} and print "--DEBUG:Getting Dump Entities...\n";  
+  $YBA_API->Get("/proxy/$ml_node->{private_ip}:$master_http_port/dump-entities","BASE_URL_UNIVERSE");
+  $output->Write_Section(time(),"DUMPENTITIES",undef,$YBA_API->{json_string},"text/json");
+  
   if ($opt{USETESTDATA}){
 	 print "--Writing ONE record of test data, then exiting...\n";
-	 $output->WriteQuery(time(), "ycql", {FIVE=>5,SIX=>6,COW=>"Moo"},"SELECT some_junk FROM made_up");
+	 Save_tserver_follower_lag_metrics();
+	 $output->WriteQuery(time(), "ycql", {FIVE=>5,SIX=>6,COW=>"Moo",elapsed_millis=>200,query=>undef,nodename=>'BogusNode'},"SELECT some_junk FROM made_up");
 	 $output->Close("FINAL");
 	 exit 2;
   }  
   # Run iteration ONCE, to verify it works...
   return unless $opt{DAEMON} ;
   
+  my ($lock_dir,$lockfile) = $opt{LOCKFILE}=~m{^(.+/)([^/]+)$};
+  my $lock_retry = 0;
+  $opt{UNIV_UUID}=~tr/'"//d; # Zap quotes 
   $opt{LOCKFILE} .= ".$opt{UNIV_UUID}"; # one lock per universe 
+  while (! -w $lock_dir  and $lock_retry++ < 2){
+     print "WARNING: $lock_dir (--LOCKFILE) is not writable.\n";
+     if ($flags_used{LOCKFILE}){
+        die "ERROR: Unwritable LOCKFILE dir ($flags_used{LOCKFILE}) specified.";
+     }
+     # User did not specify it, so we auto-try the /temp dir
+     $lock_dir="/tmp";
+     $opt{LOCKFILE} = "$lock_dir/$lockfile";
+	 print "WARNING: Trying to use lockfile $opt{LOCKFILE}...\n";
+  }
   print "--Testing main loop before daemonizing...\n";
 
   if (Main_loop_Iteration()){
@@ -299,7 +353,7 @@ sub Initialize{
   }
   # Close open file handles that may be leftover from main loop outputs
   $output->Close(0); # Not the "Final" close 
-  print "--End main loop test.\n";  
+  print "--End main loop test. Output file will be '$opt{OUTPUT}'.\n";
 }
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
@@ -311,7 +365,8 @@ sub daemonize {
     }
     my $grandchild_output = "nohup.out";
     sysopen $opt{LOCK_FH}, $opt{LOCKFILE}, O_EXCL | O_RDWR | O_CREAT | O_NONBLOCK
-       or die "ERROR (Fatal):$0 is already running: Lockfile $opt{LOCKFILE}:$!";
+       or die "ERROR (Fatal):$0 is already running?: Lockfile $opt{LOCKFILE}"
+	    ." created " . sprintf('%.2f',-M $opt{LOCKFILE}) ." days ago:$!";
      # Handle Signals ..
     sub Signal_Handler {   # 1st argument is signal name
         my($sig) = @_;
@@ -333,7 +388,7 @@ sub daemonize {
     # 	The child itself forks and it then exits right away, so its child is taken over by init and can't be a zombie.
     warn (unixtime_to_printable(time()) 
 	     . " Daemonizing. Expected to run in background until "
-		 .  unixtime_to_printable($opt{ENDTIME_EPOCH}). "\n");
+		 .  unixtime_to_printable($opt{ENDTIME_EPOCH} + time()). " + time for Table info initialization(~2 min).\n");
     my $pid = fork ();
     if ($pid < 0) {
       die "first fork failed: $!";
@@ -376,8 +431,53 @@ sub daemonize {
    umask 0; # Clear the file creation mask
    #foreach (0 .. (POSIX::sysconf (&POSIX::_SC_OPEN_MAX) || 1024))
    #   { POSIX::close $_ } # Close all open file descriptors
-
    return $pid; # Will always return "0", since this is the child process.
+ }
+ #-----------------------------------------------------------------------------
+sub Get_Universe_Name_with_retry{
+  my ($retry_count) = @_;
+  --$retry_count <=0 and die "ERROR: Too many failed attempts";
+  eval { $opt{UNIVERSE} = $YBA_API->Get("") };
+  if ($@  or  $opt{UNIVERSE}{error}){
+    # Fall through and handle retry
+  }else{
+    return; # All is well - we got the info in $opt{UNIVERSE}
+  }
+  warn "--WARNING $retry_count: Unable to `get` Universe info for $opt{UNIV_UUID}:$@";
+  # See if http was specified or empty - retry with https
+  if ($opt{YBA_HOST} =~m/^https/i){
+     die "ERROR: https spec: $opt{YBA_HOST} failed.";
+  }
+  if ($opt{YBA_HOST} =~m/^http\W/i){
+    $opt{YBA_HOST} = "https" . substr($opt{YBA_HOST},4);
+  }else{
+    # "http(s) was not specified
+    $opt{YBA_HOST} = "https://" . $opt{YBA_HOST};
+  }
+  warn "--INFO: Retrying connection with HTTPS to $opt{YBA_HOST}";
+  $YBA_API = Web::Interface::->new(); # Reset this global, forcing use of new URL 
+  return Get_Universe_Name_with_retry($retry_count);
+}
+#-----------------------------------------------------------------------------
+ sub Get_Table_Details{
+    # Get tables + Details - Moved after Daemonizing because it takes too long for user to wait for it 
+   print "-- ",unixtime_to_printable(time)," Getting tables and details...\n"; # Goes to nohup.out 
+   my $tbl_start_time = time();
+   my $tbl_count      = 0;
+   my $tbl_count_prev = 0;
+   my $tables = $YBA_API->Get("/tables") || []; # Need this because entities does not give table ID
+   for my $tbl(@$tables){
+  	  my $tbl_header = join("\n",map{"$_: $tbl->{$_}"} sort keys %$tbl);
+       my $desc = $YBA_API->Get("/tables/$tbl->{tableUUID}"); # Get table description 
+       $output->Write_Section(time(),"TABLEDESC",$tbl_header,$YBA_API->{json_string},"text/json");
+  	  if ( ++$tbl_count % 100 == 0  or  (time() - $tbl_start_time) % 10 ==0){
+  		  next unless $tbl_count - $tbl_count_prev > 4; # Avoid frequent updates 
+  		  print "-- .",unixtime_to_printable(time)," . processed $tbl_count out of ",scalar(@$tables)," tables after " ,
+  		       (time() - $tbl_start_time), " seconds.\n";
+  		  $tbl_count_prev = $tbl_count;
+  	  }
+   }
+   print "-- ",unixtime_to_printable(time)," Details for ",scalar(@$tables), " tables saved.\n";
  }
 #------------------------------------------------------------------------------
 sub unixtime_to_printable{
@@ -421,8 +521,10 @@ sub Extract_nodes_From_Universe{ # CLASS method
 	my $count=0;
 	for my $n (@{  $univ_hash->{universeDetails}{nodeDetailsSet} }){
        push @node, my $thisnode = {map({$_=>$n->{$_}||''} qw|nodeIdx nodeName nodeUuid azUuid isMaster
-                                  	   isTserver ysqlServerHttpPort yqlServerHttpPort state|),
+                                  	   isTserver ysqlServerHttpPort yqlServerHttpPort state tserverHttpPort 
+									   tserverRpcPort masterHttpPort masterRpcPort nodeExporterPort|),
 	                              map({$_=>$n->{cloudInfo}{$_}} qw|private_ip public_ip az region |) };
+       $thisnode->{$_} =~tr/-//d for grep {/uuid/i} keys %$thisnode;
        $callback and $callback->($thisnode, $count);
        $count++;
     }
@@ -435,9 +537,9 @@ sub Handle_MIME_HEADER  {
 	return unless $dispatch_type eq "Header"; # Only expecting a Header 
 
     for ( grep {!/_SECTION_|Content-Type|params$/} sort keys %{$self->{INPUT}{general_header}} ){
+		   $self->{INPUT}{general_header}{$_} =~tr/'//d; # Zap single quotes (UNIV_UUID)
 		   print {$self->{OUTPUT_FH}} "INSERT INTO kv_store VALUES ('MIMEHDR','$_','$self->{INPUT}{general_header}{$_}');\n";
 	}
-		
 }
 
 sub Handle_UNIVERSE_JSON{
@@ -521,20 +623,130 @@ sub Handle_MONITOR_DATA {
 	    s/'/~/g ;
 	}
 	my $type = shift @values;
+	return unless scalar(@values) >=  scalar(@{ $self->{FIELDS}{$type} }) ; # Make sure we have sufficient @values 
 	print {$self->{OUTPUT_FH}} "INSERT INTO $type VALUES('",
 	        join("','",@values),      "');\n"; 
 };
 
 sub Handle_Event_Data{
 	my ($self,$dispatch_type,$body ) = @_;
-	$opt{DEBUG} and print "--DEBUG:IN: EVENT handler type $dispatch_type\n";
+	$opt{DEBUG} and print "--DEBUG:IN: ",(caller(0))[3]," handler type $dispatch_type\n";
 	return unless $dispatch_type eq "Header";
-	# Put stuff into EVENT table 
-	for my $ts (sort keys %{  $self->{INPUT}{general_header} }){
-	  print {$self->{OUTPUT_FH}} "INSERT INTO event VALUES($ts,'",
-	        $self->{INPUT}{general_header}{$ts}  ,
-	        "');\n"; 
+
+    $self->{INPUT}{general_header}{MSG} =~s/'/''/g; # MSG : escape single quotes 
+	print {$self->{OUTPUT_FH}} "INSERT INTO event VALUES($self->{INPUT}{general_header}{TIMESTAMP},'",
+	        $self->{INPUT}{general_header}{MSG}  ,
+			"');\n";
+}
+
+sub Handle_ENTITIES_Data{
+	my ($self,$dispatch_type,$body ) = @_;
+	$opt{DEBUG} and print "--DEBUG:IN: ",(caller(0))[3]," handler type $dispatch_type\n";
+	return if $self->{SECTION_PROCESSED}{DUMPENTITIES}; # Already processed - Don't allow dups.
+	return unless $dispatch_type eq "Body" and $body;
+	# We get a giant JSON dump of entities .. parse it 
+	#{"keyspaces":[{"keyspace_id":"..","keyspace_name":"system","keyspace_type":"ycql"},
+	# {"keyspace_id":"7c51fb494aaf4da786c5ffd4175f4f3c","keyspace_name":"vijay","keyspace_type":"ycql"}],"tables":[{"table_id":"000...
+	#tablets":[{"table_id":"sys.catalog.uuid","tablet_id":"00000000000000000000000000000000","state":"RUNNING"},{"table_id":"000033e80000300080000000000042e3","tablet_id":"003353a4627048fb8a9733f353ccf903","state":"RUNNING","replicas":[{"type":"VOTER","server_uuid":"92b2779d3a5f496fb0ad7b846f1270e4","addr":"10.231.0.66:9100"},{..],"leader":"92b2779d3a5f496fb0ad7b846f1270e4"},
+	my $bj = JSON::Tiny::decode_json($body);
+    for my $ks (@{ $bj->{keyspaces} }){
+	 	# Add to KEYSPACES table #$opt{DEBUG} and print "--DEBUG: Keyspace $ks->{keyspace_name} ($ks->{keyspace_id}) type $ks->{keyspace_type}\n";
+		$ks->{keyspace_id} =~tr/-//d;
+		print {$self->{OUTPUT_FH}} "INSERT INTO keyspaces VALUES('",
+		       join("','", $ks->{keyspace_id},$ks->{keyspace_name},$ks->{keyspace_type}),
+			   "');\n";
 	}
+    for my $t (@{ $bj->{tables} }){
+		print {$self->{OUTPUT_FH}} "INSERT INTO tables (id,keyspace_id,name,state) VALUES('",
+		       join("','", $t->{table_id}, $t->{keyspace_id},  $t->{table_name}, $t->{state}),
+			   "');\n";
+	}
+    for my $t (@{ $bj->{tablets} }){
+	 	my $replicas = $t->{replicas} ; # AOH
+	 	my $l        = $t->{leader} || "";
+		for my $r (@$replicas){
+		   print {$self->{OUTPUT_FH}} "INSERT INTO tablets VALUES('",
+		       join("','", $t->{tablet_id}, $t->{table_id}, $t->{state}, $r->{type}, $r->{server_uuid},$r->{addr},$l ),
+			   "');\n";
+		}
+	}
+	$opt{DEBUG} and printf "--DEBUG: %d Keyspaces, %d tables, %d tablets\n", 
+	                     scalar(@{ $bj->{keyspaces} }),scalar(@{ $bj->{tables} }), scalar(@{ $bj->{tablets} });
+    # Fixup Node UUIDs : These are not in the Universe JSON - so we update from tablets 
+	print {$self->{OUTPUT_FH}} "UPDATE NODE ",
+       "SET nodeUuid=(select server_uuid FROM tablets ",
+           "WHERE  substr(addr,1,instr(addr,\":\")-1) = private_ip limit 1);\n";
+}
+
+sub Handle_Namespaces_Data{
+	my ($self,$dispatch_type,$body ) = @_;
+	$opt{DEBUG} and print "--DEBUG:IN: ",(caller(0))[3]," handler type $dispatch_type\n";
+	return unless $dispatch_type eq "Body" and $body;
+	my $bj = JSON::Tiny::decode_json($body);
+    for my $ns (@$bj){
+		$ns->{namespaceUUID} =~tr/-//d;
+		print {$self->{OUTPUT_FH}} "INSERT INTO namespaces VALUES('",
+		       join("','",  $ns->{namespaceUUID}, $ns->{name}, $ns->{tableType}),
+			   "');\n";
+	}
+}
+
+sub Handle_Table_Description{
+	my ($self,$dispatch_type,$body ) = @_;
+	$opt{DEBUG} and print "--DEBUG:IN: ",(caller(0))[3]," handler type $dispatch_type\n";
+	if ( $dispatch_type eq "Header" ){
+		$self->{TABLE_HDR} = $self->{INPUT}{general_header};
+		# "tableUUID":"...","keySpace":"vdf","tableType":"YQL_TABLE_TYPE","tableName":"emp","relationType":"USER_TABLE_RELATION",
+		# "sizeBytes":598584.0,"isIndexTable":false,"pgSchemaName":""
+		return;
+	}
+	if ( $dispatch_type eq "Body" and $body){
+        # Process body JSON
+		my $bj = JSON::Tiny::decode_json($body);
+
+		#
+		#tablecol(tableid TEXT PRIMARY KEY, isPartitionKey INTEGER, isClusteringKey INTEGER, columnOrder TEXT, sortOrder TEXT, 
+        #                           name TEXT, type TEXT, partitionKey TEXT, clusteringKey TEXT);
+        for my $c (@{$bj->{tableDetails}{columns}}){
+           print {$self->{OUTPUT_FH}} "INSERT INTO tablecol VALUES('", $bj->{tableUUID},"'",
+                 map ({",'" .$c->{$_} . "'"} qw|isPartitionKey isClusteringKey columnOrder sortOrder name type partitionKey clusteringKey|),
+                 ");\n";
+        };
+		delete $self->{TABLE_HDR};
+	}
+
+}
+
+sub Handle_Tablet_Metrics{
+	my ($self,$dispatch_type,$body ) = @_;
+	$opt{DEBUG} and print "--DEBUG:IN: ",(caller(0))[3]," handler type $dispatch_type\n";
+	if ( $dispatch_type eq "Header" ){
+		$self->{TABLETMETRIC_HEADER} = $self->{INPUT}{general_header};
+		$self->{TABLETMETRIC_BODY}   = "";
+		return;
+	}
+	if ( $dispatch_type eq "Body" and $body){
+		$self->{TABLETMETRIC_BODY} .= $body; # Accumulate the pieces 
+		return;
+	}
+	return unless $dispatch_type eq "EOF";
+	return unless length($self->{TABLETMETRIC_BODY}) > 10; # Sanity checvk 
+	my $bj = JSON::Tiny::decode_json($self->{TABLETMETRIC_BODY});
+	# Put stuff into tablemetrics table 
+	for my $metricInfo (@$bj){
+	   $self->{TABLETMETRIC_HEADER}{NODE} =~tr/-//d; # Zap dashes 
+	   for my $m( @{$metricInfo->{metrics}} ){
+	     print {$self->{OUTPUT_FH}} "INSERT INTO TABLETMETRIC VALUES("
+	           #timestamp INTEGER, node-uuid , tablet_id TEXT, metric_name TEXT, metric_value NUMERIC
+		   ,$self->{TABLETMETRIC_HEADER}{TIMESTAMP}
+		   ,qq|,"$self->{TABLETMETRIC_HEADER}{NODE}"|  # Node UUID 
+		   ,qq|,"$metricInfo->{id}"| # Tablet ID
+		   ,qq|,"$m->{name}"|,
+		   ,qq|,|,$m->{value}
+		   ,");\n";
+	   }
+	}
+	$self->{TABLETMETRIC_HEADER} = {};
 }
 
 my %Section_Handler =( # Defines Handler subroutines for each Mime piect (_SECTION_) received
@@ -543,12 +755,17 @@ my %Section_Handler =( # Defines Handler subroutines for each Mime piect (_SECTI
 	CSVHEADER		=> \&Handle_CSVHEADER	,
 	MONITOR_DATA	=> \&Handle_MONITOR_DATA,
 	EVENT           => \&Handle_Event_Data,
+	DUMPENTITIES    => \&Handle_ENTITIES_Data,
+	TABLEDESC       => \&Handle_Table_Description,
+	NAMESPACES      => \&Handle_Namespaces_Data,
+	TABLETMETRIC    => \&Handle_Tablet_Metrics,
+	NONE            => sub{$opt{DEBUG} and print "--DEBUG:GOT 'NONE' Section at  $_[0]->{INPUT}{recordnumber} - ignored\n"},
 );
 
 sub Parse_Body_Record{
    my ($self, $rec) = @_;
 
-   my $dispatch = $Section_Handler{ $self->{INPUT}{general_header}{_SECTION_} };
+   my $dispatch = $Section_Handler{ $self->{INPUT}{general_header}{_SECTION_} ||= "NONE" };
    if ( ! $self->{HEADER_PRINTED}[$self->{PIECENBR}]){
       $opt{DEBUG} and print "--DEBUG:HDR $self->{PIECENBR}:",map({"$_=>" . $self->{INPUT}{general_header}{$_} . "; "} 
 	     grep {!/params$/} sort keys %{$self->{INPUT}{general_header}}),"\n";
@@ -564,6 +781,7 @@ sub Parse_Body_Record{
 	  print {$self->{OUTPUT_FH}} "END TRANSACTION; -- $self->{PIECENBR} : ",
 	          $self->{INPUT}{general_header}{_SECTION_}, "\n";
 	  $self->{PIECENBR}++;
+	  $self->{SECTION_PROCESSED}{ $self->{INPUT}{general_header}{_SECTION_} } ++; # How many of these are processed 
 	  return;
    }   
    $opt{DEBUG} and print "--DEBUG:GOT Piece:",substr($rec,0,200),"..\n";
@@ -587,11 +805,13 @@ sub Process_file_and_create_Sqlite{
 	}
 	
     $self->Initialize_SQLITE_Output();
-	
-	$self->{INPUT}->parse($self, \&Parse_Body_Record);
-	close $self->{INPUT_FH};
-	print {$self->{OUTPUT_FH}} "SELECT 'All input records processed.';\n";
-
+	# Incomplete file or bad JSON may cause the next parse to fail:
+	eval { $self->{INPUT}->parse($self, \&Parse_Body_Record) };
+    if ($@){
+       print {$self->{OUTPUT_FH}} "SELECT '-- ERROR Parsing input:$@ --';\n";
+	}else{
+       print {$self->{OUTPUT_FH}} "SELECT 'All input records processed.';\n";
+    }
 	$self->{TYPE_EXISTS}{ycql} and $self->Create_and_run_views_for_ycql();
 	$self->{TYPE_EXISTS}{ysql} and $self->Create_and_run_views_for_ysql();
 	close $self->{OUTPUT_FH};
@@ -699,11 +919,13 @@ sub Create_and_run_views_for_ysql{
 sub Initialize_SQLITE_Output{
     my ($self) = @_;
 	$!=undef;
+	my $output_option = "|-"; # Default is to fork & pipe to SQLITE 
 	if ($opt{OUTPUT}){
 		if ($opt{OUTPUT} =~/^STDOUT$/i){ # Send SQL to stdout
 			die "ERROR: Cannot specify DB and OUTPUT=STDOUT together\n" if $opt{DB};
-			$opt{DB} = " ";
-			$opt{SQLITE} = "cat";
+			$opt{DB} = "\*STDOUT";
+			$opt{SQLITE} = "";
+			$output_option = ">&"; # Append to STDOUT
 		}else{
 			die "ERROR: The only valid OUTPUT option is STDOUT in --analyze mode. use --DB.\n";
 		}
@@ -719,7 +941,7 @@ sub Initialize_SQLITE_Output{
 	-e $self->{SQLITE_FILENAME} and die "ERROR: $self->{SQLITE_FILENAME} already exists. Use --db to specify a different file.\n";
 	print "--Populating Sqlite($sqlite_version) database '$self->{SQLITE_FILENAME}'...\n";
 	
-	open($self->{OUTPUT_FH}, "|-", "$opt{SQLITE} $self->{SQLITE_FILENAME}") 
+	open($self->{OUTPUT_FH}, $output_option, ($opt{SQLITE} ? "$opt{SQLITE} " : "") . $self->{SQLITE_FILENAME}) 
 	     or die "ERROR: Cannot fork sqlite to open $self->{SQLITE_FILENAME}";
 	print {$self->{OUTPUT_FH}} <<"__SQL1__";
 CREATE TABLE IF NOT EXISTS kv_store(type text,key text, value text);
@@ -729,6 +951,15 @@ INSERT INTO kv_store VALUES
 	  ,('GENERAL','Processing file','$opt{ANALYZE}')
 	  ,('GENERAL','Analysis version','$main::VERSION');
 CREATE TABLE IF NOT EXISTS event(ts INTEGER, e TEXT);
+CREATE TABLE IF NOT EXISTS keyspaces(id TEXT PRIMARY KEY, name TEXT, type TEXT); -- YCQL
+CREATE TABLE IF NOT EXISTS tables(id TEXT PRIMARY KEY, keyspace TEXT, keyspace_id TEXT, name TEXT,state TEXT,uuid TEXT,tableType TEXT, 
+                relationType TEXT,sizeBytes NUMERIC, walSizeBytes NUMERIC, isIndexTable INTEGER,pgSchemaName TEXT, ttlInSeconds INTEGER);
+-- {"tableUUID":"000033..","keySpace":"yugabyte","tableType":"PGSQL_TABLE_TYPE","tableName":"addresses","relationType":"USER_TABLE_RELATION","sizeBytes":0.0,"walSizeBytes":1.8874368E7,"isIndexTable":false,"pgSchemaName"
+CREATE TABLE IF NOT EXISTS tablecol(tableid TEXT, isPartitionKey INTEGER, isClusteringKey INTEGER, columnOrder TEXT, sortOrder TEXT, 
+                                    name TEXT, type TEXT, partitionKey TEXT, clusteringKey TEXT);
+CREATE TABLE IF NOT EXISTS tablets(id TEXT, table_id TEXT ,state TEXT,type TEXT,server_uuid TEXT,addr TEXT,leader TEXT); -- Multiple tablet replicas w same ID
+CREATE TABLE IF NOT EXISTS namespaces(namespaceUUID TEXT, name TEXT, tableType TEXT); -- YSQL 
+CREATE TABLE IF NOT EXISTS tabletmetric(timestamp INTEGER, node_uuid TEXT, tablet_id TEXT, metric_name TEXT, metric_value NUMERIC);
 __SQL1__
 
 }
@@ -790,14 +1021,18 @@ sub Get{
 		$self->{json_string} = qx|$self->{curl_base_cmd} --url $url$endpoint|;
 		if ($?){
 		   print "ERROR: curl get '$endpoint' failed: $?\n";
-		   exit 1;
+		   $output and $output->Write_Section(time(),"EVENT","MSG:ERROR: curl get '$endpoint' failed: $?",
+                       undef,"text/event");
+		   return {error=>$?};
 		}
     }else{ # HTTP::Tiny
 	   $self->{raw_response} = $self->{HT}->get(  $url . $endpoint );
 	   if (not $self->{raw_response}->{success}){
 		  print "ERROR: Get '$endpoint' failed with status=$self->{raw_response}->{status}: $self->{raw_response}->{reason}\n";
+		  $output->Write_Section(time(),"EVENT","MSG:ERROR: Get '$endpoint' failed with status=$self->{raw_response}->{status}: $self->{raw_response}->{reason}",
+                       undef,"text/event");
 		  $self->{raw_response}->{status} == 599 and print "\t(599)Content:$self->{raw_response}{content};\n";
-		  exit 1;
+		  return {error=> $self->{raw_response}->{status}};
 	   }
 	   $self->{json_string} = $self->{raw_response}{content};
 	}
@@ -837,6 +1072,32 @@ sub boundary{ # getter/setter
    print { $self->{OUTPUT_FH} }  "--" . $self->{boundary} . ($final ? "--\n" : "\n");
 }
 
+sub Write_Section{ # Writes the specified SECTION as an independent MIME piece 
+   my ($self,$ts,$section,$header,$data,$mime_type) = @_;
+
+   return unless $header or $data;
+
+   $mime_type ||= "text/plain";
+
+   if (! $self->{OUTPUT_FH} ){
+	  # Need to initialize output
+      $self->Open_and_Initialize();
+   }   
+   if ($self->{IN_CSV_SECTION}){
+	   $self->{IN_CSV_SECTION} = 0;
+	   $self->{TYPE_INITIALIZED} = {}; # Zap types to un-init 
+	   $self->boundary(); # Close the CSV section
+   }
+
+ 	$self->header($mime_type,
+	      join("\n",
+			 "_SECTION_: $section",
+			 "TIMESTAMP:$ts" . ($header ? "\n$header" : "")
+			 ));
+	$data and print { $self->{OUTPUT_FH} } $data,"\n";
+	$self->boundary();  
+}
+
 sub Open_and_Initialize{
 	my ($self) = @_;
 	$opt{DEBUG} and print "--DEBUG: Opening output file=" , $opt{OUTPUT},"\n";
@@ -865,32 +1126,6 @@ sub Open_and_Initialize{
 	}
 }
 
-sub Write_event{
-   my ($self,$ts,$event,$delayed_write) = @_;
-   if ($delayed_write){
-      push @{$self->{EVENT_QUEUE}}, [$ts,$event];
-	  return;
-   }
-   return unless  @{$self->{EVENT_QUEUE}} or $event;
-   if (! $self->{OUTPUT_FH} ){
-	  # Need to initialize output
-      $self->Open_and_Initialize();
-   }   
-   if ($self->{IN_CSV_SECTION}){
-	   $self->{IN_CSV_SECTION} = 0;
-	   $self->{TYPE_INITIALIZED} = {}; # Zap types to un-init 
-	   $self->boundary(); # Close the CSV section
-   }
- 	$self->header("text/event",
-	      join("\n",
-			 "_SECTION_: EVENT",
-			 map ({$_->[0] .": " . $_[1]}  @{$self->{EVENT_QUEUE}}),
-			 $event ? ("$ts: $event") : ()
-			 ));
-	$self->boundary();  
-	$self->{EVENT_QUEUE} = [];
-}
-
 sub Initialize_query_type{
 	my ($self,$type,$q) = @_;
 	
@@ -909,6 +1144,7 @@ sub Initialize_query_type{
 			 ));
 	$self->boundary();
 	$self->{TYPE_INITIALIZED}{$type} = 1;
+	$self->{TYPE_KEYS}{$type} = [sort(keys %$q)];
 	$self->header("text/csv","_SECTION_: MONITOR_DATA");
 	$self->{IN_CSV_SECTION} = 1;
 }
@@ -925,13 +1161,14 @@ sub WriteQuery{
 	                     . ".." . substr($sanitized_query,-($opt{MAX_QUERY_LEN}/2));
   }
   $q->{query} = qq|"$sanitized_query"|;
-  print { $self->{OUTPUT_FH} } join(",", $type, $ts, map( {$q->{$_}} sort keys %$q)),"\n";
+  print { $self->{OUTPUT_FH} } join(",", $type, $ts, map( {defined($q->{$_}) ? $q->{$_} :""} 
+      @{ $self->{TYPE_KEYS}{$type} })),"\n";
 }
 
 sub Close{
 	my ($self, $final) = @_;
     return unless $self->{OUTPUT_FH};
-	$final and $self->Write_event(time(),"Final close",0); # No delay 
+	$final and $self->Write_Section(time(),"EVENT","MSG:Final close",undef,"text/event");
 	$self->boundary(undef,$final);
 	$self->{IN_CSV_SECTION} = 0;
     close $self->{OUTPUT_FH};
@@ -990,17 +1227,7 @@ sub parse {
  
   $o->{general_header} = $o->parseHeader();
   croak "no boundary defined" unless $o->{general_header}->{"Content-Type.params"}->{"boundary"};
-  my $b = $o->{general_header}->{"Content-Type.params"}->{"boundary"};
-  if (length($b)>2 and (my $quote=substr($b,0,1)) eq substr($b,-1,1)){
-      if ($quote eq '"'  or $quote eq "'"){
-		  $b=substr($b,1,length($b)-2);
-	  }
-  }
-  $o->{boundary} = $b;
-  
   $o->parseBody();
-
-  #my @parts = ($general_header);
 
   while(! (eof($o->{fh}) || $o->{eof})){
     $o->{general_header} = $o->parseHeader();
@@ -1012,10 +1239,6 @@ sub parse {
 	 # Did not find proper ending boundary
 	 $o->{callback}->($o->{CALLER},undef); # Indiates Piece completed.
   }
-  #$general_header->{Epilog} = $o->parseBody();
-
-  #return \@parts;
-
 }
 
 sub parseBody {
@@ -1063,6 +1286,15 @@ sub parseHeader {
       $header{$p}->{$l} = $w;
     }
   }
+  
+
+  my $b = $header{"Content-Type.params"}->{"boundary"};
+  if ($b and length($b)>2 and (my $quote=substr($b,0,1)) eq substr($b,-1,1)){
+      if ($quote eq '"'  or $quote eq "'"){
+		  $b=substr($b,1,length($b)-2);
+	  }
+  }
+  $b and $o->{boundary} = $b;
   return \%header;
 }
 1;
