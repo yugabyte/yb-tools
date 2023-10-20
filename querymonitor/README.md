@@ -147,22 +147,25 @@ select customerid,emails,individual407typecode,rescountrycode,customertypecode,i
 After you run querymonitor using `--analyze <file-name>` , it generates a sqlite database.
 That database has data in several tables and views - these are described below:
 
-`client_summary  `: By client IP : type of queries, latency, and  per-region query count 
-`event           `: Internal events that occur during data collection (start|stop|errors)
-`keyspaces       `: List of `YCQL` keyspaces, with details 
-`kv_store        `: Key-Value store - has run parameters, gflags  
-`namespaces      `: List of YSQL namespaces (aka Databases)
-`NODE            `: List of nodes (masters/tservers) and details 
-`node_summary_cql`: Queries and response times per node 
-`q_detail        `: Details of each query including zone info 
-`slow_queries    `: "Large" query counts that take a "Long time"
-`slow_tables     `: By-table analysis - Latency  by query type 
-`summary_cql     `: By-Date/Time analysis of queries (in 10-minute slices)
-`tables          `: YCQL/YSQL table details 
-`tabletmetric    `: currently `follower_lag` per tablet, timestamped.
-`tablets         `: tablet details 
-`ycql            `: Query details collected (raw) for YCQL
-`ysql            `: Query details collected (raw) for YSQL
+| Field                                  | Description                                                             |
+| ---------------------------------------| ----------------------------------------------------------------------- |
+| `client_summary`                       | By client IP : type of queries, latency, and  per-region query count    |
+| `event`                                | Internal events that occur during data collection (start\|stop\|errors) |
+| `keyspaces`                            | List of `YCQL` keyspaces, with details                                  |
+| `kv_store`                             | Key-Value store - has run parameters, gflags                            |
+| `namespaces`                           | List of YSQL namespaces (aka Databases)                                 |
+| `NODE`                                 | List of nodes (masters/tservers) and details                            |
+| `node_summary_cql`                     | Queries and response times per node                                     |
+| `q_detail`                             | Details of each query including zone info                               |
+| `slow_queries`                         | "Large" query counts that take a "Long time"                            |
+| `slow_tables`                          | By-table analysis - Latency  by query type                              |
+| `summary_cql`                          | By-Date/Time analysis of queries (in 10-minute slices)                  |
+| `tables`                               | YCQL/YSQL table details                                                 |
+| `tabletmetric`                         | currently `follower_lag` per tablet, timestamped.                       |
+| `tablets`                              | tablet details                                                          |
+| `ycql`                                 | Query details collected (raw) for YCQL                                  |
+| `ysql`                                 | Query details collected (raw) for YSQL                                  |
+
 
 You can get this list (without the description) using the generated sqlite database:
 
