@@ -3,3 +3,4 @@
 bin/
 
 cover.out
+yb_sync_LDAP/yb_sync_ldap.py

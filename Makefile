@@ -1,6 +1,6 @@
 include global.mk
 
-YBTOOLS = pkg ycrc yugatool yugaware-client
+YBTOOLS = pkg ycrc yugatool yugaware-client yb-support-tool
 
 all: ${YBTOOLS}
 
@@ -8,9 +8,6 @@ all: ${YBTOOLS}
 ${YBTOOLS}:
 	${MAKE} -C $@
 
-clean:
-	rm -rf bin/
-	rm -rf out/
 
 .PHONY: integration
 integration: ginkgo

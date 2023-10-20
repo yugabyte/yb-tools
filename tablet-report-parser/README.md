@@ -1,6 +1,8 @@
 # Tablet Report Parser
 
 * Reads a tablet report that was created by **yugatool**
+* Can process **dump-entities** output
+* Can process **tablet_info** created by yugatool
 * outputs a *sqlite* database (or SQL stream) that contains parsed data + analysis info
 * Can produce various reports, such as leaderless tablets, tablet-count recommendations...
 * Can be used to analyze table/tablet status, check replication factors etc.
@@ -8,16 +10,17 @@
 ## See KB article for details :
 ### https://yugabyte.zendesk.com/knowledge/articles/12124512476045/en-us
 
+_NOTE: The KB article is more up-to-date than this README._
+
 ## HOW TO  Run THIS script  - and feed the generated SQL into sqlite3:
 
    `$ perl tablet_report_parser.pl  tablet-report-09-20T14.out`
 
 ## Sample Run:
 
-
 ```
 $ ./tablet-report-parser.pl tablet-report.out
-Sun Jan 22 00:00:50 2023 ./tablet-report-parser.pl version 0.26
+Sun Jan 22 00:00:50 2023 ./tablet-report-parser.pl version 0.33
         Reading tablet-report.out,
         creating/updating sqlite db tablet-report.out.sqlite.
 ./tablet-report-parser.pl Version 0.26 generating SQL on Sun Jan 22 00:00:50 2023
@@ -46,8 +49,6 @@ table_detail
      |90 leaderless tablets found.(See "leaderless")
  --- To get a report, run: ---
   sqlite3 -header -column tablet-report-parser/tablet-report.out.sqlite "SELECT * from <REPORT-NAME>"
-
-
 ```
 
 ## HOW TO Run Analysis using SQLITE ---
@@ -118,3 +119,14 @@ $ ./tablet-report-parser.pl tablet-report.out | sqlite3 i.can.name.my.sqlite.db.
 Alternatively, you can save the SQL stream to a file, then run sqlite separately:
 
 $ ./tablet-report-parser.pl tablet-report.out > saved.SQL.statements.sql
+
+You can pass multiple file names into the program, the tablet report, entities , or tablet_info:
+
+`perl  tablet-report-parser.pl tablet-report-2023-02-14.out.gz  007347.dump-entities bb3a15e4023a493cba91fdfbd4316570.txt`
+
+ * Files with "entities" in the name are processed as "dump-entities" files. These are created by:
+        curl <master-leader-hostname>:7000/dump-entities | gzip -c > 1000 4 24 27 30 46 119 1000 1001date -I)-<master-leader-hostname>.dump-entities.gz
+
+ * Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
+       ./yugatool -m $MASTERS $TLS_CONFIG tablet_info $TABLET_UUID > $TABLET_UUID.txt
+
