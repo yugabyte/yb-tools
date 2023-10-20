@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.12";
+our $VERSION = "0.13";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
@@ -92,7 +92,7 @@ sub Get_and_Parse_tablets_from_tservers{
          warn "-- Node $n->{nodeName} $n->{Tserver_UUID} is $n->{state} .. skipping\n";
          next;
       }
-
+      $n->{Tserver_UUID} ||= "*Unknown\@Idx-" . $n->{nodeIdx} . "*"; # Can happen for un-initialized system
       my $tabletCount = 0;
       print "SELECT '", TimeDelta("Processing tablets on $n->{nodeName} $n->{Tserver_UUID} (Idx $n->{nodeIdx})..."),"';\n";
       my $html_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/tablets?raw","BASE_URL_UNIVERSE",1); # RAW
@@ -180,7 +180,7 @@ sub Initialize{
         open my $f, "<", $cfile_name or die "ERROR: Opening $cfile_name:$!";
         while(<$f>){
            my ($key,$val) = m/\b(\w+)\s*=\s*["']?([\w\-:\.\/]+)['"]?/;
-           next unless exists $opt{uc $key};
+           next unless $key and  exists $opt{uc $key};
            $opt{uc $key} ||= $val; # Cmd-line overrides file info 
         }
         close $f;
