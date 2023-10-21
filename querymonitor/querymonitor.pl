@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.30";
+our $VERSION = "1.31";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -624,7 +624,8 @@ sub Handle_MONITOR_DATA {
 	}
 	my $type = shift @values;
 	return unless scalar(@values) >=  scalar(@{ $self->{FIELDS}{$type} }) ; # Make sure we have sufficient @values 
-	print {$self->{OUTPUT_FH}} "INSERT INTO $type VALUES('",
+	$values[  $#{ $self->{FIELDS}{$type} }+1 ] ||= ''; # Ensure last field has a value
+  print {$self->{OUTPUT_FH}} "INSERT INTO $type VALUES('",
 	        join("','",@values),      "');\n"; 
 };
 
@@ -709,7 +710,7 @@ sub Handle_Table_Description{
         #                           name TEXT, type TEXT, partitionKey TEXT, clusteringKey TEXT);
         for my $c (@{$bj->{tableDetails}{columns}}){
            print {$self->{OUTPUT_FH}} "INSERT INTO tablecol VALUES('", $bj->{tableUUID},"'",
-                 map ({",'" .$c->{$_} . "'"} qw|isPartitionKey isClusteringKey columnOrder sortOrder name type partitionKey clusteringKey|),
+                 map ({",'" .($c->{$_}||"") . "'"} qw|isPartitionKey isClusteringKey columnOrder sortOrder name type partitionKey clusteringKey|),
                  ");\n";
         };
 		delete $self->{TABLE_HDR};
