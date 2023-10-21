@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.13";
+our $VERSION = "0.14";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
@@ -13,6 +13,7 @@ my $HELP_TEXT = << "__HELPTEXT__";
    --YBA_HOST         [=] <YBA hostname or IP> (Required)
    --API_TOKEN        [=] <API access token>   (Required)
    --UNIVERSE         [=] <Universe Name>  (Required. Can be partial, sufficient to be Unique)
+   --CUSTOMER         [=] <Customer-uuid-or-name> (Optional. Required if more than one customer exists)
    --GZIP             (Use this if you want to create a sql.gz for export, instead of a sqlite DB)
    **ADVANCED options**
    --HTTPCONNECT      [=] [curl | tiny]    (Optional. Whether to use 'curl' or HTTP::Tiny(Default))
@@ -20,6 +21,7 @@ my $HELP_TEXT = << "__HELPTEXT__";
    --CONFIG_FILE_NAME [=] <name-of-file-containing-options> (Also --CONFIG_FILE_PATH)
    
     If STDOUT is redirected, it can be sent to  a SQL file, or gzipped, and collected for offline analysis.
+    You may abbreviate option names up to the minimum required for uniqueness.
 __HELPTEXT__
 use strict;
 use warnings;
@@ -59,7 +61,8 @@ my %opt = (
    STATUS_MSG_TO_STDERR => 0,
    FOLLOWER_LAG_MINIMUM => 1000, # Collect follower lag if GEQ this value 
    CONFIG_FILE_PATH     => "/home/yugabyte/",
-   CONFIG_FILE_NAME     => '.yba*.rc', 
+   CONFIG_FILE_NAME     => '.yba*.rc',
+   CUSTOMER             => undef,
 );
 
 #---- Start ---
@@ -163,7 +166,7 @@ sub Initialize{
                         API_TOKEN=s YBA_HOST=s UNIVERSE=s
                         GZIP! DBFILE=s SQLITE=s GZIP! DROPTABLES!
                         HTTPCONNECT=s CURL=s FOLLOWER_LAG_MINIMUM=i
-                        CONFIG_FILE_PATH=s CONFIG_FILE_NAME=s]
+                        CONFIG_FILE_PATH=s CONFIG_FILE_NAME=s CUSTOMER=s]
                ) or die "ERROR: Invalid command line option(s). Try --help.";
 
     if ($opt{HELP}){
@@ -205,11 +208,25 @@ sub Initialize{
      die "ERROR:Unable to `get` YBA API customer info - Bad API_TOKEN?:$@"; 
    }
    ## All is well - we got the info in $opt{YBA_JSON}
-   $opt{CUST_UUID} = $opt{YBA_JSON}[0]{uuid};
-   $YBA_API->Set_Value("CUST_UUID", $opt{YBA_JSON}[0]{uuid});
-   $opt{DEBUG} and print "--DEBUG: Customer $opt{YBA_JSON}[0]{name} = $opt{YBA_JSON}[0]{uuid}\n";
+   if (scalar(@{ $opt{YBA_JSON} }) == 1){
+      $opt{CUST_UUID} = $opt{YBA_JSON}[0]{uuid}; # Simple - single cust.
+   }elsif (not $opt{CUSTOMER}){
+       warn "WARNING: --CUSTOMER is not specified, and multiple customers exist .. selecting First(".$opt{YBA_JSON}[0]{name}.").\n";
+       $opt{CUST_UUID} = $opt{YBA_JSON}[0]{uuid};
+   }else{
+      for my $c(@{ $opt{YBA_JSON} }){
+        $opt{DEBUG} and print "--DEBUG: CUSTOMER:$c->{uuid} = '$c->{name}'.\n";
+         next unless $c->{uuid} eq $opt{CUSTOMER} or $c->{name} =~/$opt{CUSTOMER}/i;
+         $opt{CUST_UUID} = $c->{uuid};
+         last;
+      }
+      die "ERROR: Customer '$opt{CUSTOMER}' was not found (Run with --debug to list)" unless $opt{CUST_UUID}; 
+   }
+   $YBA_API->Set_Value("CUST_UUID", $opt{CUST_UUID});
+   $opt{DEBUG} and print "--DEBUG: Customer $opt{CUST_UUID} selected.\n";
    
    $opt{UNIVERSE_LIST} = $YBA_API->Get("/customers/$YBA_API->{CUST_UUID}/universes","BASE_URL_API_V1");
+   ref($opt{UNIVERSE_LIST}) eq "ARRAY" or die "ERROR: Could not get universe list. Bad API token ? --customer?";
    for my $u (@{$opt{UNIVERSE_LIST}}){
       $opt{DEBUG} and print "--DEBUG: Scanning Universe: $u->{name}\t $u->{universeUUID}\n";
       if ($opt{UNIVERSE}  and  $u->{name} =~/$opt{UNIVERSE}/i){
