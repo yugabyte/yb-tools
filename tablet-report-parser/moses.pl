@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.14";
+our $VERSION = "0.15";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
@@ -522,38 +522,6 @@ my %DBINFO =(
      __LOG__
      DROPPABLE => 0,
     },
-    GRIDXX => { FIELDS => [qw|ipaddr macaddr nodes hfscreatetime systemid timestamp HOSTNAME ISSOURCEGRID|],
-      CREATE=> <<"     __GRID__",
-       CREATE TABLE  IF NOT EXISTS xxxnode(
-       id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-       ipaddr TEXT NOT NULL,
-       macaddr TEXT,
-       nodes INTEGER,
-       hfscreatetime INTEGER NOT NULL,
-       systemid TEXT,
-       timestamp INTEGER,
-       HOSTNAME TEXT,
-       ISSOURCEGRID INTEGER
-       );
-     __GRID__
-     DROPPABLE => 1,
-    },TAABLE => {
-       CREATE=><<"     __DOMAIN__",
-       CREATE TABLE  IF NOT EXISTS xxxdomain(
-       id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-       gridid INTEGER NOT NULL REFERENCES GRID(id) ON DELETE CASCADE,
-       name     TEXT NOT NULL,
-	   cid      TEXT,
-       parentid INTEGER,
-       CONTACTINFO TEXT
-       );
-       --CREATE UNIQUE INDEX IF NOT EXISTS by_domainid ON DOMAIN (id);  
-       --CREATE UNIQUE INDEX IF NOT EXISTS by_gridid ON DOMAIN (gridid,id); 
-       --CREATE UNIQUE INDEX IF NOT EXISTS by_domain_name ON DOMAIN (name,gridid);  
-     __DOMAIN__
-     DROPPABLE => 1,
-    }, 
-    
 );
 
 
@@ -698,6 +666,51 @@ sub Create_Views{
 	 WHERE  node.isTserver  AND nodeuuid=node_uuid
 	       AND  t.tablet_uuid=trd.tablet_uuid  
 		   AND trd.leader_count !=1;
+  CREATE VIEW IF NOT EXISTS table_sizes AS 
+  SELECT T.NAMESPACE,T.TABLE_NAME,count(*) as tablets,RF1_tablets,
+     sum(T.NUM_SST_FILES) as sst_files, -- D.sst_files as RF1_SST_files,
+     round(sum(T.SST_FILES) /1024.0/1024.0/1024.0,2) as sst_gb,
+     round(sum(T.SST_FILES_UNCOMPRESSED) /1024.0/1024.0/1024.0,2) as sst_gb_uncompr,
+     round(sum(T.WAL_FILES) /1024.0/1024.0/1024.0,2) as wal_GB,
+     round(sum(T.TOTAL) /1024.0/1024.0/1024.0,2) as tot_gb,
+     D.tot_gb as RF1_tot_GB
+  FROM TABLET T,
+  	  (SELECT NAMESPACE,TABLE_NAME,count(*) as RF1_tablets,
+  	   printf('%d',sum(NUM_SST_FILES)) as sst_files,
+  	   round(sum(SST_FILES) /1024.0/1024.0/1024.0,2) as sst_gb,
+  	   round(sum(SST_FILES_UNCOMPRESSED) /1024.0/1024.0/1024.0,2) as sst_gb_uncompr,
+  	   round(sum(WAL_FILES) /1024.0/1024.0/1024.0,2) as wal_GB,
+  	   round(sum(TOTAL) /1024.0/1024.0/1024.0,2) as tot_gb
+  	FROM (SELECT  tablet_uuid,
+  	        NAMESPACE,TABLE_NAME,TABLE_UUID, avg(NUM_SST_FILES) NUM_SST_FILES ,avg(SST_FILES) SST_FILES ,
+  	       avg(SST_FILES_UNCOMPRESSED) SST_FILES_UNCOMPRESSED,avg(TOTAL) TOTAL ,avg(WAL_FILES ) WAL_FILES
+  	     FROM tablet GROUP BY tablet_uuid, NAMESPACE,TABLE_NAME,TABLE_UUID) 
+  	GROUP BY NAMESPACE,TABLE_NAME) D 
+  WHERE t.NAMESPACE=d.NAMESPACE AND T.TABLE_NAME=D.TABLE_NAME
+  GROUP BY T.NAMESPACE,T.TABLE_NAME;
+  
+  CREATE VIEW IF NOT EXISTS namespace_sizes AS 
+  SELECT T.NAMESPACE,count(*) as tablets,RF1_tablets,
+     sum(T.NUM_SST_FILES) as sst_files, -- D.sst_files as RF1_SST_files,
+     round(sum(T.SST_FILES) /1024.0/1024.0/1024.0,2) as sst_gb,
+     round(sum(T.SST_FILES_UNCOMPRESSED) /1024.0/1024.0/1024.0,2) as sst_gb_uncompr,
+     round(sum(T.WAL_FILES) /1024.0/1024.0/1024.0,2) as wal_GB,
+     round(sum(T.TOTAL) /1024.0/1024.0/1024.0,2) as tot_gb,
+     D.tot_gb as RF1_tot_GB
+  FROM TABLET T,
+  	  (SELECT NAMESPACE,TABLE_NAME,count(*) as RF1_tablets,
+  	   printf('%d',sum(NUM_SST_FILES)) as sst_files,
+  	   round(sum(SST_FILES) /1024.0/1024.0/1024.0,2) as sst_gb,
+  	   round(sum(SST_FILES_UNCOMPRESSED) /1024.0/1024.0/1024.0,2) as sst_gb_uncompr,
+  	   round(sum(WAL_FILES) /1024.0/1024.0/1024.0,2) as wal_GB,
+  	   round(sum(TOTAL) /1024.0/1024.0/1024.0,2) as tot_gb
+  	FROM (SELECT  tablet_uuid,
+  	        NAMESPACE,TABLE_NAME,TABLE_UUID, avg(NUM_SST_FILES) NUM_SST_FILES ,avg(SST_FILES) SST_FILES ,
+  	       avg(SST_FILES_UNCOMPRESSED) SST_FILES_UNCOMPRESSED,avg(TOTAL) TOTAL ,avg(WAL_FILES ) WAL_FILES
+  	     FROM tablet GROUP BY tablet_uuid, NAMESPACE,TABLE_NAME,TABLE_UUID) 
+  	GROUP BY NAMESPACE) D 
+  WHERE t.NAMESPACE=d.NAMESPACE 
+  GROUP BY T.NAMESPACE;
 
 SELECT '-- The following reports are available --';
 .tables
