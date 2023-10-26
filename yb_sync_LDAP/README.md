@@ -10,7 +10,7 @@ corresponding roles are added/deleted to YCQL or YSQL.
 * The script requires a number of python modules which, by default are installed on the YBA node
 * The script also requires postgres system libraries to be installed (`libpq.so.5()(64bit)`)
 
-## RUn instructions/help
+## Run instructions/help
 
 ```
 usage: yb_sync_ldap.py [-h] [--debug] [--apihost APIHOST]
