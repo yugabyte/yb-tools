@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.32"
+VERSION = "0.34"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -51,7 +51,10 @@ YCQL_GRANT_ROLE = "GRANT \"{}\" TO \"{}\";"
 YCQL_REVOKE_ROLE = "REVOKE \"{}\" FROM \"{}\";"
 YCQL_DROP_ROLE = "DROP ROLE IF EXISTS \"{}\";"
 YCQL_CREATE_NOLOGIN_ROLE = "CREATE ROLE \"{}\" WITH LOGIN=false;"
-YSQL_CREATE_ROLE = "CREATE ROLE \"{}\" WITH LOGIN PASSWORD '{}' IN ROLE {};"
+YSQL_CREATE_ROLE = "CREATE ROLE \"{}\" WITH LOGIN PASSWORD '{}';"
+YSQL_CREATE_ROLE_IN_ROLES = "CREATE ROLE \"{}\" WITH LOGIN PASSWORD '{}' IN ROLE {};"
+YSQL_CREATE_NOLOGIN_ROLE = "CREATE ROLE \"{}\" WITH NOLOGIN;"
+YSQL_CREATE_NOLOGIN_ROLE_IN_ROLES = "CREATE ROLE \"{}\" WITH NOLOGIN IN ROLE {};"
 YSQL_GRANT_ROLE = "GRANT {} TO \"{}\";"
 YSQL_REVOKE_ROLE = "REVOKE {} FROM \"{}\";"
 YSQL_DROP_ROLE = "DROP ROLE IF EXISTS \"{}\";"
@@ -68,12 +71,12 @@ LDAP_FILE_DATA = os.path.join(LDAP_BASE_DATA_DIR, 'cache/{}/{}/ldap_data.json')
 LDAP_BASE_DIR_ERROR = "The base directory {} does not exist"
 YCQL_ROLE_QUERY = "SELECT role, member_of, can_login FROM roles "\
                   "WHERE  role !='cassandra' {}" # param : "AND is_superuser = false" or ""
-YSQL_ROLE_QUERY = "SELECT r.rolname as role, ARRAY(SELECT b.rolname FROM "\
+YSQL_ROLE_QUERY = "SELECT r.rolname as role, r.rolcanlogin as can_login, ARRAY(SELECT b.rolname FROM "\
                   "pg_catalog.pg_auth_members m JOIN pg_catalog.pg_roles b "\
                   "ON (m.roleid = b.oid) WHERE m.member=r.oid) as member_of "\
                   "FROM pg_catalog.pg_roles r WHERE r.rolname !~ '^pg_' "\
                   "  AND r.rolname NOT IN ('yugabyte','postgres')"\
-                  " {} AND r.rolcanlogin='t' order by 1;"  # param: "AND r.rolsuper='f'" or ""
+                  " {} order by 1;"  # param: "AND r.rolsuper='f'" or ""
 UID_RE = r"\['?([A-Za-z0-9_\.@]+)'?\]"
 
 
@@ -109,6 +112,8 @@ class YBLDAPSync:
         """ The init routine for this class."""
         self.args = self.parse_arguments()
         self.host_ipaddr  = self.args.apihost if self.args.apihost else self.get_local_ipaddr()
+        #Strip off http http:// or https:// if sent in as the 'http_type' var us used to build the URL
+        self.host_ipaddr = self.host_ipaddr.replace('https://', '').replace('http://', '')
         self.ycql_session = None
         self.ysql_session = None
         self.http_type    = 'http'
@@ -460,6 +465,7 @@ class YBLDAPSync:
         :Return dbdict - dictionary contain the state of the database
         """
         dbdict = {}
+        db_nologin_role = {}
         owned_object_count = {}
         with session:
             owned_cursor = session.cursor(cursor_factory=psycopg2.extras.DictCursor)
@@ -470,13 +476,15 @@ class YBLDAPSync:
             owned_cursor.close()
             #
             auth_cursor = session.cursor(cursor_factory=psycopg2.extras.DictCursor)
-            auth_cursor.execute(YSQL_ROLE_QUERY.format(
-                    "" if allow_drop_superuser else "AND r.rolsuper='f'"  ))
+            auth_cursor.execute(YSQL_ROLE_QUERY.format("" if allow_drop_superuser else "AND r.rolsuper='f'"))
             rows = auth_cursor.fetchall()
             for row in rows:
-                dbdict[row['role']] = row['member_of']
+                if row['can_login']:
+                    dbdict[row['role']] = row['member_of']
+                else:
+                    db_nologin_role[row['role']] = row['member_of']
             auth_cursor.close()
-        return dbdict,owned_object_count
+        return dbdict,db_nologin_role,owned_object_count
 
     @classmethod
     def ycql_auth_to_dict(self, session, allow_drop_superuser):
@@ -496,7 +504,7 @@ class YBLDAPSync:
           if row['can_login']:
             dbdict[row['role']] = row['member_of']
           else:
-             db_nologin_role[row['role']] = 1
+             db_nologin_role[row['role']] = row['member_of']
              
         return dbdict,db_nologin_role
 
@@ -708,8 +716,7 @@ class YBLDAPSync:
                 stmt_type['AddRole'] +=1
                 role_to_create = get_uid_from_ddiff(key)
                 if target_api == 'YCQL':
-                    stmt_list.append(YCQL_CREATE_ROLE.format(role_to_create,
-                                                             generate_random_password()))
+                    stmt_list.append(YCQL_CREATE_ROLE.format(role_to_create, generate_random_password()))
                     for grant_role in value:
                         if not grant_role in db_nologin_role:
                            logging.debug("CREATing (non-login) role {} in DB, to assign to {}".format(grant_role,key))
@@ -718,10 +725,26 @@ class YBLDAPSync:
                         stmt_list.append(YCQL_GRANT_ROLE.format(grant_role, role_to_create))
                         stmt_type['GrantRole'] +=1
                 else:
-                    grant_roles = ','.join(['"{0}"'.format(role) for role in value])
-                    stmt_list.append(YSQL_CREATE_ROLE.format(role_to_create,
-                                                             generate_random_password(),
-                                                             grant_roles))
+                    grant_roles = ','.join(['{0}'.format(role) for role in value])
+                    for grant_role in value:
+                        if not grant_role in db_nologin_role:
+                           logging.debug("CREATing (non-login) role {} in DB, to assign to {}".format(grant_role, key))
+                           if grant_role == grant_roles:
+                               stmt_list.append(YSQL_CREATE_NOLOGIN_ROLE.format(grant_role))
+                           else:
+                            stmt_list.append(YSQL_CREATE_NOLOGIN_ROLE_IN_ROLES.format(grant_role, grant_roles))
+                            stmt_list.append(YSQL_GRANT_ROLE.format(grant_role, grant_roles))
+                            stmt_type['GrantRole'] += 1
+                           db_nologin_role[grant_role] = 1
+
+                    if (role_to_create == grant_roles):
+                        stmt_list.append(YSQL_CREATE_ROLE.format(role_to_create,
+                                                            generate_random_password()))
+                    else:
+                        stmt_list.append(YSQL_CREATE_ROLE_IN_ROLES.format(role_to_create,
+                                                            generate_random_password(),
+                                                            grant_roles))
+
         # Process dropped records - dictionary_item_removed
         if 'dictionary_item_removed' in diff_library: # in DB, Not in LDAP 
             for key, value in diff_library['dictionary_item_removed'].items():
@@ -745,18 +768,22 @@ class YBLDAPSync:
                 logging.debug("GRANTing DB role {} to users:{}".format(key,value.values()))
                 grant_role_list = []
                 for grant_role in value.values():
-                    if not grant_role in db_nologin_role:
-                       logging.debug("CREATing (non-login) role {} in DB, to assign to {}".format(grant_role,key))
-                       stmt_list.append(YCQL_CREATE_NOLOGIN_ROLE.format(grant_role))
-                       db_nologin_role[grant_role] = 1
                     stmt_type['GrantRole'] +=1
                     if target_api == 'YCQL':
+                        if not grant_role in db_nologin_role:
+                            logging.debug("CREATing (non-login) role {} in DB, to assign to {}".format(grant_role, key))
+                            stmt_list.append(YCQL_CREATE_NOLOGIN_ROLE.format(grant_role))
+                            db_nologin_role[grant_role] = 1
                         stmt_list.append(YCQL_GRANT_ROLE.format(grant_role, role_to_modify))
                     else:
                         grant_role_list.append(grant_role)
-                if target_api == 'YSQL':
-                    grant_roles = ','.join(['"{0}"'.format(role) for role in grant_role_list])
-                    stmt_list.append(YSQL_GRANT_ROLE.format(grant_roles, role_to_modify))
+                        grant_roles = ','.join(['"{0}"'.format(role) for role in grant_role_list])
+                        if not grant_role in db_nologin_role:
+                            logging.debug("CREATing (non-login) role {} in DB, to assign to {}".format(grant_role, key))
+                            stmt_list.append(YSQL_CREATE_NOLOGIN_ROLE.format(grant_role, grant_role))
+                            db_nologin_role[grant_role] = 1
+                        if grant_roles != role_to_modify:
+                            stmt_list.append(YSQL_GRANT_ROLE.format(grant_roles, role_to_modify))
         # Process changed records - delete attribute - iterable_item_removed
         if 'iterable_items_removed_at_indexes' in diff_library: # Permission is in DB, not in LDAP 
             for key, value in diff_library['iterable_items_removed_at_indexes'].items():
@@ -846,6 +873,8 @@ class YBLDAPSync:
         """
         db_certificate = universe['db_certificate']
         owned_counts={}
+        db_role_dict={}
+        db_nologin_role={}
         if self.args.target_api == 'YCQL':
             if not self.ycql_session:
                 self.ycql_session = self.connect_to_ycql(universe,
@@ -859,9 +888,9 @@ class YBLDAPSync:
                                                          self.args.dbuser,
                                                          self.args.dbpass,
                                                          db_certificate)
-            (db_role_dict, owned_counts) = self.ysql_auth_to_dict(self.ysql_session, self.args.allow_drop_superuser)
+            (db_role_dict, db_nologin_role, owned_counts) = self.ysql_auth_to_dict(self.ysql_session, self.args.allow_drop_superuser)
         logging.info("Loaded {} DB Users (allow_drop_superuser={}).".format(len(db_role_dict),self.args.allow_drop_superuser))
-        logging.debug(" DB Users:{}; NO-Login:{}".format(db_role_dict,db_nologin_role))
+        logging.debug(" DB Users:{}; NO-Login:{}".format(db_role_dict, db_nologin_role))
         if "DBROLE" in self.args.reports or "ALL" in self.args.reports:
            self.Print_Report("DB ROLE (allow_drop_superuser={})".format(self.args.allow_drop_superuser),db_role_dict)
         return db_role_dict,owned_counts,db_nologin_role
