@@ -1,8 +1,6 @@
 #!/bin/bash
 
-
-#Function to show blinkdots for various steps in progress when needed in the script.
-
+# Function to show blinkdots for various steps in progress when needed in the script.
 function blinkdots() {
   local pid=$1
   local delay=0.5
@@ -19,12 +17,7 @@ function blinkdots() {
   printf "\n"
 }
 
-
 # Function to display error message and exit
-
-
-# Function to display error message and exit
-
 function error_exit() {
   echo "$1"
   exit 1
@@ -54,9 +47,18 @@ fi
 # Extract the yugabyte binary version information from the core dump file
 
 echo "Extracting yugabyte binary version information, please wait..."
-#strings "$file_name" | grep -E "/yugabyte/yb-software/yugabyte-" | head -n 1 > /tmp/yb_db_version & PID=$!
+strings "$file_name" | grep -E "/yugabyte/yb-software/yugabyte-" | head -n 1 > /tmp/yb_db_version & PID=$!
 
-strings "$file_name" | grep -P "^/.*/yugabyte/yb-software/.*/bin/" | sort | uniq -c | sort -nr | head -1 | awk {'print $2'} > /tmp/yb_db_version & PID=$!
+#Below grep takes a lot of time. We are trying to improve......
+#strings "$file_name" | grep -P '^.*\/yugabyte\/yb-software\/[^/]+\/bin\/' | sort | uniq -c | sort -nr | head -1 | awk {'print $2'} > /tmp/yb_db_version & PID=$!
+
+# For pg the output is messed up and we need the second line, i think
+
+# support@lincoln:/cases/6794$ strings "./2023-06-27T15_02_15/b0bf8796-be63-4aea-9e54-c3a43a3540df/core_postgres.6326" | grep -E "/yugabyte/yb-software/yugabyte-"
+# /home/yugabyte/yb-software/yugabyte-2.14.9.0-b23-centos-x86_64/postgres/bin/pos
+# /home/yugabyte/yb-software/yugabyte-2.14.9.0-b23-centos-x86_64/postgres/bin/postgres
+
+#strings "$file_name" | grep -E "/yugabyte/yb-software/yugabyte-" | sed -n '2p' > /tmp/yb_db_version & PID=$!
 
 
 blinkdots $PID
@@ -149,62 +151,10 @@ if [ -f "$post_install" ]; then
   else
     error_exit "Error: Failed to execute post_install script."
   fi
-=======
-# Check if file is a valid core dump
-file_output=$(file "$file_name")
-if echo "$file_output" | grep -q "core file"; then
-  echo "Great! The file is a valid core dump, proceeding with analysis."
-else
-  error_exit "Error: The file is NOT an ELF core dump, please provide a valid core dump file. Make sure the file IS NOT compressed, if so please extract it and then try again!"
-fi
-
-# Extract version information from the file
-input_string=$(strings "$file_name" | grep -E "/yugabyte/yb-software/yugabyte-|yugabyte_version" | head -n 1) || input_string=""
-
-modified_string=$(echo "$input_string" | awk -F "/" '{for (i=1; i<=NF; i++) if ($i == "yugabyte" && $(i+1) == "yb-software") print $(i+2)}' | sed 's/centos/linux/' | sed 's/$/.tar.gz/')
-
-version=$(echo "$modified_string" | awk -F "-" '{print $2}')
-
-# Generate the URL for the binary
-output_string="https://downloads.yugabyte.com/releases/$version/$modified_string"
-echo "The final URL is: $output_string"
-
-# Download the binary
-download_file="$modified_string"
-target_dir="/cases/home/yugabyte/yb-software"
-
-echo "Downloading the binary file to $target_dir/$modified_string"
-
-curl -L -# "$output_string" -o "$target_dir/$modified_string"
-if [ $? -eq 0 ]; then
-  echo "Download of YB version file succeeded."
-else
-  error_exit "Error: Download of YB version file failed."
-fi
-
-# Extract the binary
-tar_file="$target_dir/$modified_string"
-
-echo "Extracting $tar_file in $target_dir"
-
-tar -xzf "$tar_file" -C "$target_dir" --strip-components=0 &>/dev/null
-
-# Execute post install script. This will setup the yb-db executable files to work with core and other cluster related stuff.
-
-post_install="$yb_db_install_dir/$executable_dir/bin/post_install.sh"
-
-if [ -f "$post_install" ]; then
-  echo "Executing post_install script to setup the binary as per core dump. Please bear with me!"
-  $post_install &>/dev/null &
-  blinkdots $!
-  if [ $? -eq 0 ]; then
-    echo "Post-installation setup completed."
-  else
-    error_exit "Error: Failed to execute post_install script."
-  fi
 else
   error_exit "Error: $post_install not found."
 fi
+
 
 # Replace the path in the yb_db_version with the new target directory
 
@@ -263,10 +213,10 @@ echo "--------------------------------------------------------"
 if [ "$redirect_output" == "y" ]; then
   output_file="${file_name}_$(echo "$lldb_command" | tr -s ' ' '_')_analysis.out"
   echo "Output will be saved to $output_file"
-  lldb -f "$new_yb_db_version" -c "$file_name" -o "$lldb_command" -o "quit"> "$output_file"
+  lldb --one-line-before-file "settings append target.exec-search-paths $(find $extracted_directory -type d | xargs echo)" -f "$new_yb_db_version" -c "$file_name" -o "$lldb_command" -o "quit"> "$output_file"
   echo "Analysis complete, the file '$output_file' has been saved."
 else
-  lldb -f "$new_yb_db_version" -c "$file_name" -o "$lldb_command"
+  lldb --one-line-before-file "settings append target.exec-search-paths $(find $extracted_directory -type d | xargs echo)" -f "$new_yb_db_version" -c "$file_name" -o "$lldb_command"
 fi
 fi
 echo "Exiting."
