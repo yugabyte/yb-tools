@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.34"
+VERSION = "0.35"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -52,11 +52,11 @@ YCQL_REVOKE_ROLE = "REVOKE \"{}\" FROM \"{}\";"
 YCQL_DROP_ROLE = "DROP ROLE IF EXISTS \"{}\";"
 YCQL_CREATE_NOLOGIN_ROLE = "CREATE ROLE \"{}\" WITH LOGIN=false;"
 YSQL_CREATE_ROLE = "CREATE ROLE \"{}\" WITH LOGIN PASSWORD '{}';"
-YSQL_CREATE_ROLE_IN_ROLES = "CREATE ROLE \"{}\" WITH LOGIN PASSWORD '{}' IN ROLE {};"
+YSQL_CREATE_ROLE_IN_ROLES = "CREATE ROLE \"{}\" WITH LOGIN PASSWORD '{}' IN ROLE \"{}\";"
 YSQL_CREATE_NOLOGIN_ROLE = "CREATE ROLE \"{}\" WITH NOLOGIN;"
-YSQL_CREATE_NOLOGIN_ROLE_IN_ROLES = "CREATE ROLE \"{}\" WITH NOLOGIN IN ROLE {};"
-YSQL_GRANT_ROLE = "GRANT {} TO \"{}\";"
-YSQL_REVOKE_ROLE = "REVOKE {} FROM \"{}\";"
+YSQL_CREATE_NOLOGIN_ROLE_IN_ROLES = "CREATE ROLE \"{}\" WITH NOLOGIN IN ROLE \"{}\";"
+YSQL_GRANT_ROLE = "GRANT \"{}\" TO \"{}\";"
+YSQL_REVOKE_ROLE = "REVOKE \"{}\" FROM \"{}\";"
 YSQL_DROP_ROLE = "DROP ROLE IF EXISTS \"{}\";"
 YSQL_OWNED_OBJECTS = "SELECT r.rolname as role,count(*) as owned_objects "\
                      "FROM pg_roles r,pg_shdepend d "\
