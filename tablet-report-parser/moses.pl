@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.16";
+our $VERSION = "0.17";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
@@ -390,7 +390,7 @@ sub Handle_ENTITIES_Data{
 sub Handle_xCluster_Data{
   # Uses Globals $db, $universe
   $db->CreateTable("xcluster",qw|uuid  name sourceUniverseUUID targetUniverseUUID status createTime modifyTime |);
-  $db->CreateTable("xcTable" ,qw|xcid table_uuid streamId lag|);
+  $db->CreateTable("xcTable" ,my @xcTableFields= qw|xcid table_uuid streamId replicationSetupDone needBootstrap indexTable status lag|);
 
   my %xcConfig;
 
@@ -405,13 +405,15 @@ sub Handle_xCluster_Data{
         . "');"
       );
       for my $table_uuid(@{ $xClusterDetails->{tables} }){
-         my $lag =  ref $xClusterDetails->{lag} ? 0 :  $xClusterDetails->{lag} + 0; # HASH indicates error - set to 0; 
-         $db->putsql("INSERT INTO xcTable (xcid table_uuid lag) VALUES('"
+         my @table_val;
+         my $lag =  ref $xClusterDetails->{lag} ? 0 :  $xClusterDetails->{lag} + 0; 
+         my ($tableDetail) = grep {$_->{tableId} eq $table_uuid} @{ $xClusterDetails->{tableDetails} };
+
+         $db->putsql("INSERT INTO xcTable (xcid,table_uuid,lag) VALUES('"
             . join("','", $uuid, $table_uuid, $lag)
             . "');"
          );
       }
-      # There should also be  $xClusterDetails->{tableDetails} , but it is MIA 
     }
   );
 }
