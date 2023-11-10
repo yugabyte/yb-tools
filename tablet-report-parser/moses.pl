@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.15";
+our $VERSION = "0.16";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
@@ -10,7 +10,7 @@ my $HELP_TEXT = << "__HELPTEXT__";
  Moses also collects a snapshot of metrics (tables, tablet lag).
  
  Run options:
-   --YBA_HOST         [=] <YBA hostname or IP> (Required)
+   --YBA_HOST         [=] <YBA hostname or IP> (Required) "[http(s)://]<hostname-or-ip>[:<port>]"
    --API_TOKEN        [=] <API access token>   (Required)
    --UNIVERSE         [=] <Universe Name>  (Required. Can be partial, sufficient to be Unique)
    --CUSTOMER         [=] <Customer-uuid-or-name> (Optional. Required if more than one customer exists)
@@ -18,10 +18,13 @@ my $HELP_TEXT = << "__HELPTEXT__";
    **ADVANCED options**
    --HTTPCONNECT      [=] [curl | tiny]    (Optional. Whether to use 'curl' or HTTP::Tiny(Default))
    --FOLLOWER_LAG_MINIMUM [=] <value> (ms)(collect tablet follower lag for values >= this value(default 1000))
-   --CONFIG_FILE_NAME [=] <name-of-file-containing-options> (Also --CONFIG_FILE_PATH)
+   --CONFIG_FILE_(PATH|NAME) [=] <path-or-name-of-file-containing-options> (i.e --CONFIG_FILE_PATH & .._NAME)
    
     If STDOUT is redirected, it can be sent to  a SQL file, or gzipped, and collected for offline analysis.
     You may abbreviate option names up to the minimum required for uniqueness.
+    Options can be set via --cmd-line, or via environment, or both, or via a "config_file".
+    We look for config files by default at --CONFIG_FILE_PATH=/home/yugabyte with a name "*.yba.rc".
+    Expected config file content format is : EXPORT <OPTION-NAME>="VALUE"
 __HELPTEXT__
 use strict;
 use warnings;
@@ -84,7 +87,8 @@ $SQL_OUTPUT_FH and close ($SQL_OUTPUT_FH);
 
 warn TimeDelta("COMPLETED. '$opt{DBFILE}' Created " , $opt{STARTTIME}),"\n";
 $opt{DBFILE}=~/sqlite$/ and warn "\t RUN: sqlite3 -header -column $opt{DBFILE}\n";
-
+$opt{DBFILE}=~/gz$/ and warn "\t To process into a DB, RUN: gunzip -c $opt{DBFILE} | sqlite3 "
+                      . substr($opt{DBFILE},0,-7) . ".sqlite\n";
 exit 0;
 #----------------------------------------------------------------------------------------------
 sub Get_and_Parse_tablets_from_tservers{
@@ -225,10 +229,17 @@ sub Initialize{
    $YBA_API->Set_Value("CUST_UUID", $opt{CUST_UUID});
    $opt{DEBUG} and print "--DEBUG: Customer $opt{CUST_UUID} selected.\n";
    
+   $YBA_API->{"UNIV_UUID"} = undef; # We have not found it yet 
    $opt{UNIVERSE_LIST} = $YBA_API->Get("/customers/$YBA_API->{CUST_UUID}/universes","BASE_URL_API_V1");
    ref($opt{UNIVERSE_LIST}) eq "ARRAY" or die "ERROR: Could not get universe list. Bad API token ? --customer?";
-   for my $u (@{$opt{UNIVERSE_LIST}}){
+   if ($opt{UNIVERSE}){
+      my $u; # Try exact match
+      ($u) = grep {$_->{universeUUID} eq $opt{UNIVERSE}} @{$opt{UNIVERSE_LIST}} and  $YBA_API->Set_Value("UNIV_UUID",$u->{universeUUID});
+      ($u) = grep {$_->{name}         eq $opt{UNIVERSE}} @{$opt{UNIVERSE_LIST}} and  $YBA_API->Set_Value("UNIV_UUID",$u->{universeUUID});
+   }
+   for my $u (@{$opt{UNIVERSE_LIST}}){ # Try regex match
       $opt{DEBUG} and print "--DEBUG: Scanning Universe: $u->{name}\t $u->{universeUUID}\n";
+      last if $YBA_API->{"UNIV_UUID"}; # Already set 
       if ($opt{UNIVERSE}  and  $u->{name} =~/$opt{UNIVERSE}/i){
          $opt{DEBUG} and print  "-- Selected Universe $u->{name}\t $u->{universeUUID}\n";
          $YBA_API->Set_Value("UNIV_UUID",$u->{universeUUID});
@@ -275,6 +286,7 @@ sub Initialize{
 
   $db->CreateTable("metrics",qw|metric_name node_uuid entity_name entity_uuid|,"value NUMERIC");
 
+  Handle_xCluster_Data() # Uses Globals :$db,$universe;
   # Since we have SELECTed the sqlite file handle, we need funny-looking "print" statements
   # to get SQLITE to display our "progress" messages. (Old SQLITE does not support ".print", so we use SELECTs)
 }
@@ -321,7 +333,7 @@ sub Handle_ENTITIES_Data{
 	my ($bj) = @_; # Entities decoded JSON 
 	$opt{DEBUG} and print "--DEBUG:IN: Handle_ENTITIES_Data\n";
     $db->CreateTable("keyspaces","id TEXT PRIMARY KEY","name TEXT", "type TEXT"); # -- YCQL
-    $db->CreateTable("tables","id TEXT PRIMARY KEY",qw|keyspace keyspace_id name state uuid tableTyp 
+    $db->CreateTable("tables","id TEXT PRIMARY KEY",qw| keyspace_id name state uuid tableTyp 
                 relationType |,"sizeBytes NUMERIC", "walSizeBytes NUMERIC", "isIndexTable INTEGER","pgSchemaName TEXT","ttlInSeconds INTEGER");
     $db->CreateTable("tablecol","tableid TEXT", "isPartitionKey INTEGER","isClusteringKey INTEGER",qw| columnOrder  sortOrder  
                                     name  type partitionKey  clusteringKey|);
@@ -369,10 +381,40 @@ sub Handle_ENTITIES_Data{
     }
     $db->putsql( "UPDATE NODE "
                . "SET nodeUuid=(select server_uuid FROM ent_tablets "
-               . "WHERE  substr(addr,1,instr(addr,\":\")-1) = private_ip limit 1);\n");
+              # . "WHERE  substr(addr,1,instr(addr,\":\")-1) = private_ip limit 1);\n");
+               . "WHERE substr(addr,1,length(addr) - 5) = private_ip limit 1);\n");
     $db->putsql("END TRANSACTION; -- Entities");
 }
 
+#------------------------------------------------------------------------------------------------
+sub Handle_xCluster_Data{
+  # Uses Globals $db, $universe
+  $db->CreateTable("xcluster",qw|uuid  name sourceUniverseUUID targetUniverseUUID status createTime modifyTime |);
+  $db->CreateTable("xcTable" ,qw|xcid table_uuid streamId lag|);
+
+  my %xcConfig;
+
+  $universe->Get_xCluster_details_w_callback(
+    sub{
+      my ($type, $xClusterDetails) = @_;
+      my $uuid = $xClusterDetails->{uuid};
+      $xcConfig{$uuid} and return; # Already seen this
+      $xcConfig{$uuid} =  $xClusterDetails;
+      $db->putsql("INSERT INTO xcluster VALUES('"
+        . join("','", map {$xClusterDetails->{$_}} qw|uuid  name sourceUniverseUUID targetUniverseUUID status createTime modifyTime |)
+        . "');"
+      );
+      for my $table_uuid(@{ $xClusterDetails->{tables} }){
+         my $lag =  ref $xClusterDetails->{lag} ? 0 :  $xClusterDetails->{lag} + 0; # HASH indicates error - set to 0; 
+         $db->putsql("INSERT INTO xcTable (xcid table_uuid lag) VALUES('"
+            . join("','", $uuid, $table_uuid, $lag)
+            . "');"
+         );
+      }
+      # There should also be  $xClusterDetails->{tableDetails} , but it is MIA 
+    }
+  );
+}
 #------------------------------------------------------------------------------------------------
 sub Extract_gflags{
 	my ($univ_hash) = @_;
@@ -676,7 +718,7 @@ sub Create_Views{
      D.tot_gb as RF1_tot_GB
   FROM TABLET T,
   	  (SELECT NAMESPACE,TABLE_NAME,count(*) as RF1_tablets,
-  	   printf('%d',sum(NUM_SST_FILES)) as sst_files,
+  	   CAST(round(sum(NUM_SST_FILES),0) AS INTEGER) as sst_files,
   	   round(sum(SST_FILES) /1024.0/1024.0/1024.0,2) as sst_gb,
   	   round(sum(SST_FILES_UNCOMPRESSED) /1024.0/1024.0/1024.0,2) as sst_gb_uncompr,
   	   round(sum(WAL_FILES) /1024.0/1024.0/1024.0,2) as wal_GB,
@@ -699,7 +741,7 @@ sub Create_Views{
      D.tot_gb as RF1_tot_GB
   FROM TABLET T,
   	  (SELECT NAMESPACE,TABLE_NAME,count(*) as RF1_tablets,
-  	   printf('%d',sum(NUM_SST_FILES)) as sst_files,
+  	   CAST(round(sum(NUM_SST_FILES),0) as INTEGER) as sst_files,
   	   round(sum(SST_FILES) /1024.0/1024.0/1024.0,2) as sst_gb,
   	   round(sum(SST_FILES_UNCOMPRESSED) /1024.0/1024.0/1024.0,2) as sst_gb_uncompr,
   	   round(sum(WAL_FILES) /1024.0/1024.0/1024.0,2) as wal_GB,
@@ -889,7 +931,7 @@ if ( $opt{YBA_HOST} =~m{^(http\w?://)}i ){
 sub Get{
     my ($self, $endpoint, $base, $raw) = @_;
     $self->{json_string}= "";
-    my $url = $base ? $self->{$base} : $self->{BASE_URL_API_CUSTOMER};
+    my $url = $base ? $self->{$base} : $self->{BASE_URL_API_CUST_UNIV};
     if ($self->{HTTPCONNECT} eq "curl"){
         $self->{json_string} = qx|$self->{curl_base_cmd} --url $url$endpoint|;
         if ($?){
@@ -915,7 +957,8 @@ sub Get{
 sub Set_Value{
     my ($self,$k,$v) = @_;
     $k and $self->{$k} = $v;
-    $self->{BASE_URL_API_CUSTOMER} = "$self->{HTTP_PREFIX}$self->{YBA_HOST}/api/customers/$self->{CUST_UUID}/universes/$self->{UNIV_UUID}";
+    $self->{BASE_URL_API_CUSTOMER} = "$self->{HTTP_PREFIX}$self->{YBA_HOST}/api/v1/customers/$self->{CUST_UUID}";
+    $self->{BASE_URL_API_CUST_UNIV}= "$self->{HTTP_PREFIX}$self->{YBA_HOST}/api/customers/$self->{CUST_UUID}/universes/$self->{UNIV_UUID}";
     $self->{BASE_URL_UNIVERSE}     = "$self->{HTTP_PREFIX}$self->{YBA_HOST}/universes/$self->{UNIV_UUID}";
     $self->{BASE_URL_API_V1}       = "$self->{HTTP_PREFIX}$self->{YBA_HOST}/api/v1";
 }
@@ -933,6 +976,7 @@ sub new{
   $yba_api or die "YBA API Parameter is required";
   my $self = $yba_api->Get(""); # Perl-ized Huge Univ JSON
   $self->{JSON_STRING} = $yba_api->{raw_response}; # Raw JSON string 
+  $self->{YBA_API} = $yba_api;
   $opt{DEBUG} and print "--DEBUG:UNIV: $_\t","=>",$self->{$_},"\n" for qw|name creationDate universeUUID version |;
   _Extract_nodes($self);
   for my $region (@{ $self->{universeDetails} {clusters} [0]{placementInfo}{cloudList}[0]{regionList} }){
@@ -951,6 +995,20 @@ sub new{
 }
 
 #----------------------------------------------------------------------------------------------
+
+sub Get_xCluster_details_w_callback{
+  my ($self,$callback) = @_;
+  for my $xcType (qw|targetXClusterConfigs sourceXClusterConfigs|){
+     for my $xcUUID (@{ $self->{universeDetails}{$xcType} }){
+         $opt{DEBUG} and print "--DEBUG:xCluster $xcType id=$xcUUID \n";
+         # Get xCluster detail config for this ID
+         my $xClusterDetails = $self->{YBA_API}->Get("/xcluster_configs/$xcUUID","BASE_URL_API_CUSTOMER");
+         $callback->($xcType, $xClusterDetails);
+     }
+  }
+}
+
+
 sub _Extract_nodes{
     my ($self) = @_;
 	
