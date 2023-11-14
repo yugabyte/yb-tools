@@ -93,6 +93,8 @@ exit 0;
 #----------------------------------------------------------------------------------------------
 sub Get_and_Parse_tablets_from_tservers{
 
+  my $prev_node_msg = "";
+
   for my $n (@{ $universe->{NODES} }){
       next unless $n->{isTserver};
       if ( $n->{state} ne  'Live'){
@@ -101,7 +103,7 @@ sub Get_and_Parse_tablets_from_tservers{
       }
       $n->{Tserver_UUID} ||= "*Unknown\@Idx-" . $n->{nodeIdx} . "*"; # Can happen for un-initialized system
       my $tabletCount = 0;
-      print "SELECT '", TimeDelta("Processing tablets on $n->{nodeName} $n->{Tserver_UUID} (Idx $n->{nodeIdx})..."),"';\n";
+      print "SELECT '", TimeDelta("Processing tablets on $n->{nodeName} $n->{Tserver_UUID} ($n->{private_ip},Idx $n->{nodeIdx})... $prev_node_msg"),"';\n";
       my $html_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/tablets?raw","BASE_URL_UNIVERSE",1); # RAW
 
       # Open the html text as a file . Read it using "</tr>\n" as the line ending, to get one <tr>(tablet) at a time 
@@ -132,12 +134,14 @@ sub Get_and_Parse_tablets_from_tservers{
       Collect_Follower_Lag_metrics($n);
       Get_Node_Metrics($n);
       $db->putsql("END TRANSACTION; --Tablets for  tserver $n->{nodeName}");
-	  $db->putlog("Found $tabletCount tablets on $n->{nodeName}:"
-	       . join (", ",map{ " $leaders{$_} leaders  on $_" } sort keys %leaders));
-      print "SELECT '",TimeDelta("Found $tabletCount tablets on $n->{nodeName}:"
-         . join (", ",map{ " $leaders{$_} leaders  on $_" } sort keys %leaders)),"';\n";
+      $db->putlog("Found $tabletCount tablets on $n->{nodeName}:"
+          . join (", ",map{ " $leaders{$_} leaders  on $_" } sort keys %leaders));
+      $prev_node_msg= "(Idx $n->{nodeIdx} had $tabletCount tablets, "
+                    . ($leaders{$n->{private_ip}} || 0) . " leaders"
+                    . ")";
+
   }
-  
+  print "SELECT '", TimeDelta("Completed Node Processing. $prev_node_msg"),"';\n";
   $db->putsql("CREATE UNIQUE INDEX tablet_idx ON tablet (node_uuid,tablet_uuid);");
 }
 #----------------------------------------------------------------------------------------------
@@ -277,6 +281,7 @@ sub Initialize{
   $db->CreateTable("gflags",qw|type key  value|);
   $opt{DEBUG} and print "SELECT '",TimeDelta("DEBUG:Extracting gflags..."),"';\n";
   Extract_gflags($universe);
+  $universe->Check_placementModificationTaskUuid($db);
   
   # Get dump_entities JSON from MASTER_LEADER
   $opt{DEBUG} and print "SELECT '",TimeDelta("DEBUG:Getting Dump Entities..."),"';\n";  
@@ -391,7 +396,7 @@ sub Handle_xCluster_Data{
   # Uses Globals $db, $universe
   $db->CreateTable("xcluster",qw|uuid  name sourceUniverseUUID targetUniverseUUID status createTime modifyTime |);
   $db->CreateTable("xcTable" ,my @xcTableFields= qw|xcid table_uuid streamId replicationSetupDone needBootstrap indexTable status lag|);
-
+  my %xcTableIdx = map { $xcTableFields[$_] => $_ } 0..$#xcTableFields; # array index map 
   my %xcConfig;
 
   $universe->Get_xCluster_details_w_callback(
@@ -406,11 +411,18 @@ sub Handle_xCluster_Data{
       );
       for my $table_uuid(@{ $xClusterDetails->{tables} }){
          my @table_val;
-         my $lag =  ref $xClusterDetails->{lag} ? 0 :  $xClusterDetails->{lag} + 0; 
+         $table_val[$xcTableIdx{lag}] =  ref $xClusterDetails->{lag} ? 0 :  $xClusterDetails->{lag} + 0; 
          my ($tableDetail) = grep {$_->{tableId} eq $table_uuid} @{ $xClusterDetails->{tableDetails} };
-
-         $db->putsql("INSERT INTO xcTable (xcid,table_uuid,lag) VALUES('"
-            . join("','", $uuid, $table_uuid, $lag)
+         if ($tableDetail){
+            for (keys %$tableDetail){
+               next unless defined( my $idx = $xcTableIdx{$_} );
+               $table_val[$idx] = $tableDetail->{$_};
+            }
+         }
+         $table_val[$xcTableIdx{xcid}]   = $uuid;
+         $table_val[$xcTableIdx{table_uuid}] = $table_uuid;
+         $db->putsql("INSERT INTO xcTable VALUES('"
+            . join("','", map {defined $table_val[$_]? $table_val[$_] : ''} 0..$#xcTableFields)
             . "');"
          );
       }
@@ -628,7 +640,6 @@ sub new {
 sub putsql{
   my ($self,$txt) = @_;
   defined $txt or return;
-  #print $sqlf "$txt\n";
   print $txt,"\n" ;
   $self->{SQLOUTPUTRECORDCOUNT}++;
 }
@@ -661,6 +672,11 @@ sub Insert_Tablet{
   my ($self,$t,$node_uuid) = @_;
   $self->putsql("INSERT into TABLET VALUES('$node_uuid'," . 
                 $t->Get_csv_quoted_values() . ");");
+}
+
+sub Append_Pending_Message{
+  my ($self,$msg) = @_; # Save $msg for later output (with View summary)
+  push @{ $self->{PENDING_MESSAGES} }, $msg;
 }
 
 sub Create_Views{
@@ -766,6 +782,10 @@ SELECT '-- S u m m a r y--';
        || (select count(*) from metrics) || ' metrics.';
  select tablet_count ||' tablets have '||replicas || ' replicas.' from tablet_replica_summary;
 __SQL__
+
+for my $msg(@{ $self->{PENDING_MESSAGES} }){
+    $self->putsql("SELECT '$msg';");
+  }
 }
 1;  
 } # End of package DatabaseClass
@@ -1046,6 +1066,14 @@ sub GetFlags_JSON{
 	   next unless my $flag = $self->{UNIV}->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
 
 	}
+}
+
+sub Check_placementModificationTaskUuid{
+  my ($self,$db) = @_;
+
+  return unless  $self->{placementModificationTaskUuid};
+  $db->putlog("Found placementModificationTaskUuid in Universe: ". $self->{placementModificationTaskUuid});
+  $db->Append_Pending_Message("WARNING: Universe $self->{name} has a pending  placementModification Task - Please get assiance to clear it.");
 }
 
 1;
