@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.17";
+our $VERSION = "0.18";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
@@ -12,7 +12,7 @@ my $HELP_TEXT = << "__HELPTEXT__";
  Run options:
    --YBA_HOST         [=] <YBA hostname or IP> (Required) "[http(s)://]<hostname-or-ip>[:<port>]"
    --API_TOKEN        [=] <API access token>   (Required)
-   --UNIVERSE         [=] <Universe Name>  (Required. Can be partial, sufficient to be Unique)
+   --UNIVERSE         [=] <Universe-Name-or-uuid>  (Required. Name Can be partial, sufficient to be Unique)
    --CUSTOMER         [=] <Customer-uuid-or-name> (Optional. Required if more than one customer exists)
    --GZIP             (Use this if you want to create a sql.gz for export, instead of a sqlite DB)
    **ADVANCED options**
@@ -264,9 +264,12 @@ sub Initialize{
   }else{
      die "ERROR: Universe info not found \n";
   }
-  #$opt{NODES} = $universe->Extract_nodes_From_Universe();
+  $universe->Check_Status(sub{warn "WARNING:$_[0]\n"});
   # Find Master/Leader 
   $opt{MASTER_LEADER}      = $YBA_API->Get("/leader")->{privateIP};
+  if (! $opt{MASTER_LEADER}){
+    die "ERROR:Could not get Master/Leader:\n\t" . $YBA_API->{json_string};
+  }
   $opt{DEBUG} and print "--DEBUG:Master/Leader JSON:",$YBA_API->{json_string},". IP is ",$opt{MASTER_LEADER},".\n";
   my ($ml_node) = grep {$_->{private_ip} eq $opt{MASTER_LEADER}} @{ $universe->{NODES} } or die "ERROR : No Master/Leader NODE found for $opt{MASTER_LEADER}";
   my $master_http_port = $universe->{universeDetails}{communicationPorts}{masterHttpPort} or die "ERROR: Master HTTP port not found in univ JSON";
@@ -1017,6 +1020,20 @@ sub new{
 }
 
 #----------------------------------------------------------------------------------------------
+
+sub Check_Status{
+  my ($self, $error_callback) = @_;
+  $self->{UNIV_STATUS} = $self->{YBA_API}->Get("/status")
+    or  die "ERROR: Cannot get Universe status" ; # Fatal error - do not callback
+  my $bad_nodes = 0;
+  for my $node_name(keys %{ $self->{UNIV_STATUS} }){
+      next if $node_name eq "universe_uuid"; # We already know this
+      next if (my $node_status = $self->{UNIV_STATUS}{$node_name}{node_status}) eq "Live";
+      $error_callback->("Node $node_name node_status=$node_status");
+      $bad_nodes++;
+  }
+  return $bad_nodes;
+}
 
 sub Get_xCluster_details_w_callback{
   my ($self,$callback) = @_;
