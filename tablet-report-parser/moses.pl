@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.19";
+our $VERSION = "0.20";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
@@ -481,7 +481,7 @@ sub Get_Node_Metrics{
       my $metrics_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{masterHttpPort}/prometheus-metrics?reset_histograms=false",
                                       "BASE_URL_UNIVERSE",1); # RAW
       while($metrics_raw=~/$regex(.+$)/mg){
-        $metric_handler{$1}-> ("Master-idx-".$n->{nodeIdx},"$1$2");
+        $metric_handler{$1}-> ("Master-" . $n->{private_ip},"$1$2");
       }       
   }
   
@@ -787,7 +787,10 @@ SELECT '-- S u m m a r y--';
        || (SELECT count(*) from tablet)||' Tablets ('
        || (SELECT count(*)  from leaderless) || ' Leaderless). '
        || (select count(*) from metrics) || ' metrics.';
- select tablet_count ||' tablets have '||replicas || ' replicas.' from tablet_replica_summary;
+ SELECT tablet_count ||' tablets have '||replicas || ' replicas.' FROM tablet_replica_summary;
+ SELECT 'WARNING: ' || node_uuid || ' has '|| metric_name || '='||value  
+ FROM  metrics 
+ WHERE node_uuid like 'Master-%' and metric_name='log_append_latency_avg' and value+0 > $opt{FOLLOWER_LAG_MINIMUM};
 __SQL__
 
 for my $msg(@{ $self->{PENDING_MESSAGES} }){
