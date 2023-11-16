@@ -462,7 +462,7 @@ sub Get_Node_Metrics{
      ql_write_latency   => sub{my ($m,$table,$val)=$_[1]=~/^(\w+)\{table_id="(\w+).+?\s(\d+)/ or return;
                                $post_process{$m}{$_[0]}{$table}=$val;},                               
      server_uptime_ms   => sub{my ($m,$val)=$_[1]=~/^(\w+).+?\s(\d+)/;save_metric($m,$_[0],0,$val)},
-     async_replication_ = sub{  # committed_lag_micros and sent_lag_micros
+     async_replication_ => sub{  # committed_lag_micros and sent_lag_micros
                               my ($m,$table_id,$val)=$_[1]=~/^(\w+).+table_id="(\w+)".+}\s*(\d+)/;
                               save_metric($m,$_[0],$table_id,$val);
                               },
