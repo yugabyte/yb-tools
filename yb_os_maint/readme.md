@@ -22,7 +22,8 @@ usage: python yb_os_maint.py [-h] (-s | -r | -t | -f FIX [FIX ...]) [-d] [-l LOG
   -h, --help            show this help message and exit
   -s, --stop            Stop services for YB host prior to O/S patch
   -r, --resume          Resume services for YB host after O/S patch
-  -t, --health          Healthcheck only - forces Dry Run
+  -t, --health          Healthcheck only - specify Universe Name or "ALL" if not running on a DB Node
+  -v, --verify          Verify Master and tServer process are in correct state per universe config
   -f, --fix [item]      Fix one or more of the following: 'placement'
   -d, --dryrun          Dry Run - pre-flight checks only - no actions taken.
   -l, --log_file_directory [folder]
