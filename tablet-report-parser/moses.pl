@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.20";
+our $VERSION = "0.21";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
@@ -111,7 +111,7 @@ sub Get_and_Parse_tablets_from_tservers{
 
       local $/="</tr>\n";
       my $row=0;
-	    my %leaders;
+      my %leaders;
       my $header =<$f>;
       $header or die "ERROR: Cant read header from node/tablet  HTML";
       #print "HDR: $header";
@@ -152,19 +152,19 @@ sub Collect_Follower_Lag_metrics{
 
   my $bj = JSON::Tiny::decode_json($YBA_API->{json_string});
    # Put stuff into metrics table 
-	for my $metricInfo (@$bj){
-	   for my $m( @{$metricInfo->{metrics}} ){
+  for my $metricInfo (@$bj){
+     for my $m( @{$metricInfo->{metrics}} ){
       next unless $m->{value} >= $opt{FOLLOWER_LAG_MINIMUM};
-	     $db->putsql("INSERT INTO metrics VALUES("
-	           #timestamp INTEGER, node-uuid , tablet_id TEXT, metric_name TEXT, metric_value NUMERIC
+       $db->putsql("INSERT INTO metrics VALUES("
+             #timestamp INTEGER, node-uuid , tablet_id TEXT, metric_name TEXT, metric_value NUMERIC
                   . qq|'$m->{name}'|
                   . qq|,"$n->{Tserver_UUID}"|  # Node UUID 
                   . qq|,"tablet"|
                   . qq|,"$metricInfo->{id}"| # Tablet ID
                   . qq|,$m->{value}|
                   . ");");
-	   }
-	}
+     }
+  }
 
 }
 #----------------------------------------------------------------------------------------------
@@ -300,46 +300,46 @@ sub Initialize{
 }
 #----------------------------------------------------------------------------------------------
 sub Setup_Output_Processing{
-	if (not $opt{AUTORUN_SQLITE}){
-		$opt{DBFILE} = "STDOUT";
-		$opt{STATUS_MSG_TO_STDERR} = 1; 
-		return; # No output processing needed-this has been setup manually
-	}
-	if (! $opt{GZIP}){
-		my $SQLITE_ERROR  = (qx|$opt{SQLITE} -version|=~m/([^\s]+)/  ?  0 : "Could not run SQLITE3: $!"); # Checks if sqlite3 can run
-		if ($SQLITE_ERROR){
-			warn "WARNING: $SQLITE_ERROR\n\t Creating compressed SQL (not a sqlite database)";
-			$opt{GZIP} = 1;
-		}
-	}
+  if (not $opt{AUTORUN_SQLITE}){
+    $opt{DBFILE} = "STDOUT";
+    $opt{STATUS_MSG_TO_STDERR} = 1; 
+    return; # No output processing needed-this has been setup manually
+  }
+  if (! $opt{GZIP}){
+    my $SQLITE_ERROR  = (qx|$opt{SQLITE} -version|=~m/([^\s]+)/  ?  0 : "Could not run SQLITE3: $!"); # Checks if sqlite3 can run
+    if ($SQLITE_ERROR){
+      warn "WARNING: $SQLITE_ERROR\n\t Creating compressed SQL (not a sqlite database)";
+      $opt{GZIP} = 1;
+    }
+  }
     $opt{DBFILE} ||= join(".", unixtime_to_printable($opt{STARTTIME},"YYYY-MM-DD"),$opt{LOCALHOST},"tabletInfo",
                                 $universe->{name}, $opt{GZIP}?"sql.gz":'sqlite');
-	my $output_sqlite_dbfilename = $opt{DBFILE};
-	if (-e $output_sqlite_dbfilename){
-		my $mtime     = (stat  $output_sqlite_dbfilename)[9];
-		my $rename_to = $output_sqlite_dbfilename .".". unixtime_to_printable($mtime,"YYYY-MM-DD-HH-MM") ;
-		if  (-e $rename_to){
-			die "ERROR:Files $output_sqlite_dbfilename and  $rename_to already exist. Please cleanup!";
-		} 
-		warn "WARNING: Renaming Existing file $output_sqlite_dbfilename to $rename_to.\n";
-		rename $output_sqlite_dbfilename, $rename_to or die "ERROR:cannot rename: $!";
-		sleep 2; # Allow time to read the message 
-	}
-	if ($opt{GZIP}){
-		$opt{STATUS_MSG_TO_STDERR} = 1;
-		open ($SQL_OUTPUT_FH, "|-", "gzip -c > $output_sqlite_dbfilename")
-		     or die "ERROR: Could not start gzip : $!";
-	}else{
-		open ($SQL_OUTPUT_FH, "|-", "$opt{SQLITE} $output_sqlite_dbfilename")
-			or die "ERROR: Could not start sqlite3 : $!";
-	}
+  my $output_sqlite_dbfilename = $opt{DBFILE};
+  if (-e $output_sqlite_dbfilename){
+    my $mtime     = (stat  $output_sqlite_dbfilename)[9];
+    my $rename_to = $output_sqlite_dbfilename .".". unixtime_to_printable($mtime,"YYYY-MM-DD-HH-MM") ;
+    if  (-e $rename_to){
+      die "ERROR:Files $output_sqlite_dbfilename and  $rename_to already exist. Please cleanup!";
+    } 
+    warn "WARNING: Renaming Existing file $output_sqlite_dbfilename to $rename_to.\n";
+    rename $output_sqlite_dbfilename, $rename_to or die "ERROR:cannot rename: $!";
+    sleep 2; # Allow time to read the message 
+  }
+  if ($opt{GZIP}){
+    $opt{STATUS_MSG_TO_STDERR} = 1;
+    open ($SQL_OUTPUT_FH, "|-", "gzip -c > $output_sqlite_dbfilename")
+         or die "ERROR: Could not start gzip : $!";
+  }else{
+    open ($SQL_OUTPUT_FH, "|-", "$opt{SQLITE} $output_sqlite_dbfilename")
+      or die "ERROR: Could not start sqlite3 : $!";
+  }
   # close STDOUT; # Don't close it - because it causes warnings later, as FH#1 can be reused
-	select $SQL_OUTPUT_FH; # All subsequent "print" goes to this file handle.
+  select $SQL_OUTPUT_FH; # All subsequent "print" goes to this file handle.
 }
 #----------------------------------------------------------------------------------------------
 sub Handle_ENTITIES_Data{
-	my ($bj) = @_; # Entities decoded JSON 
-	$opt{DEBUG} and print "--DEBUG:IN: Handle_ENTITIES_Data\n";
+  my ($bj) = @_; # Entities decoded JSON 
+  $opt{DEBUG} and print "--DEBUG:IN: Handle_ENTITIES_Data\n";
     $db->CreateTable("keyspaces","id TEXT PRIMARY KEY","name TEXT", "type TEXT"); # -- YCQL
     $db->CreateTable("tables","id TEXT PRIMARY KEY",qw| keyspace_id name state uuid tableTyp 
                 relationType |,"sizeBytes NUMERIC", "walSizeBytes NUMERIC", "isIndexTable INTEGER","pgSchemaName TEXT","ttlInSeconds INTEGER");
@@ -348,40 +348,40 @@ sub Handle_ENTITIES_Data{
     $db->CreateTable("ent_tablets",qw|id  table_id state type server_uuid addr leader |); #-- Multiple tablet replicas w same ID
     $db->CreateTable("namespaces",qw|namespaceUUID  name  tableType|); #-- YSQL 
 
-	# We get a giant JSON dump of entities .. parse it 
-	#{"keyspaces":[{"keyspace_id":"..","keyspace_name":"system","keyspace_type":"ycql"},
-	# {"keyspace_id":"7c51fb494aaf4da786c5ffd4175f4f3c","keyspace_name":"vijay","keyspace_type":"ycql"}],"tables":[{"table_id":"000...
-	#tablets":[{"table_id":"sys.catalog.uuid","tablet_id":"00000000000000000000000000000000","state":"RUNNING"},{"table_id":"000033e80000300080000000000042e3","tablet_id":"003353a4627048fb8a9733f353ccf903","state":"RUNNING","replicas":[{"type":"VOTER","server_uuid":"92b2779d3a5f496fb0ad7b846f1270e4","addr":"10.231.0.66:9100"},{..],"leader":"92b2779d3a5f496fb0ad7b846f1270e4"},
-	#my $bj = JSON::Tiny::decode_json($body);
+  # We get a giant JSON dump of entities .. parse it 
+  #{"keyspaces":[{"keyspace_id":"..","keyspace_name":"system","keyspace_type":"ycql"},
+  # {"keyspace_id":"7c51fb494aaf4da786c5ffd4175f4f3c","keyspace_name":"vijay","keyspace_type":"ycql"}],"tables":[{"table_id":"000...
+  #tablets":[{"table_id":"sys.catalog.uuid","tablet_id":"00000000000000000000000000000000","state":"RUNNING"},{"table_id":"000033e80000300080000000000042e3","tablet_id":"003353a4627048fb8a9733f353ccf903","state":"RUNNING","replicas":[{"type":"VOTER","server_uuid":"92b2779d3a5f496fb0ad7b846f1270e4","addr":"10.231.0.66:9100"},{..],"leader":"92b2779d3a5f496fb0ad7b846f1270e4"},
+  #my $bj = JSON::Tiny::decode_json($body);
     $db->putsql("BEGIN TRANSACTION; -- Entities");
     for my $ks (@{ $bj->{keyspaces} }){
-	 	# Add to KEYSPACES table #$opt{DEBUG} and print "--DEBUG: Keyspace $ks->{keyspace_name} ($ks->{keyspace_id}) type $ks->{keyspace_type}\n";
-		$ks->{keyspace_id} =~tr/-//d;
-		$db->putsql("INSERT INTO keyspaces VALUES('" 
-		             .join("','", $ks->{keyspace_id},$ks->{keyspace_name},$ks->{keyspace_type})
-			         ."');");
-	}
+     # Add to KEYSPACES table #$opt{DEBUG} and print "--DEBUG: Keyspace $ks->{keyspace_name} ($ks->{keyspace_id}) type $ks->{keyspace_type}\n";
+    $ks->{keyspace_id} =~tr/-//d;
+    $db->putsql("INSERT INTO keyspaces VALUES('" 
+                 .join("','", $ks->{keyspace_id},$ks->{keyspace_name},$ks->{keyspace_type})
+               ."');");
+  }
     for my $t (@{ $bj->{tables} }){
-		$db->putsql( "INSERT INTO tables (id,keyspace_id,name,state) VALUES('"
-		       . join("','", $t->{table_id}, $t->{keyspace_id},  $t->{table_name}, $t->{state})
-			   . "');");
-	}
-	
-	my %node_by_ip;
+    $db->putsql( "INSERT INTO tables (id,keyspace_id,name,state) VALUES('"
+           . join("','", $t->{table_id}, $t->{keyspace_id},  $t->{table_name}, $t->{state})
+         . "');");
+  }
+  
+  my %node_by_ip;
     for my $t (@{ $bj->{tablets} }){
-	 	my $replicas = $t->{replicas} ; # AOH
-	 	my $l        = $t->{leader} || "";
-		for my $r (@$replicas){
-		   $db->putsql( "INSERT INTO ent_tablets VALUES('"
-		       . join("','", $t->{tablet_id}, $t->{table_id}, $t->{state}, $r->{type}, $r->{server_uuid},$r->{addr},$l )
-			   . "');");
+     my $replicas = $t->{replicas} ; # AOH
+     my $l        = $t->{leader} || "";
+    for my $r (@$replicas){
+       $db->putsql( "INSERT INTO ent_tablets VALUES('"
+           . join("','", $t->{tablet_id}, $t->{table_id}, $t->{state}, $r->{type}, $r->{server_uuid},$r->{addr},$l )
+         . "');");
            my ($node_ip) = $r->{addr} =~/([\d\.]+)/ or next;
            next if $node_by_ip{$node_ip}; # Already setup 
            $node_by_ip{$node_ip} = $r->{server_uuid}; # Tserver UUID 
-		}
-	}
-	$opt{DEBUG} and printf "--DEBUG: %d Keyspaces, %d tables, %d tablets\n", 
-	                     scalar(@{ $bj->{keyspaces} }),scalar(@{ $bj->{tables} }), scalar(@{ $bj->{tablets} });
+    }
+  }
+  $opt{DEBUG} and printf "--DEBUG: %d Keyspaces, %d tables, %d tablets\n", 
+                       scalar(@{ $bj->{keyspaces} }),scalar(@{ $bj->{tables} }), scalar(@{ $bj->{tablets} });
     
     # Fixup Node UUIDs : The ones in the Universe JSON are useless - so we update from tablets with TSERVER uuid 
     for my $n (@{ $universe->{NODES} }){
@@ -434,19 +434,19 @@ sub Handle_xCluster_Data{
 }
 #------------------------------------------------------------------------------------------------
 sub Extract_gflags{
-	my ($univ_hash) = @_;
-	for my $k (qw|universeName provider providerType replicationFactor numNodes ybSoftwareVersion enableYCQL
-             	enableYSQL enableYEDIS nodePrefix |){
-	   next unless defined ( my $v= $univ_hash->{universeDetails}{clusters}[0]{userIntent}{$k} );
-	   $db->putsql("INSERT INTO gflags VALUES ('CLUSTER','$k','$v');");
-	}
-	for my $flagtype (qw|masterGFlags tserverGFlags |){
-	   next unless my $flag = $univ_hash->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
-	   for my $k(sort keys %$flag){
-		    (my $v = $flag->{$k}) =~tr/'/~/; # Zap potential single quote in gflag value 
-	      $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
-	   }
-	}
+  my ($univ_hash) = @_;
+  for my $k (qw|universeName provider providerType replicationFactor numNodes ybSoftwareVersion enableYCQL
+               enableYSQL enableYEDIS nodePrefix |){
+     next unless defined ( my $v= $univ_hash->{universeDetails}{clusters}[0]{userIntent}{$k} );
+     $db->putsql("INSERT INTO gflags VALUES ('CLUSTER','$k','$v');");
+  }
+  for my $flagtype (qw|masterGFlags tserverGFlags |){
+     next unless my $flag = $univ_hash->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
+     for my $k(sort keys %$flag){
+        (my $v = $flag->{$k}) =~tr/'/~/; # Zap potential single quote in gflag value 
+        $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
+     }
+  }
 
 }
 #------------------------------------------------------------------------------------------------
@@ -466,8 +466,13 @@ sub Get_Node_Metrics{
                               my ($m,$table_id,$val)=$_[1]=~/^(\w+).+table_id="(\w+)".+}\s*(\d+)/;
                               save_metric($m,$_[0],$table_id,$val);
                               },
+     hybrid_clock_skew  => sub{my ($m,$val)=$_[1]=~/^(\w+).+?\s(\d+)/;save_metric($m,$_[0],0,$val)},
+     'handler_latency_yb_tserver_TabletServerService_Read{quantile="p99' 
+                        => sub{my ($val)=$_[1]=~/\s(\d+)/;save_metric('tserver_read_p99',$_[0],0,$val)},
+     'handler_latency_yb_tserver_TabletServerService_Write{quantile="p99'
+                        => sub{my ($val)=$_[1]=~/\s(\d+)/;save_metric('tserver_write_p99',$_[0],0,$val)},
   );
-  my $regex = "^(" . join("|^",keys(%metric_handler)). ")";
+  my $regex = "^(" . join("|^",map {quotemeta} keys(%metric_handler)). ")";
 
   if ($n->{isTserver}){
       my $metrics_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/prometheus-metrics?reset_histograms=false",
@@ -517,31 +522,31 @@ sub Read_this_buffer_w_callback{
 }
 #------------------------------------------------------------------------------------------------
 sub unixtime_to_printable{
-	my ($unixtime,$format, $showTZ) = @_;
-	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($unixtime);
-	$opt{TZOFFSET} ||= do{my $tz = (localtime time)[8] * 60 - POSIX::mktime(gmtime 0) / 60;
-                                      	sprintf "%+03d:%02d", $tz / 60, abs($tz) % 60};
-	if (not defined $format  or  $format eq "YYYY-MM-DD HH:MM:SS"){
+  my ($unixtime,$format, $showTZ) = @_;
+  my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($unixtime);
+  $opt{TZOFFSET} ||= do{my $tz = (localtime time)[8] * 60 - POSIX::mktime(gmtime 0) / 60;
+                                        sprintf "%+03d:%02d", $tz / 60, abs($tz) % 60};
+  if (not defined $format  or  $format eq "YYYY-MM-DD HH:MM:SS"){
        return sprintf("%04d-%02d-%02d %02d:%02d:%02d", $year+1900, $mon+1, $mday, $hour, $min, $sec)
-	        . ($showTZ? " " . $opt{TZOFFSET} : "");
-	}
-	if ($format eq "YYYY-MM-DD HH:MM"){
+          . ($showTZ? " " . $opt{TZOFFSET} : "");
+  }
+  if ($format eq "YYYY-MM-DD HH:MM"){
        return sprintf("%04d-%02d-%02d %02d:%02d", $year+1900, $mon+1, $mday, $hour, $min)
-	          . ($showTZ? " " . $opt{TZOFFSET} : "");
-	}
-	if ($format eq "YYYY-MM-DD"){
-		  return sprintf("%04d-%02d-%02d", $year+1900, $mon+1, $mday)
-		         . ($showTZ? " " . $opt{TZOFFSET} : "");
-	}
-	if ($format eq "HMS"){
-		  return sprintf("%02d:%02d:%02d", $hour,$min,$sec)
-		         . ($showTZ? " " . $opt{TZOFFSET} : "");
-	}
-	if ($format eq "YYYY-MM-DD-HH-MM"){
+            . ($showTZ? " " . $opt{TZOFFSET} : "");
+  }
+  if ($format eq "YYYY-MM-DD"){
+      return sprintf("%04d-%02d-%02d", $year+1900, $mon+1, $mday)
+             . ($showTZ? " " . $opt{TZOFFSET} : "");
+  }
+  if ($format eq "HMS"){
+      return sprintf("%02d:%02d:%02d", $hour,$min,$sec)
+             . ($showTZ? " " . $opt{TZOFFSET} : "");
+  }
+  if ($format eq "YYYY-MM-DD-HH-MM"){
        return sprintf("%04d-%02d-%02d-%02d-%02d", $year+1900, $mon+1, $mday, $hour, $min)
-	          . ($showTZ? " " . $opt{TZOFFSET} : "");
-	}	
-	die "ERROR: Unsupported format:'$format' ";
+            . ($showTZ? " " . $opt{TZOFFSET} : "");
+  }  
+  die "ERROR: Unsupported format:'$format' ";
 }
 #----------------------------------------------------------------------------------------------
 sub TimeDelta{
@@ -696,30 +701,30 @@ sub Create_Views{
     SELECT node_uuid,min(public_ip) as node_ip,min(region ) as region,  count(*) as tablet_count,
            sum(CASE WHEN private_ip = leader THEN 1 ELSE 0 END) as leaders,
            count(DISTINCT table_name) as table_count
-	FROM tablet,node 
-	WHERE isTserver  and node.nodeuuid=node_uuid 
-	GROUP BY node_uuid
-	ORDER BY tablet_count;
+  FROM tablet,node 
+  WHERE isTserver  and node.nodeuuid=node_uuid 
+  GROUP BY node_uuid
+  ORDER BY tablet_count;
 
   CREATE VIEW tablet_replica_detail AS
     SELECT t.namespace,t.table_name,t.table_uuid,t.tablet_uuid,
-	count(DISTINCT LEADER) as leader_count, count(*) as replicas
-	from tablet t
-	GROUP BY t.namespace,t.table_name,t.table_uuid,t.tablet_uuid;
+  count(DISTINCT LEADER) as leader_count, count(*) as replicas
+  from tablet t
+  GROUP BY t.namespace,t.table_name,t.table_uuid,t.tablet_uuid;
 
   CREATE VIEW tablet_replica_summary AS
      SELECT replicas,count(*) as tablet_count FROM  tablet_replica_detail GROUP BY replicas;
 
   CREATE VIEW leaderless AS 
      SELECT t.tablet_uuid, replicas,t.namespace,t.table_name,node_uuid,private_ip ,leader_count
-	 from tablet t,node ,tablet_replica_detail trd
-	 WHERE  node.isTserver  AND nodeuuid=node_uuid
-	       AND  t.tablet_uuid=trd.tablet_uuid  
-		   AND trd.leader_count !=1;
+   from tablet t,node ,tablet_replica_detail trd
+   WHERE  node.isTserver  AND nodeuuid=node_uuid
+         AND  t.tablet_uuid=trd.tablet_uuid  
+       AND trd.leader_count !=1;
 
   CREATE VIEW delete_leaderless_be_careful AS 
     SELECT '\$HOME/tserver/bin/yb-ts-cli delete_tablet '|| tablet_uuid ||' -certs_dir_name \$TLSDIR -server_address '||private_ip ||':9100  \$REASON_tktnbr'
-	   AS generated_delete_command
+     AS generated_delete_command
      FROM leaderless;
 
 --  Based on  yb-ts-cli unsafe_config_change <tablet_id> <peer1> (undocumented)
@@ -727,12 +732,12 @@ sub Create_Views{
   CREATE VIEW UNSAFE_Leader_create AS
         SELECT  '\$HOME/tserver/bin/yb-ts-cli --server_address='|| private_ip ||':'||tserverrpcport 
         || ' unsafe_config_change ' || t.tablet_uuid
-		|| ' ' || node_uuid
-		|| ' -certs_dir_name \$TLSDIR;sleep 30;' AS cmd_to_run
-	 from tablet t,node ,tablet_replica_detail trd
-	 WHERE  node.isTserver  AND nodeuuid=node_uuid
-	       AND  t.tablet_uuid=trd.tablet_uuid  
-		   AND trd.leader_count !=1;
+    || ' ' || node_uuid
+    || ' -certs_dir_name \$TLSDIR;sleep 30;' AS cmd_to_run
+   from tablet t,node ,tablet_replica_detail trd
+   WHERE  node.isTserver  AND nodeuuid=node_uuid
+         AND  t.tablet_uuid=trd.tablet_uuid  
+       AND trd.leader_count !=1;
   CREATE VIEW IF NOT EXISTS table_sizes AS 
   SELECT T.NAMESPACE,T.TABLE_NAME,count(*) as tablets,RF1_tablets,
      sum(T.NUM_SST_FILES) as sst_files, -- D.sst_files as RF1_SST_files,
@@ -742,17 +747,17 @@ sub Create_Views{
      round(sum(T.TOTAL) /1024.0/1024.0/1024.0,2) as tot_gb,
      D.tot_gb as RF1_tot_GB
   FROM TABLET T,
-  	  (SELECT NAMESPACE,TABLE_NAME,count(*) as RF1_tablets,
-  	   CAST(round(sum(NUM_SST_FILES),0) AS INTEGER) as sst_files,
-  	   round(sum(SST_FILES) /1024.0/1024.0/1024.0,2) as sst_gb,
-  	   round(sum(SST_FILES_UNCOMPRESSED) /1024.0/1024.0/1024.0,2) as sst_gb_uncompr,
-  	   round(sum(WAL_FILES) /1024.0/1024.0/1024.0,2) as wal_GB,
-  	   round(sum(TOTAL) /1024.0/1024.0/1024.0,2) as tot_gb
-  	FROM (SELECT  tablet_uuid,
-  	        NAMESPACE,TABLE_NAME,TABLE_UUID, avg(NUM_SST_FILES) NUM_SST_FILES ,avg(SST_FILES) SST_FILES ,
-  	       avg(SST_FILES_UNCOMPRESSED) SST_FILES_UNCOMPRESSED,avg(TOTAL) TOTAL ,avg(WAL_FILES ) WAL_FILES
-  	     FROM tablet GROUP BY tablet_uuid, NAMESPACE,TABLE_NAME,TABLE_UUID) 
-  	GROUP BY NAMESPACE,TABLE_NAME) D 
+      (SELECT NAMESPACE,TABLE_NAME,count(*) as RF1_tablets,
+       CAST(round(sum(NUM_SST_FILES),0) AS INTEGER) as sst_files,
+       round(sum(SST_FILES) /1024.0/1024.0/1024.0,2) as sst_gb,
+       round(sum(SST_FILES_UNCOMPRESSED) /1024.0/1024.0/1024.0,2) as sst_gb_uncompr,
+       round(sum(WAL_FILES) /1024.0/1024.0/1024.0,2) as wal_GB,
+       round(sum(TOTAL) /1024.0/1024.0/1024.0,2) as tot_gb
+    FROM (SELECT  tablet_uuid,
+            NAMESPACE,TABLE_NAME,TABLE_UUID, avg(NUM_SST_FILES) NUM_SST_FILES ,avg(SST_FILES) SST_FILES ,
+           avg(SST_FILES_UNCOMPRESSED) SST_FILES_UNCOMPRESSED,avg(TOTAL) TOTAL ,avg(WAL_FILES ) WAL_FILES
+         FROM tablet GROUP BY tablet_uuid, NAMESPACE,TABLE_NAME,TABLE_UUID) 
+    GROUP BY NAMESPACE,TABLE_NAME) D 
   WHERE t.NAMESPACE=d.NAMESPACE AND T.TABLE_NAME=D.TABLE_NAME
   GROUP BY T.NAMESPACE,T.TABLE_NAME;
   
@@ -765,17 +770,17 @@ sub Create_Views{
      round(sum(T.TOTAL) /1024.0/1024.0/1024.0,2) as tot_gb,
      D.tot_gb as RF1_tot_GB
   FROM TABLET T,
-  	  (SELECT NAMESPACE,TABLE_NAME,count(*) as RF1_tablets,
-  	   CAST(round(sum(NUM_SST_FILES),0) as INTEGER) as sst_files,
-  	   round(sum(SST_FILES) /1024.0/1024.0/1024.0,2) as sst_gb,
-  	   round(sum(SST_FILES_UNCOMPRESSED) /1024.0/1024.0/1024.0,2) as sst_gb_uncompr,
-  	   round(sum(WAL_FILES) /1024.0/1024.0/1024.0,2) as wal_GB,
-  	   round(sum(TOTAL) /1024.0/1024.0/1024.0,2) as tot_gb
-  	FROM (SELECT  tablet_uuid,
-  	        NAMESPACE,TABLE_NAME,TABLE_UUID, avg(NUM_SST_FILES) NUM_SST_FILES ,avg(SST_FILES) SST_FILES ,
-  	       avg(SST_FILES_UNCOMPRESSED) SST_FILES_UNCOMPRESSED,avg(TOTAL) TOTAL ,avg(WAL_FILES ) WAL_FILES
-  	     FROM tablet GROUP BY tablet_uuid, NAMESPACE,TABLE_NAME,TABLE_UUID) 
-  	GROUP BY NAMESPACE) D 
+      (SELECT NAMESPACE,TABLE_NAME,count(*) as RF1_tablets,
+       CAST(round(sum(NUM_SST_FILES),0) as INTEGER) as sst_files,
+       round(sum(SST_FILES) /1024.0/1024.0/1024.0,2) as sst_gb,
+       round(sum(SST_FILES_UNCOMPRESSED) /1024.0/1024.0/1024.0,2) as sst_gb_uncompr,
+       round(sum(WAL_FILES) /1024.0/1024.0/1024.0,2) as wal_GB,
+       round(sum(TOTAL) /1024.0/1024.0/1024.0,2) as tot_gb
+    FROM (SELECT  tablet_uuid,
+            NAMESPACE,TABLE_NAME,TABLE_UUID, avg(NUM_SST_FILES) NUM_SST_FILES ,avg(SST_FILES) SST_FILES ,
+           avg(SST_FILES_UNCOMPRESSED) SST_FILES_UNCOMPRESSED,avg(TOTAL) TOTAL ,avg(WAL_FILES ) WAL_FILES
+         FROM tablet GROUP BY tablet_uuid, NAMESPACE,TABLE_NAME,TABLE_UUID) 
+    GROUP BY NAMESPACE) D 
   WHERE t.NAMESPACE=d.NAMESPACE 
   GROUP BY T.NAMESPACE;
 
@@ -790,7 +795,18 @@ SELECT '-- S u m m a r y--';
  SELECT tablet_count ||' tablets have '||replicas || ' replicas.' FROM tablet_replica_summary;
  SELECT 'WARNING: ' || node_uuid || ' has '|| metric_name || '='||value  
  FROM  metrics 
- WHERE node_uuid like 'Master-%' and metric_name='log_append_latency_avg' and value+0 > $opt{FOLLOWER_LAG_MINIMUM};
+ WHERE node_uuid like 'Master-%' and metric_name='log_append_latency_avg' and value+0 >= $opt{FOLLOWER_LAG_MINIMUM};
+ SELECT 'WARNING: Node ' || node_uuid || ' has '|| metric_name || '='||value  
+ FROM  metrics 
+ WHERE metric_name IN ('hybrid_clock_skew')
+      and value+0 >= 50;
+ SELECT 'WARNING: Node ' || node_uuid || ' has '|| metric_name || '='||value 
+        || CASE WHEN entity_uuid != '0' THEN '(' || entity_name || ' ' || entity_uuid || ')'
+           ELSE '' END
+ FROM  metrics 
+ WHERE metric_name IN ('tserver_read_p99', 'tserver_write_p99',
+                       'async_replication_committed_lag_micros','async_replication_sent_lag_micros')
+      and value+0 >=  $opt{FOLLOWER_LAG_MINIMUM};
 __SQL__
 
 for my $msg(@{ $self->{PENDING_MESSAGES} }){
@@ -829,15 +845,17 @@ our %is_numeric = map{$_=>1} qw|NUM_SST_FILES SST_FILES SST_FILES_UNCOMPRESSED T
 
 
 my %kilo_multiplier=(
-		BYTES	=> 1,
-        B       => 1,
-		KB		=> 1024,
-        K       => 1024,
-		MB		=> 1024*1024,
-        M       => 1024*1024,
-		GB		=> 1024*1024*1024,
-        G       => 1024*1024*1024,
-	);
+    BYTES   => 1,
+    B       => 1,
+    KB      => 1024,
+    K       => 1024,
+    MB      => 1024*1024,
+    M       => 1024*1024,
+    GB      => 1024*1024*1024,
+    G       => 1024*1024*1024,
+    TB      => 1024*1024*1024*1024,
+    T       => 1024*1024*1024*1024,
+  );
 
 sub new_from_tr{
     my ($class, $line) = @_;
@@ -853,8 +871,12 @@ sub new_from_tr{
     $val{do{tr/ -/__/;uc }} = $disk{$_} for keys %disk;
         # Convert disk values to numeric (xlate K, B etc)
     for my $k (qw|SST_FILES SST_FILES_UNCOMPRESSED TOTAL WAL_FILES|){
-        my ($numeric,$unit) = $val{$k} =~m/([\-\.\d]+)(\w+)/;
-        $val{$k} = $numeric *  ($kilo_multiplier{ uc $unit } || 1);
+        if ($val{$k}){
+          my ($numeric,$unit) = $val{$k} =~m/([\-\.\d]+)(\w+)/;
+          $val{$k} = $numeric *  ($kilo_multiplier{ uc $unit } || 1);
+        }else{
+          $val{$k} = 0;
+        }
     }    
     delete $val{$_} for qw|TABLET_ID RAFTCONFIG ON_DISK_SIZE|; # rm hashes - this object is now FLAT.
     return bless \%val, $class;
@@ -979,7 +1001,7 @@ sub Get{
        }
        $self->{json_string} = $self->{raw_response}{content};
     }
-	if ($raw){
+  if ($raw){
        return $self->{response} = $self->{json_string}; # Do not decode
     }
     $self->{response} = JSON::Tiny::decode_json( $self->{json_string} );
@@ -1022,7 +1044,7 @@ sub new{
       $self->{REGION}{$region->{name}}{UUID}          = $region->{uuid};
       $self->{REGION}{$region->{name}}{AZ_NODE_COUNT} = $az_node_count;
       $opt{DEBUG} and print "--DEBUG:REGION $region->{name}: PREFERRED=$preferred, $az_node_count nodes, $region->{uuid}.\n";
-	}
+  }
   return bless $self, $class;
 }
 
@@ -1057,39 +1079,39 @@ sub Get_xCluster_details_w_callback{
 
 sub _Extract_nodes{
     my ($self) = @_;
-	
+  
   $self->{NODES} = [];
-	my $count=0;
-	for my $n (@{  $self->{universeDetails}{nodeDetailsSet} }){
+  my $count=0;
+  for my $n (@{  $self->{universeDetails}{nodeDetailsSet} }){
        push @{ $self->{NODES} }, my $thisnode = {map({$_=>$n->{$_}||''} qw|nodeIdx nodeName nodeUuid azUuid isMaster
-                                  	   isTserver ysqlServerHttpPort yqlServerHttpPort state tserverHttpPort 
-									   tserverRpcPort masterHttpPort masterRpcPort nodeExporterPort|),
-	                              map({$_=>$n->{cloudInfo}{$_}} qw|private_ip public_ip az region |) };
+                                       isTserver ysqlServerHttpPort yqlServerHttpPort state tserverHttpPort 
+                     tserverRpcPort masterHttpPort masterRpcPort nodeExporterPort|),
+                                map({$_=>$n->{cloudInfo}{$_}} qw|private_ip public_ip az region |) };
        $thisnode->{$_} =~tr/-//d for grep {/uuid/i} keys %$thisnode;
        $count++;
     }
-    return $self->{NODES};	
+    return $self->{NODES};  
 }
 
 sub GetFlags_with_callback{
   my ($self, $callback,$escape_quote) = @_;
-  	for my $flagtype (qw|masterGFlags tserverGFlags |){
-	   next unless my $flag = $self->{UNIV}->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
-	   for my $k(sort keys %$flag){
-		    my $v = $flag->{$k};
+    for my $flagtype (qw|masterGFlags tserverGFlags |){
+     next unless my $flag = $self->{UNIV}->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
+     for my $k(sort keys %$flag){
+        my $v = $flag->{$k};
         $escape_quote and $v =~tr/'/~/; # Zap potential single quote in gflag value 
-	      # $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
+        # $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
         $callback->($flagtype,$k,$v)
-	   }
-	}
+     }
+  }
 }
 
 sub GetFlags_JSON{
   my ($self) = @_;
-  	for my $flagtype (qw|masterGFlags tserverGFlags |){
-	   next unless my $flag = $self->{UNIV}->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
+    for my $flagtype (qw|masterGFlags tserverGFlags |){
+     next unless my $flag = $self->{UNIV}->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
 
-	}
+  }
 }
 
 sub Check_placementModificationTaskUuid{
@@ -1402,7 +1424,7 @@ sub _throw {
 # Emulate boolean type
 package JSON::Tiny::_Bool;
 use overload '""' => sub { ${$_[0]} }, fallback => 1;
-1;	
+1;  
 
 }; #End of JSON::Tiny
 #==============================================================================
