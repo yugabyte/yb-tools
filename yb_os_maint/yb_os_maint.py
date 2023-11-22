@@ -19,7 +19,7 @@ V1.2 - Added the following:
 v1.3
     Added New parameter  '-l' or '--log_file_directory'.  Output will go to stdout if not specified
     Removed the '-t' parameter for terminal output
-    Added tablet balance check and basic underreplicated chacks
+    Added tablet balance check and basic underreplicated checks
 v1.4
     Added master and tserver lag checks via metrics - lag > xxx_LAG_THRESHOLD_SECONDS will prevent node from stopping
 v1.5
@@ -66,9 +66,16 @@ v 1.18
     Bypass master and tserver replication lag check if tablet count is zero
 v 1.19
     Added maintenance widow  - create or extend for 20 mins on stop, remove on resume
+v 1.20
+    Decoupled healthcheck from having to run on node - now accepts a universe name or 'ALL'.  If running
+      on a node, that node's universe is used if no other node (or ALL) is specified.
+    Added --verify (-v) option to ensure master and tserver are in correct state per YBA
+v 1.21
+    Added YBA connectivity check and retry to start of script
+    Refactored --verify function to make more readable
 '''
 
-Version = 1.18
+Version = "1.21"
 
 import argparse
 import requests
@@ -282,8 +289,6 @@ def start_node(api_host, customer_uuid, universe, api_token, node, dry_run=True)
         ## Resume x-cluster replication
         ## resume source replication
         log('\n- Resuming x-cluster replication')
-        ## First, sleep a bit to prevent race condition when patching multiple servers concurrently
-        time.sleep(random.randint(1, MAX_TIME_TO_SLEEP_SECONDS))
         resume_count = 0
         if 'sourceXClusterConfigs' in universe['universeDetails']:
             for rpl in universe['universeDetails']['sourceXClusterConfigs']:
@@ -330,6 +335,87 @@ def start_node(api_host, customer_uuid, universe, api_token, node, dry_run=True)
         log(e, True)
         log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
         exit(NODE_DB_ERROR)
+
+def get_node_health (node_type, node, yba_state):
+    uri = None
+    can_reach = True
+    if node_type.lower() == 'master':
+        uri = node['cloudInfo']['private_ip'] + ':' + str(node['masterHttpPort']) + '/api/v1/health-check'
+    elif node_type.lower() == 'tserver':
+        uri = node['cloudInfo']['private_ip'] + ':' + str(node['tserverHttpPort']) + '/api/v1/health-check'
+    else:
+        raise Exception('Invalid node type "{}" for node health'.format(node_type))
+
+    try:
+        resp = requests.get('http://' + uri)
+    except:
+        try:
+            resp = requests.get('https://' + uri)
+        except:
+            can_reach = False
+            pass
+
+    if yba_state == 'Live':
+        if can_reach:
+            return True, None
+        else:
+            return False, '{} is running according to YBA, but stopped or uncommunicative'.format(node_type)
+    else:
+        if can_reach:
+            return False, '{} is stopped according to YBA, but running on node'.format(node_type)
+        else:
+            return True, None
+
+
+# Verify tServer/Master processes are in same state as YBA thinks they are
+def verify(api_host, customer_uuid, universe, api_token, node):
+    log('Verifying Master and tServer on node {} are in correct state per YBA'.format(node['cloudInfo']['private_ip']))
+    log(' - YBA shows node as being {}'.format(node['state']))
+    errs = 0
+
+    if node['state'] == 'Live':
+        if node['isMaster']:
+            log('   YBA shows node as having a Master - checking for process')
+            passed, message = get_node_health('Master', node, node['state'])
+            if passed:
+                log('     Check passed: master process found on node')
+            else:
+                log(message, True)
+                errs += 1
+        else:
+            log('   YBA shows node as NOT having a Master - skipping check')
+
+        if node['isTserver']:
+            log('   YBA shows node as having a tServer - checking for process')
+            passed, message = get_node_health('tServer', node, node['state'])
+            if passed:
+                log('     Check passed: tServer process found on node')
+            else:
+                log(message, True)
+                errs += 1
+        else:
+            log('   YBA shows node as NOT having a  tServer - skipping check')
+    elif node['state'] == 'Stopped':
+        passed, message = get_node_health('Master', node, node['state'])
+        if passed:
+            log('     Check passed: No master process found on node')
+        else:
+            log(message, True)
+            errs += 1
+
+        passed, message = get_node_health('Tserver', node, node['state'])
+        if passed:
+            log('     Check passed: No tServer process found on node')
+        else:
+            log(message, True)
+            errs += 1
+    else:
+        log('Node is in state "' + node['state'] + '" and cannot be verified.  Node must be LIVE or STOPPED to run verification', True)
+        errs += 1
+
+    if errs > 0:
+        raise Exception("Node process verification failed")
+    return True
 
 
 # Stop x-cluster and then the node processes
@@ -387,11 +473,10 @@ def stop_node(api_host, customer_uuid, universe, api_token, node):
         exit(NODE_DB_ERROR)
 
 
-# Run pre-flight checks
-def health_check(api_host, customer_uuid, universe, api_token, node):
+def health_check(api_host, customer_uuid, universe, api_token, node=None):
     try:
         errcount = 0;
-        log('Performing pre-flight checks...')
+        log('Performing health checks for universe {}, UUID {}...'.format(universe['name'], universe['universeUUID']))
 
         # put together Prometheus URL by stripping off existing port of API server if specified and appending proper port
         # Then try https, if fails, step down to http
@@ -410,8 +495,8 @@ def health_check(api_host, customer_uuid, universe, api_token, node):
                 errcount += 1;
         log('Using prometheus host at {}\n'.format(promhost))
 
-        log('Found node ' + node['nodeName'] + ' in Universe ' + universe['name'] + ' - UUID ' + universe[
-            'universeUUID'])
+        if node is not None:
+            log('Found node ' + node['nodeName'] + ' in Universe ' + universe['name'] + ' - UUID ' + universe['universeUUID'])
 
         log('- Checking for task placement UUID')
         if PLACEMENT_TASK_FIELD in universe and len(universe[PLACEMENT_TASK_FIELD]) > 0:
@@ -444,22 +529,23 @@ def health_check(api_host, customer_uuid, universe, api_token, node):
             log('  All nodes, masters and t-servers are alive.')
 
         log('- Checking for master and tablet health')
-        if not node['isMaster']:
-            log('  ### Warning: node is not a Master ###')
-        if not node['isTserver']:
-            log('  ### Warning: node is not a TServer ###')
+        if node is not None:
+            if not node['isMaster']:
+                log('  ### Warning: node is not a Master ###')
+            if not node['isTserver']:
+                log('  ### Warning: node is not a TServer ###')
 
         master_node = None
         for masternode in universe['universeDetails']['nodeDetailsSet']:
             if masternode['isMaster'] and masternode['state'] == 'Live':
-                master_node = masternode['cloudInfo']['private_ip']
+                master_node = masternode['cloudInfo']['private_ip'] + ':' + str(node['masterHttpPort'])
                 break
 
         try:  # try both http and https endpoints
-            resp = requests.get('https://' + master_node + ':7000/api/v1/health-check')
+            resp = requests.get('https://' + master_node + '/api/v1/health-check')
             hc = resp.json()
         except:
-            resp = requests.get('http://' + master_node + ':7000/api/v1/health-check')
+            resp = requests.get('http://' + master_node + '/api/v1/health-check')
             hc = resp.json()
         hc_errs = 0
         for n in hc:
@@ -500,10 +586,10 @@ def health_check(api_host, customer_uuid, universe, api_token, node):
         tabs = None
         totalTablets = 0
         try:  # try both http and https endpoints
-            resp = requests.get('https://' + master_node + ':7000/api/v1/tablet-servers')
+            resp = requests.get('https://' + master_node + '/api/v1/tablet-servers')
             tabs = resp.json()
         except:
-            resp = requests.get('http://' + master_node + ':7000/api/v1/tablet-servers')
+            resp = requests.get('http://' + master_node + '/api/v1/tablet-servers')
             tabs = resp.json()
 
         for uid in tabs:
@@ -523,9 +609,9 @@ def health_check(api_host, customer_uuid, universe, api_token, node):
 
         htmlresp = None
         try:  # try both http and https endpoints
-            htmlresp = requests.get('https://' + master_node + ':7000/tablet-servers')
+            htmlresp = requests.get('https://' + master_node + '/tablet-servers')
         except:
-            htmlresp = requests.get('http://' + master_node + ':7000/tablet-servers')
+            htmlresp = requests.get('http://' + master_node + '/tablet-servers')
 
         if(TABLET_BALANCE_TEXT) in htmlresp.text:
             log('  Passed tablet balance check - YBA is reporting the following: ' + TABLET_BALANCE_TEXT)
@@ -607,14 +693,14 @@ def health_check(api_host, customer_uuid, universe, api_token, node):
         else:
             log('  Tablet count in universe is zero - bypassing master replication lag check')
 
-        ## End pre-flight checks,
+        ## End health checks,
         if errcount > 0:
-            log('--- Pre flight check has failed - ' + str(
+            log('--- Health check has failed - ' + str(
                 errcount) + ' errors were detected terminating shutdown.')
             log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
             exit(NODE_DB_ERROR)
         else:
-            log('--- Pre flight check completed with no issues')
+            log('--- Health check for universe "{}" completed with no issues'.format(universe['name']))
             return
 
     except Exception as e:
@@ -629,7 +715,7 @@ def fix(api_host, customer_uuid, universe, api_token, dbhost, fix_list):
     if 'placement' in fix_list:
         if PLACEMENT_TASK_FIELD in f and len(f[PLACEMENT_TASK_FIELD]) > 0:
             f[PLACEMENT_TASK_FIELD] = ''
-            mods.append('placeemnt')
+            mods.append('placement')
 
     # Do not allow master/tserver fix for now.
     """
@@ -665,6 +751,24 @@ def fix(api_host, customer_uuid, universe, api_token, dbhost, fix_list):
             log('Server items fixed')
     else:
         log('No items exist to fix')
+
+def get_db_node_and_universe(universes, hostname, ip, universe_name):
+    if universes is None or len(universes) < 1:
+        log('No Universes found - cannot determine if this a DB node', True)
+        log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
+        raise Exception("No Universes found")
+    univ_to_return = None
+    for universe in universes:
+
+        for node in universe['universeDetails']['nodeDetailsSet']:
+            if str(node['nodeName']).upper() in hostname.upper() or hostname.upper() in str(
+                    node['nodeName']).upper() or \
+                    node['cloudInfo']['private_ip'] == ip or node['cloudInfo']['public_ip'] == ip:
+                return node, universe
+            if universe_name is not None and universe_name != 'ALL':
+                if str(universe['name']).upper() == universe_name.upper():
+                    univ_to_return = universe
+    return None, univ_to_return
 
 def wait_for_task(api_host, customer_uuid, task_uuid, api_token):
     done = False
@@ -738,15 +842,21 @@ def main():
                          action='store_true',
                          help='Resume services for YB host after O/S patch')
     mxgroup.add_argument('-t', '--health',
-                         action='store_true',
-                         help='Healthcheck only - forces Dry Run')
+                         nargs='?',
+                         const='<localhost>',
+                         type=str,
+                         action='store',
+                         help='Healthcheck only - specify Universe Name or "ALL" if not running on a DB Node')
     mxgroup.add_argument('-f', '--fix',
                          nargs='+',
                          action='store',
                          help='Fix one or more of the following: placement')
+    mxgroup.add_argument('-v', '--verify',
+                         action='store_true',
+                         help='Verify Master and tServer process are in correct state per universe config')
     parser.add_argument('-d', '--dryrun',
                         action='store_true',
-                        help='Dry Run - pre-flight checks only - no actions taken.',
+                        help='Dry Run - health checks only - no actions taken.',
                         required=False)
     parser.add_argument('-l', '--log_file_directory',
                         action='store',
@@ -771,6 +881,11 @@ def main():
     elif args.fix:
         action = 'fix'
         dry_run = True
+    elif args.verify:
+        action = 'verify'
+        dry_run = True
+
+    ACTIONS_ALLOWED_ON_YBA = 'health|stop|resume'
 
     # Set up logging - if directory not specified, log to stdout
     if args.log_file_directory is not None:
@@ -784,7 +899,7 @@ def main():
                         + '_' + action + '.log', "a")
 
     log('\n--------------------------------------')
-    log(datetime.now().strftime(LOG_TIME_FORMAT) + ' script started')
+    log(datetime.now().strftime(LOG_TIME_FORMAT) + ' script version {} started'.format(Version))
     # find env variable file - should be only 1
     flist = fnmatch.filter(os.listdir(ENV_FILE_PATH), ENV_FILE_PATTERN)
     if len(flist) < 1:
@@ -832,73 +947,98 @@ def main():
             LOG_FILE.close()
         exit(OTHER_ERROR)
 
-    try:
-        dbhost = None
-        log('Checking host ' + hostname + ' with IP ' + ip)
-
-        # determine instance type - DB Node, YBA Server, or other
+    num_retries = 1
+    while num_retries <= 5:
         try:
-            if yba_server(ip, action, dry_run):
-                exit_code = NODE_YBA_SUCCESS
-                if action == 'fix':
-                    log('Cannot run fix command from a YBA server - run from the node instead', True)
-                    log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_YBA_ERROR))
-                    exit_code = NODE_YBA_ERROR
-                else:
-                    log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process completed successfully - exiting with code ' + str(NODE_YBA_SUCCESS))
-                if (not LOG_TO_TERMINAL):
-                    LOG_FILE.close()
-                exit(exit_code)
-        except Exception as e:
-            log(e, True)
-            log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
-            if (not LOG_TO_TERMINAL):
-                LOG_FILE.close()
-            exit(OTHER_ERROR)
-        try:
-            can_connect = True
-            log('Checking current node using YBA server at ' + api_host)
+            log('Attempt {} to communicate with YBA host at {}'.format(num_retries, api_host))
+            response = requests.get(api_host + '/api/customers/' + customer_uuid,
+                                headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
+                                timeout=5)
+            num_retries = 999
         except:
-            log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Could not contact YBA server at ' + api_host + ' exiting', True)
-            exit(OTHER_ERROR)
-
-        if can_connect:
-            universes = get_universes(api_host, customer_uuid, api_token)
-
-            # Iterate thru universes and attempt a match in the node list by node name, private IP or public IP
-            # Note that node info is located in nodeDetailSet, so we only need to call getUniverses API to get all nodes
-            if universes is None or len(universes) < 1:
-                log('No Universes found - cannot determine if this a DB node', True)
-                log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
-                exit(OTHER_ERROR)
-            for universe in universes:
-                for node in universe['universeDetails']['nodeDetailsSet']:
-                    if str(node['nodeName']).upper() in hostname.upper() or hostname.upper() in str(
-                            node['nodeName']).upper() or \
-                            node['cloudInfo']['private_ip'] == ip or node['cloudInfo']['public_ip'] == ip:
-                        dbhost = node
-                        found = True
-                        if action == 'stop':
-                            if dry_run:
-                                log('--- Dry run only - all checks will be done, but replication will not be paused and nothing will be stopped ')
-                            health_check(api_host, customer_uuid, universe, api_token, dbhost)
-                            if not dry_run:
-                                stop_node(api_host, customer_uuid, universe, api_token, dbhost)
-                            else:
-                                log('--- Dry run only - Exiting')
-                        elif action == 'resume':
-                            start_node(api_host, customer_uuid, universe, api_token, dbhost, dry_run)
-                        elif action == 'health':
-                            log('--- Health Check only - all checks will be done, but replication will not be paused and nothing will be stopped ')
-                            health_check(api_host, customer_uuid, universe, api_token, dbhost)
-                        elif action == 'fix':
-                            fix(api_host, customer_uuid, universe, api_token, dbhost, args.fix)
-
-            if dbhost is None:
-                log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Node is neither a DB host nor a YBA host - exiting with code ' + str(OTHER_SUCCESS))
+            if num_retries >= 5:
+                log(datetime.now().strftime(LOG_TIME_FORMAT) + ' Could not establish communication with YBA server at {} after {} attempts - exiting'.format(api_host, num_retries), True)
+                log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code {}'.format(NODE_YBA_ERROR))
                 if (not LOG_TO_TERMINAL):
                     LOG_FILE.close()
-                exit(OTHER_SUCCESS)
+                exit(NODE_YBA_ERROR)
+            else:
+                num_retries += 1
+                sleeptime = random.randint(5, MAX_TIME_TO_SLEEP_SECONDS)
+                log(datetime.now().strftime(LOG_TIME_FORMAT) + 'Could not establish communication with YBA server at {} trying again in {} seconds'.format(api_host, sleeptime))
+                pass
+
+    log('Retrieving Universes from YBA server at ' + api_host)
+    universes = get_universes(api_host, customer_uuid, api_token)
+    dbhost, universe = get_db_node_and_universe(universes, hostname, ip, args.health)
+
+    try:
+        ## first, do healthcheck if specified
+        if action == 'health':
+            log('--- Health Check only - all checks will be done, but nothing will be stopped or resumed ')
+            if args.health == '<localhost>' and dbhost is None:
+                log('Helthcheck is not being run from a DB node - Specify a universe name or "ALL" to check all Universes from a non-DB node.', True)
+                log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
+                if (not LOG_TO_TERMINAL):
+                    LOG_FILE.close()
+                exit(OTHER_ERROR)
+            hc_host = dbhost
+            if args.health != '<localhost>':
+                if dbhost is not None:
+                    log('Helthcheck universes specified from a DB node - checking health for universe "{}" instead'.format(args.health))
+                    hc_host = None
+                if str(args.health).upper() == 'ALL':
+                    for hc_universe in universes:
+                        log('\n')
+                        health_check(api_host, customer_uuid, hc_universe, api_token, hc_host)
+                else:
+                    if universe is not None:
+                        health_check(api_host, customer_uuid, universe, api_token, hc_host)
+                    else:
+                        log('Could not find universe with name "{}" exiting'.format(args.health), True)
+                        log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
+                        if (not LOG_TO_TERMINAL):
+                            LOG_FILE.close()
+                        exit(OTHER_ERROR)
+            else:
+                health_check(api_host, customer_uuid, universe, api_token, dbhost)
+
+        else: # not a healthckeck only, so proceed
+            if dbhost is None: # running from YBA instance
+                if yba_server(ip, action, dry_run):
+                    exit_code = NODE_YBA_SUCCESS
+                    if not action in ACTIONS_ALLOWED_ON_YBA :
+                        log('Cannot run {} command from a YBA server - run from the node instead'.format(action), True)
+                        log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_YBA_ERROR))
+                        exit_code = NODE_YBA_ERROR
+                    else:
+                        log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process completed successfully - exiting with code ' + str(NODE_YBA_SUCCESS))
+                    if (not LOG_TO_TERMINAL):
+                        LOG_FILE.close()
+                    exit(exit_code)
+                else: # not YBA or DB node, and not running a healthcheck
+                    log('\n' + datetime.now().strftime(
+                        LOG_TIME_FORMAT) + ' Node is neither a DB host nor a YBA host - exiting with code ' + str(
+                        OTHER_ERROR))
+                    if (not LOG_TO_TERMINAL):
+                        LOG_FILE.close()
+                    exit(OTHER_ERROR)
+            else: # running from a DBnode
+                if action == 'stop':
+                    if dry_run:
+                        log('--- Dry run only - all checks will be done, but replication will not be paused and nothing will be stopped ')
+                    health_check(api_host, customer_uuid, universe, api_token, dbhost)
+                    if not dry_run:
+                        stop_node(api_host, customer_uuid, universe, api_token, dbhost)
+                    else:
+                        log('--- Dry run only - Exiting')
+                elif action == 'resume':
+                    start_node(api_host, customer_uuid, universe, api_token, dbhost, dry_run)
+                elif action == 'fix':
+                    fix(api_host, customer_uuid, universe, api_token, dbhost, args.fix)
+                elif action == 'verify':
+                    verify(api_host, customer_uuid, universe, api_token, dbhost)
+
     except Exception as e:
         log(e, True)
         log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
