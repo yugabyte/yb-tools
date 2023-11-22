@@ -70,9 +70,12 @@ v 1.20
     Decoupled healthcheck from having to run on node - now accepts a universe name or 'ALL'.  If running
       on a node, that node's universe is used if no other node (or ALL) is specified.
     Added --verify (-v) option to ensure master and tserver are in correct state per YBA
+v 1.21
+    Added YBA connectivity check and retry to start of script
+    Refactored --verify function to make more readable
 '''
 
-Version = 1.20
+Version = "1.21"
 
 import argparse
 import requests
@@ -333,75 +336,79 @@ def start_node(api_host, customer_uuid, universe, api_token, node, dry_run=True)
         log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
         exit(NODE_DB_ERROR)
 
+def get_node_health (node_type, node, yba_state):
+    uri = None
+    can_reach = True
+    if node_type.lower() == 'master':
+        uri = node['cloudInfo']['private_ip'] + ':' + str(node['masterHttpPort']) + '/api/v1/health-check'
+    elif node_type.lower() == 'tserver':
+        uri = node['cloudInfo']['private_ip'] + ':' + str(node['tserverHttpPort']) + '/api/v1/health-check'
+    else:
+        raise Exception('Invalid node type "{}" for node health'.format(node_type))
+
+    try:
+        resp = requests.get('http://' + uri)
+    except:
+        try:
+            resp = requests.get('https://' + uri)
+        except:
+            can_reach = False
+            pass
+
+    if yba_state == 'Live':
+        if can_reach:
+            return True, None
+        else:
+            return False, '{} is running according to YBA, but stopped or uncommunicative'.format(node_type)
+    else:
+        if can_reach:
+            return False, '{} is stopped according to YBA, but running on node'.format(node_type)
+        else:
+            return True, None
+
 
 # Verify tServer/Master processes are in same state as YBA thinks they are
 def verify(api_host, customer_uuid, universe, api_token, node):
     log('Verifying Master and tServer on node {} are in correct state per YBA'.format(node['cloudInfo']['private_ip']))
+    log(' - YBA shows node as being {}'.format(node['state']))
     errs = 0
-    master = node['cloudInfo']['private_ip'] + ':' + str(node['masterHttpPort'])  + '/api/v1/health-check'
-    tserver = node['cloudInfo']['private_ip'] + ':' + str(node['tserverHttpPort']) +  '/api/v1/health-check'
 
     if node['state'] == 'Live':
-        log(' - YBA shows node as being LIVE')
         if node['isMaster']:
             log('   YBA shows node as having a Master - checking for process')
-
-            try:  # try both http and https endpoints
-                resp = requests.get('http://' + master)
-                log('     Check passed: Master process found on node')
-            except:
-                try:
-                    resp = requests.get('https://' + master)
-                    log('    Check passed: Master process found on node')
-                except:
-                    log('Master is running according to YBA, but stopped or uncommunicative', True)
-                    errs += 1
+            passed, message = get_node_health('Master', node, node['state'])
+            if passed:
+                log('     Check passed: master process found on node')
+            else:
+                log(message, True)
+                errs += 1
         else:
-            log('    YBA shows node as NOT having a Master - skipping check')
+            log('   YBA shows node as NOT having a Master - skipping check')
 
         if node['isTserver']:
-            log('   YBA shows node as having a tServer  - checking for process')
-            try:  # try both http and https endpoints
-                resp = requests.get('http://' + tserver)
+            log('   YBA shows node as having a tServer - checking for process')
+            passed, message = get_node_health('tServer', node, node['state'])
+            if passed:
                 log('     Check passed: tServer process found on node')
-            except:
-                try:
-                    resp = requests.get('https://' + tserver)
-                    log('     Check passed: tServer process found on node')
-                except:
-                    log('tServer is running according to YBA, but stopped or uncommunicative', True)
-                    errs += 1
+            else:
+                log(message, True)
+                errs += 1
         else:
             log('   YBA shows node as NOT having a  tServer - skipping check')
-
     elif node['state'] == 'Stopped':
-        log(' - YBA shows node as being STOPPED')
-        log('   Checking for Master process')
-
-        try:  # try both http and https endpoints
-            resp = requests.get('http://' + master)
+        passed, message = get_node_health('Master', node, node['state'])
+        if passed:
+            log('     Check passed: No master process found on node')
+        else:
+            log(message, True)
             errs += 1
-            log('Master is stopped or not present according to YBA, but running on node', True)
-        except:
-            try:
-                resp = requests.get('https://' + master)
-                log('Master is stopped or not present according to YBA, but running on node', True)
-                errs +=1
-            except:
-                log('    Check passed: no Master process found on node')
 
-        log('   Checking for tServer process')
-        try:  # try both http and https endpoints
-            resp = requests.get('http://' + tserver)
-            log('tServer process is stopped or not present according to YBA, but running on node', True)
+        passed, message = get_node_health('Tserver', node, node['state'])
+        if passed:
+            log('     Check passed: No tServer process found on node')
+        else:
+            log(message, True)
             errs += 1
-        except:
-            try:
-                resp = requests.get('https://' + tserver)
-                log('tServer process is stopped or not present according to YBA, but running on node', True)
-                errs += 1
-            except:
-                log('    Check passed: no tServer process found on node')
     else:
         log('Node is in state "' + node['state'] + '" and cannot be verified.  Node must be LIVE or STOPPED to run verification', True)
         errs += 1
@@ -892,7 +899,7 @@ def main():
                         + '_' + action + '.log', "a")
 
     log('\n--------------------------------------')
-    log(datetime.now().strftime(LOG_TIME_FORMAT) + ' script started')
+    log(datetime.now().strftime(LOG_TIME_FORMAT) + ' script version {} started'.format(Version))
     # find env variable file - should be only 1
     flist = fnmatch.filter(os.listdir(ENV_FILE_PATH), ENV_FILE_PATTERN)
     if len(flist) < 1:
@@ -940,15 +947,30 @@ def main():
             LOG_FILE.close()
         exit(OTHER_ERROR)
 
-    try:
-        log('Retrieving Universes from YBA server at ' + api_host)
-        universes = get_universes(api_host, customer_uuid, api_token)
-        dbhost, universe = get_db_node_and_universe(universes, hostname, ip, args.health)
-    except:
-        log(datetime.now().strftime(LOG_TIME_FORMAT) + ' Could not contact YBA server at ' + api_host + ' exiting', True)
-        if(not LOG_TO_TERMINAL):
-            LOG_FILE.close()
-        exit(OTHER_ERROR)
+    num_retries = 1
+    while num_retries <= 5:
+        try:
+            log('Attempt {} to communicate with YBA host at {}'.format(num_retries, api_host))
+            response = requests.get(api_host + '/api/customers/' + customer_uuid,
+                                headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
+                                timeout=5)
+            num_retries = 999
+        except:
+            if num_retries >= 5:
+                log(datetime.now().strftime(LOG_TIME_FORMAT) + ' Could not establish communication with YBA server at {} after {} attempts - exiting'.format(api_host, num_retries), True)
+                log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code {}'.format(NODE_YBA_ERROR))
+                if (not LOG_TO_TERMINAL):
+                    LOG_FILE.close()
+                exit(NODE_YBA_ERROR)
+            else:
+                num_retries += 1
+                sleeptime = random.randint(5, MAX_TIME_TO_SLEEP_SECONDS)
+                log(datetime.now().strftime(LOG_TIME_FORMAT) + 'Could not establish communication with YBA server at {} trying again in {} seconds'.format(api_host, sleeptime))
+                pass
+
+    log('Retrieving Universes from YBA server at ' + api_host)
+    universes = get_universes(api_host, customer_uuid, api_token)
+    dbhost, universe = get_db_node_and_universe(universes, hostname, ip, args.health)
 
     try:
         ## first, do healthcheck if specified
