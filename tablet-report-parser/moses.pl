@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.21";
+our $VERSION = "0.22";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
@@ -128,6 +128,12 @@ sub Get_and_Parse_tablets_from_tservers{
           my $t = Tablet::->new_from_tr($_);
           $tabletCount++;
           $t->{LEADER} and $leaders{$t->{LEADER}} ++;
+          if ($t->{TABLET_UUID} eq "hash_split"){
+             # Something wierd about this line - record it as a comment, and ignore line
+             $db->putlog("WARNING: unexpected tablet line#$. for node $n->{private_ip}:$_",4);
+             $db->Collect_Error_Metric("Unparsed Tablet line for node $n->{private_ip}");
+             next;
+          }
           $db->Insert_Tablet($t, $n->{Tserver_UUID});
       }
       close $f;
@@ -468,9 +474,9 @@ sub Get_Node_Metrics{
                               },
      hybrid_clock_skew  => sub{my ($m,$val)=$_[1]=~/^(\w+).+?\s(\d+)/;save_metric($m,$_[0],0,$val)},
      'handler_latency_yb_tserver_TabletServerService_Read{quantile="p99' 
-                        => sub{my ($val)=$_[1]=~/\s(\d+)/;save_metric('tserver_read_p99',$_[0],0,$val)},
+                        => sub{my ($val)=$_[1]=~/\s(\d+)/;save_metric('tserver_read_latency_p99',$_[0],0,$val)},
      'handler_latency_yb_tserver_TabletServerService_Write{quantile="p99'
-                        => sub{my ($val)=$_[1]=~/\s(\d+)/;save_metric('tserver_write_p99',$_[0],0,$val)},
+                        => sub{my ($val)=$_[1]=~/\s(\d+)/;save_metric('tserver_write_latency_p99',$_[0],0,$val)},
   );
   my $regex = "^(" . join("|^",map {quotemeta} keys(%metric_handler)). ")";
 
@@ -691,6 +697,11 @@ sub Append_Pending_Message{
   push @{ $self->{PENDING_MESSAGES} }, $msg;
 }
 
+sub Collect_Error_Metric{
+  my ($self,$msg) = @_;
+  $self->{ERROR_METRIC}{$msg}++;
+}
+
 sub Create_Views{
   my ($self) = @_;
   $self->putsql(<<"__SQL__");
@@ -791,27 +802,30 @@ SELECT '-- S u m m a r y--';
  select   (SELECT count(*) from node) ||' Nodes;  ' 
        || (SELECT count(*) from tablet)||' Tablets ('
        || (SELECT count(*)  from leaderless) || ' Leaderless). '
-       || (select count(*) from metrics) || ' metrics.';
+       || (select count(*) from metrics) || ' metrics.'; 
  SELECT tablet_count ||' tablets have '||replicas || ' replicas.' FROM tablet_replica_summary;
- SELECT 'WARNING: ' || node_uuid || ' has '|| metric_name || '='||value  
- FROM  metrics 
- WHERE node_uuid like 'Master-%' and metric_name='log_append_latency_avg' and value+0 >= $opt{FOLLOWER_LAG_MINIMUM};
- SELECT 'WARNING: Node ' || node_uuid || ' has '|| metric_name || '='||value  
- FROM  metrics 
- WHERE metric_name IN ('hybrid_clock_skew')
+ SELECT 'WARNING: ' || nodeName||'('|| node_uuid || ') has '|| metric_name || '='||value  
+ FROM  metrics,node
+ WHERE node_uuid=nodeUuid and  node_uuid like 'Master-%' and metric_name='log_append_latency_avg' and value+0 >= $opt{FOLLOWER_LAG_MINIMUM};
+ SELECT 'WARNING: Node ' || nodeName||'('|| node_uuid || ') has '|| metric_name || '='||value  
+ FROM  metrics,node
+ WHERE node_uuid=nodeUuid and metric_name IN ('hybrid_clock_skew')
       and value+0 >= 50;
- SELECT 'WARNING: Node ' || node_uuid || ' has '|| metric_name || '='||value 
+ SELECT 'WARNING: Node ' || nodeName||'('|| node_uuid || ') has '|| metric_name || '='||value 
         || CASE WHEN entity_uuid != '0' THEN '(' || entity_name || ' ' || entity_uuid || ')'
            ELSE '' END
- FROM  metrics 
- WHERE metric_name IN ('tserver_read_p99', 'tserver_write_p99',
+ FROM  metrics,node 
+ WHERE node_uuid=nodeUuid and metric_name IN ('tserver_read_latency_p99', 'tserver_write_latency_p99',
                        'async_replication_committed_lag_micros','async_replication_sent_lag_micros')
       and value+0 >=  $opt{FOLLOWER_LAG_MINIMUM};
 __SQL__
 
-for my $msg(@{ $self->{PENDING_MESSAGES} }){
-    $self->putsql("SELECT '$msg';");
+  for my $msg(@{ $self->{PENDING_MESSAGES} }){
+      $self->putsql("SELECT '$msg';");
   }
+  for my $k(sort keys %{ $self->{ERROR_METRIC} }){
+      $self->putsql("SELECT ". $self->{ERROR_METRIC}{$k}  .",'$k';");
+  }  
 }
 1;  
 } # End of package DatabaseClass
@@ -944,12 +958,13 @@ sub new{
         sleep 2;
     }   
     my $self =bless {map {$_ => $opt{$_}||""} qw|HTTPCONNECT UNIV_UUID API_TOKEN YBA_HOST CUST_UUID| }, $class;
-if ( $opt{YBA_HOST} =~m{^(http\w?://)}i ){
+    if ( $opt{YBA_HOST} =~m{^(http\w?://)}i ){
        $self->{HTTP_PREFIX} ="$1";
        $self->{YBA_HOST} = substr($self->{YBA_HOST},length($1));
     }else{
        $self->{HTTP_PREFIX} ="http://";
     }
+    $opt{YBA_HOST} =~s|/$||; # Zap trailing slash 
     $self->Set_Value();
     $self->{HTTP_PREFIX} ||= substr($opt{YBA_HOST},0,5); # HTTP: or HTTPS
     if ($self->{HTTPCONNECT} eq "curl"){
