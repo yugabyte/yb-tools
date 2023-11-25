@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.22";
+our $VERSION = "0.23";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
@@ -105,7 +105,12 @@ sub Get_and_Parse_tablets_from_tservers{
       my $tabletCount = 0;
       print "SELECT '", TimeDelta("Processing tablets on $n->{nodeName} $n->{Tserver_UUID} ($n->{private_ip},Idx $n->{nodeIdx})... $prev_node_msg"),"';\n";
       my $html_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/tablets?raw","BASE_URL_UNIVERSE",1); # RAW
-
+      if ( $opt{GZIP} ){
+         # Save raw Node HTML  to the output as a comment, for debugging
+         (my $escaped_HTML = $html_raw) =~s|\*/|*^/g|; # Escape closing comment 
+         print "-- Raw Node  $n->{nodeName} $n->{Tserver_UUID} ($n->{private_ip},Idx $n->{nodeIdx}) HTML --\n/*\n",
+                $escaped_HTML,"\n*/\n";
+      }
       # Open the html text as a file . Read it using "</tr>\n" as the line ending, to get one <tr>(tablet) at a time 
       open my $f,"<",\$html_raw or die $!;
 
@@ -295,6 +300,13 @@ sub Initialize{
   # Get dump_entities JSON from MASTER_LEADER
   $opt{DEBUG} and print "SELECT '",TimeDelta("DEBUG:Getting Dump Entities..."),"';\n";  
   my $entities = $YBA_API->Get("/proxy/$ml_node->{private_ip}:$master_http_port/dump-entities","BASE_URL_UNIVERSE");
+  if ( $opt{GZIP} ){
+    # Save raw univ & entities to the output as a comment, for debugging
+    (my $escaped_JSON = $universe->{JSON_STRING}) =~s|\*/|*^/g|; # Escape closing comment 
+    print "-- Universe JSON --\n/*\n", $escaped_JSON,"\n*/\n";
+    ($escaped_JSON = $YBA_API->{json_string}) =~s|\*/|*^/g|; # Escape closing comment in ENTITIES
+    print "-- ENTITIES --\n/*\n", $escaped_JSON,"\n*/\n";
+  }
   # Analyze & save DUMP ENTITIES contained in  $YBA_API->{json_string} 
   Handle_ENTITIES_Data($entities);
 
@@ -448,6 +460,14 @@ sub Extract_gflags{
   }
   for my $flagtype (qw|masterGFlags tserverGFlags |){
      next unless my $flag = $univ_hash->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
+     for my $k(sort keys %$flag){
+        (my $v = $flag->{$k}) =~tr/'/~/; # Zap potential single quote in gflag value 
+        $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
+     }
+  }
+  for my $flagtype (qw|MASTER TSERVER |){ # New gflag location for 2.18
+     next unless my $flag = $univ_hash->{universeDetails}{clusters}[0]{userIntent}{specificGFlags};
+     next unless $flag = $flag->{perProcessFlags}{value}{$flagtype};
      for my $k(sort keys %$flag){
         (my $v = $flag->{$k}) =~tr/'/~/; # Zap potential single quote in gflag value 
         $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
@@ -1044,7 +1064,7 @@ sub new{
   my ($class, $yba_api) = @_;
   $yba_api or die "YBA API Parameter is required";
   my $self = $yba_api->Get(""); # Perl-ized Huge Univ JSON
-  $self->{JSON_STRING} = $yba_api->{raw_response}; # Raw JSON string 
+  $self->{JSON_STRING} = $yba_api->{json_string}; # Raw JSON string 
   $self->{YBA_API} = $yba_api;
   $opt{DEBUG} and print "--DEBUG:UNIV: $_\t","=>",$self->{$_},"\n" for qw|name creationDate universeUUID version |;
   _Extract_nodes($self);
