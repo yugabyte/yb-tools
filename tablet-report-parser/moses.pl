@@ -1,24 +1,25 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.23";
+our $VERSION = "0.24";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
- Get and analyze info on all tablets in the system.
+ Get and analyze info on all tablets , config(gflags/xCluster) in the system.
  By default, output will be piped to sqlite3 to create a sqlite3 database,
  and run default reports.
- Moses also collects a snapshot of metrics (tables, tablet lag).
+ Moses also collects a snapshot of metrics (tables, tablet, xCluster lag).
  
  Run options:
    --YBA_HOST         [=] <YBA hostname or IP> (Required) "[http(s)://]<hostname-or-ip>[:<port>]"
    --API_TOKEN        [=] <API access token>   (Required)
    --UNIVERSE         [=] <Universe-Name-or-uuid>  (Required. Name Can be partial, sufficient to be Unique)
    --CUSTOMER         [=] <Customer-uuid-or-name> (Optional. Required if more than one customer exists)
-   --GZIP             (Use this if you want to create a sql.gz for export, instead of a sqlite DB)
+   --GZIP             Use this if you want to create a sql.gz for export, instead of a sqlite DB
+                      In addition, this collects additional debug info as a comment in the SQL.
    **ADVANCED options**
-   --HTTPCONNECT      [=] [curl | tiny]    (Optional. Whether to use 'curl' or HTTP::Tiny(Default))
-   --FOLLOWER_LAG_MINIMUM [=] <value> (ms)(collect tablet follower lag for values >= this value(default 1000))
-   --CONFIG_FILE_(PATH|NAME) [=] <path-or-name-of-file-containing-options> (i.e --CONFIG_FILE_PATH & .._NAME)
+   --HTTPCONNECT            [=] [curl | tiny]    (Optional. Whether to use 'curl' or HTTP::Tiny(Default))
+   --FOLLOWER_LAG_MINIMUM   [=] <value> (ms)(collect tablet follower lag for values >= this value(default 1000))
+   --CONFIG_FILE_(PATH|NAME)[=] <path-or-name-of-file-containing-options> (i.e --CONFIG_FILE_PATH & .._NAME)
    
     If STDOUT is redirected, it can be sent to  a SQL file, or gzipped, and collected for offline analysis.
     You may abbreviate option names up to the minimum required for uniqueness.
