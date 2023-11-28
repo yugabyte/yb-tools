@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.24";
+our $VERSION = "0.25";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
@@ -18,7 +18,7 @@ my $HELP_TEXT = << "__HELPTEXT__";
                       In addition, this collects additional debug info as a comment in the SQL.
    **ADVANCED options**
    --HTTPCONNECT            [=] [curl | tiny]    (Optional. Whether to use 'curl' or HTTP::Tiny(Default))
-   --FOLLOWER_LAG_MINIMUM   [=] <value> (ms)(collect tablet follower lag for values >= this value(default 1000))
+   --FOLLOWER_LAG_MINIMUM   [=] <value> (milisec)(collect tablet follower lag for values >= this value(default 1000))
    --CONFIG_FILE_(PATH|NAME)[=] <path-or-name-of-file-containing-options> (i.e --CONFIG_FILE_PATH & .._NAME)
    
     If STDOUT is redirected, it can be sent to  a SQL file, or gzipped, and collected for offline analysis.
@@ -485,7 +485,7 @@ sub Get_Node_Metrics{
      ql_read_latency    => sub{my ($m,$table,$val)=$_[1]=~/^(\w+)\{table_id="(\w+).+?\s(\d+)/ or return;
                                $post_process{$m}{$_[0]}{$table}=$val;},
      log_append_latency => sub{my ($m,$table,$val)=$_[1]=~/^(\w+)\{table_id="(\w+).+?\s(\d+)/ or return;
-                               $post_process{$m}{$_[0]}{$table}=$val;},
+                               $post_process{$m}{$_[0]}{$table}=$val;}, #microseconds 
      ql_write_latency   => sub{my ($m,$table,$val)=$_[1]=~/^(\w+)\{table_id="(\w+).+?\s(\d+)/ or return;
                                $post_process{$m}{$_[0]}{$table}=$val;},                               
      server_uptime_ms   => sub{my ($m,$val)=$_[1]=~/^(\w+).+?\s(\d+)/;save_metric($m,$_[0],0,$val)},
@@ -494,7 +494,7 @@ sub Get_Node_Metrics{
                               save_metric($m,$_[0],$table_id,$val);
                               },
      hybrid_clock_skew  => sub{my ($m,$val)=$_[1]=~/^(\w+).+?\s(\d+)/;save_metric($m,$_[0],0,$val)},
-     'handler_latency_yb_tserver_TabletServerService_Read{quantile="p99' 
+     'handler_latency_yb_tserver_TabletServerService_Read{quantile="p99' #microseconds
                         => sub{my ($val)=$_[1]=~/\s(\d+)/;save_metric('tserver_read_latency_p99',$_[0],0,$val)},
      'handler_latency_yb_tserver_TabletServerService_Write{quantile="p99'
                         => sub{my ($val)=$_[1]=~/\s(\d+)/;save_metric('tserver_write_latency_p99',$_[0],0,$val)},
@@ -826,19 +826,22 @@ SELECT '-- S u m m a r y--';
        || (select count(*) from metrics) || ' metrics.'; 
  SELECT tablet_count ||' tablets have '||replicas || ' replicas.' FROM tablet_replica_summary;
  SELECT 'WARNING: ' || nodeName||'('|| node_uuid || ') has '|| metric_name || '='||value  
+         || ' microseconds'
  FROM  metrics,node
- WHERE node_uuid=nodeUuid and  node_uuid like 'Master-%' and metric_name='log_append_latency_avg' and value+0 >= $opt{FOLLOWER_LAG_MINIMUM};
+ WHERE node_uuid=nodeUuid and  node_uuid like 'Master-%' and metric_name='log_append_latency_avg' 
+       and value+0 >= $opt{FOLLOWER_LAG_MINIMUM} * 1000;
  SELECT 'WARNING: Node ' || nodeName||'('|| node_uuid || ') has '|| metric_name || '='||value  
+         || ' microseconds'
  FROM  metrics,node
  WHERE node_uuid=nodeUuid and metric_name IN ('hybrid_clock_skew')
-      and value+0 >= 50;
+      and value+0 >= $opt{FOLLOWER_LAG_MINIMUM}; -- Treat this as microsec for this metric
  SELECT 'WARNING: Node ' || nodeName||'('|| node_uuid || ') has '|| metric_name || '='||value 
         || CASE WHEN entity_uuid != '0' THEN '(' || entity_name || ' ' || entity_uuid || ')'
-           ELSE '' END
+           ELSE '' END || ' microseconds'
  FROM  metrics,node 
  WHERE node_uuid=nodeUuid and metric_name IN ('tserver_read_latency_p99', 'tserver_write_latency_p99',
                        'async_replication_committed_lag_micros','async_replication_sent_lag_micros')
-      and value+0 >=  $opt{FOLLOWER_LAG_MINIMUM};
+      and value+0 >=  $opt{FOLLOWER_LAG_MINIMUM}*1000;
 __SQL__
 
   for my $msg(@{ $self->{PENDING_MESSAGES} }){
@@ -896,7 +899,7 @@ sub new_from_tr{
     my ($class, $line) = @_;
     # This parses a <tr> block for one tablet, extracts fields and returns a tablet object
     my $h=0;
-    my %val = map{$fields[$h++] => $_} $line=~m{<td>(.+?)</td>}gs;
+    my %val = map{$fields[$h++] => defined $_?$_:''} $line=~m{<td>(.*?)</td>}gs; # Can have empty <td>'s
     
     ($val{TABLET_UUID}) = $val{TABLET_ID} =~m/^(?:<.+?>)?(\w+)/; # Usually <a href>, but tombstones have only uuid
     $val{FOLLOWERS} = join ",", $val{'RAFTCONFIG'} =~m/FOLLOWER: ([^<]+)/g ; # a CSV string 
