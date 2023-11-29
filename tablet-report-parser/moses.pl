@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.25";
+our $VERSION = "0.26";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, moses.pl  Version $VERSION
                ========
@@ -20,7 +20,11 @@ my $HELP_TEXT = << "__HELPTEXT__";
    --HTTPCONNECT            [=] [curl | tiny]    (Optional. Whether to use 'curl' or HTTP::Tiny(Default))
    --FOLLOWER_LAG_MINIMUM   [=] <value> (milisec)(collect tablet follower lag for values >= this value(default 1000))
    --CONFIG_FILE_(PATH|NAME)[=] <path-or-name-of-file-containing-options> (i.e --CONFIG_FILE_PATH & .._NAME)
-   
+   **Backfill related options**
+   --WAIT_INDEX_BACKFILL        If specified, this program runs till backfills complete. No report or DB.
+   --INDEX_NAME             [=] <idx-name> Optionally Used with WAIT_INDEX_BACKFILL, to specify WHICH idx to wait for.
+   --SLEEP_INTERVAL_SEC     [=] nn  Number of seconds to sleep between check for backfill; default 30.
+
     If STDOUT is redirected, it can be sent to  a SQL file, or gzipped, and collected for offline analysis.
     You may abbreviate option names up to the minimum required for uniqueness.
     Options can be set via --cmd-line, or via environment, or both, or via a "config_file".
@@ -67,12 +71,23 @@ my %opt = (
    CONFIG_FILE_PATH     => "/home/yugabyte/",
    CONFIG_FILE_NAME     => '.yba*.rc',
    CUSTOMER             => undef,
+   WAIT_INDEX_BACKFILL  => 0,
+   INDEX_NAME           => undef,
+   SLEEP_INTERVAL_SEC   => 30,
 );
 
 #---- Start ---
 my ($YBA_API,$SQL_OUTPUT_FH, $db, $universe);
 warn "-- ", $opt{STARTTIME_PRINTABLE}, " : Moses version $VERSION \@$opt{LOCALHOST} starting ...", "\n";
 Initialize();
+
+if ($opt{WAIT_INDEX_BACKFILL}){
+   while ( Check_Index_Backfill_complete() ){
+       sleep $opt{SLEEP_INTERVAL_SEC};
+   }
+   warn TimeDelta("Index backfill wait COMPLETED. Exiting.");
+   exit 0;
+}
 
 Get_and_Parse_tablets_from_tservers();
 
@@ -186,7 +201,10 @@ sub Initialize{
                         API_TOKEN=s YBA_HOST=s UNIVERSE=s
                         GZIP! DBFILE=s SQLITE=s GZIP! DROPTABLES!
                         HTTPCONNECT=s CURL=s FOLLOWER_LAG_MINIMUM=i
-                        CONFIG_FILE_PATH=s CONFIG_FILE_NAME=s CUSTOMER=s]
+                        CONFIG_FILE_PATH=s CONFIG_FILE_NAME=s CUSTOMER=s
+                        WAIT_INDEX_BACKFILL|WAITINDEXBACKFILL|WAITBACKFILL|WAIT_BACKFILL!
+                        INDEX_NAME|INDEXNAME=s SLEEP_INTERVAL_SEC|INTERVAL=i
+                        ]
                ) or die "ERROR: Invalid command line option(s). Try --help.";
 
     if ($opt{HELP}){
@@ -277,15 +295,11 @@ sub Initialize{
      die "ERROR: Universe info not found \n";
   }
   $universe->Check_Status(sub{warn "WARNING:$_[0]\n"});
-  # Find Master/Leader 
-  $opt{MASTER_LEADER}      = $YBA_API->Get("/leader")->{privateIP};
-  if (! $opt{MASTER_LEADER}){
-    die "ERROR:Could not get Master/Leader:\n\t" . $YBA_API->{json_string};
+
+  if ($opt{WAIT_INDEX_BACKFILL}){
+     return; # No need to create output etc...
   }
-  $opt{DEBUG} and print "--DEBUG:Master/Leader JSON:",$YBA_API->{json_string},". IP is ",$opt{MASTER_LEADER},".\n";
-  my ($ml_node) = grep {$_->{private_ip} eq $opt{MASTER_LEADER}} @{ $universe->{NODES} } or die "ERROR : No Master/Leader NODE found for $opt{MASTER_LEADER}";
-  my $master_http_port = $universe->{universeDetails}{communicationPorts}{masterHttpPort} or die "ERROR: Master HTTP port not found in univ JSON";
-  
+
   #--- Initialize SQL output -----
   Setup_Output_Processing(); # Figure out if we are piping to sqlite etc.. 
 
@@ -300,7 +314,8 @@ sub Initialize{
   
   # Get dump_entities JSON from MASTER_LEADER
   $opt{DEBUG} and print "SELECT '",TimeDelta("DEBUG:Getting Dump Entities..."),"';\n";  
-  my $entities = $YBA_API->Get("/proxy/$ml_node->{private_ip}:$master_http_port/dump-entities","BASE_URL_UNIVERSE");
+  my $entities = # $YBA_API->Get("/proxy/$ml_node->{private_ip}:$master_http_port/dump-entities","BASE_URL_UNIVERSE");
+                 $universe->Get_Master_leader_Endpoint_data("/dump-entities", 0);
   if ( $opt{GZIP} ){
     # Save raw univ & entities to the output as a comment, for debugging
     (my $escaped_JSON = $universe->{JSON_STRING}) =~s|\*/|*^/g|; # Escape closing comment 
@@ -538,14 +553,42 @@ sub save_metric{
   $db->putsql("INSERT INTO METRICS VALUES('$metric','$node_uuid','TABLE','$table_uuid',$value);");
 }
 #------------------------------------------------------------------------------------------------
-sub Read_this_buffer_w_callback{
-   my ($buf_ref, $callback, $delim) = @_;
+sub Check_Index_Backfill_complete{
+  $opt{DEBUG} and print TimeDelta("DEBUG:Getting Index backfill from $opt{MASTER_LEADER}..."),"';\n";  
+  my $task_list = $universe->Get_Master_leader_Endpoint_data("/tasks?raw",1);
+  my $active_backfills = 0;
+  Read_this_buffer_HTML_Table_w_callback(
+    \$task_list,
+    sub{ my ($v, $fref,$line,$row) = @_;
+       return unless $v and $v->{JOB_NAME} and $v->{JOB_NAME} eq "Backfill Table";
+       return if $v->{STATE} eq "kComplete";
+       $active_backfills++;
+       print "Backfill#$active_backfills: $v->{STATE} ",
+              $v->{START_TIME}, ", running for ",
+              $v->{DURATION},": $v->{DESCRIPTION}.\n";
+             
+    },
+  );
+  return $active_backfills;
+}
+#------------------------------------------------------------------------------------------------
+sub Read_this_buffer_HTML_Table_w_callback{
+   my ($buf_ref, $callback) = @_;
    open my $f,"<",$buf_ref or die "Cannot open buffer as file:$!";
-   $delim and local $/=$delim;
+   local $/= "</tr>\n"; # "Line" separator 
+   my $row=0;
+   my $header =<$f>;
+   $header or die "ERROR: Cant read header from  HTML";
+   #print "HDR: $header";
+   my @fields = map{tr/ -/_/;uc } $header=~m{<th>([^<]+)</th>}sg;
+
    while(<$f>){
-      $callback->($_);
+      my $h=0;
+      my %val = map{$fields[$h++] => defined $_?$_:''} $_=~m{<td>(.*?)</td>}gs; # Can have empty <td>'s
+      $callback->(\%val,\@fields,$_,++$row);
    }
    close $f;
+   $callback->(undef); # Ended
 }
 #------------------------------------------------------------------------------------------------
 sub unixtime_to_printable{
@@ -732,6 +775,7 @@ sub Create_Views{
   CREATE VIEW tablets_per_node AS 
     SELECT node_uuid,min(public_ip) as node_ip,min(region ) as region,  count(*) as tablet_count,
            sum(CASE WHEN private_ip = leader THEN 1 ELSE 0 END) as leaders,
+           sum(CASE WHEN tablet.state = 'TABLET_DATA_TOMBSTONED' THEN 1 ELSE 0 END) as tombstoned,
            count(DISTINCT table_name) as table_count
   FROM tablet,node 
   WHERE isTserver  and node.nodeuuid=node_uuid 
@@ -742,6 +786,7 @@ sub Create_Views{
     SELECT t.namespace,t.table_name,t.table_uuid,t.tablet_uuid,
   count(DISTINCT LEADER) as leader_count, count(*) as replicas
   from tablet t
+  WHERE t.state != 'TABLET_DATA_TOMBSTONED'
   GROUP BY t.namespace,t.table_name,t.table_uuid,t.tablet_uuid;
 
   CREATE VIEW tablet_replica_summary AS
@@ -1072,6 +1117,7 @@ sub new{
   $self->{YBA_API} = $yba_api;
   $opt{DEBUG} and print "--DEBUG:UNIV: $_\t","=>",$self->{$_},"\n" for qw|name creationDate universeUUID version |;
   _Extract_nodes($self);
+  _Get_Master_Leader($self);
   for my $region (@{ $self->{universeDetails} {clusters} [0]{placementInfo}{cloudList}[0]{regionList} }){
       my $preferred = 0;
       my $az_node_count = 0;
@@ -1130,6 +1176,25 @@ sub _Extract_nodes{
        $count++;
     }
     return $self->{NODES};  
+}
+
+sub _Get_Master_Leader{
+  my ($self) = @_;
+  # Find Master/Leader 
+  my $leader_IP  = $self->{YBA_API}->Get("/leader")->{privateIP};
+  if (! $leader_IP ){
+    die "ERROR:Could not get Master/Leader:\n\t" . $YBA_API->{json_string};
+  }
+  $opt{DEBUG} and print "--DEBUG:Master/Leader JSON:",$YBA_API->{json_string},". IP is $leader_IP .\n";
+  ( $self->{MASTER_LEADER_NODE} ) = grep {$_->{private_ip} eq $leader_IP } @{ $self->{NODES} } or die "ERROR : No Master/Leader NODE found for $leader_IP ";
+  my $master_http_port = $self->{universeDetails}{communicationPorts}{masterHttpPort} or die "ERROR: Master HTTP port not found in univ JSON";
+}
+
+sub Get_Master_leader_Endpoint_data{
+  my ($self, $endpoint, $RAW) = @_;
+  #("/proxy/$ml_node->{private_ip}:$master_http_port/dump-entities","BASE_URL_UNIVERSE");
+  my $master_http_port = $self->{universeDetails}{communicationPorts}{masterHttpPort};
+  return $self->{YBA_API}->Get("/proxy/$self->{MASTER_LEADER_NODE}->{private_ip}:$master_http_port$endpoint","BASE_URL_UNIVERSE",$RAW); # Get RAW data
 }
 
 sub GetFlags_with_callback{
