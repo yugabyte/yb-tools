@@ -1,31 +1,32 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.26";
+our $VERSION = "0.27";
 my $HELP_TEXT = << "__HELPTEXT__";
-    It's a me, moses.pl  Version $VERSION
+    It's a me, \x1b[1;33;100mmoses.pl\x1b[0m  Version $VERSION
                ========
  Get and analyze info on all tablets , config(gflags/xCluster) in the system.
  By default, output will be piped to sqlite3 to create a sqlite3 database,
  and run default reports.
  Moses also collects a snapshot of metrics (tables, tablet, xCluster lag).
  
- Run options:
+\x1b[1;33;100mRun options:\x1b[0;1m
    --YBA_HOST         [=] <YBA hostname or IP> (Required) "[http(s)://]<hostname-or-ip>[:<port>]"
    --API_TOKEN        [=] <API access token>   (Required)
    --UNIVERSE         [=] <Universe-Name-or-uuid>  (Required. Name Can be partial, sufficient to be Unique)
    --CUSTOMER         [=] <Customer-uuid-or-name> (Optional. Required if more than one customer exists)
    --GZIP             Use this if you want to create a sql.gz for export, instead of a sqlite DB
                       In addition, this collects additional debug info as a comment in the SQL.
-   **ADVANCED options**
+\x1b[1;33;100mADVANCED options\x1b[0m
    --HTTPCONNECT            [=] [curl | tiny]    (Optional. Whether to use 'curl' or HTTP::Tiny(Default))
    --FOLLOWER_LAG_MINIMUM   [=] <value> (milisec)(collect tablet follower lag for values >= this value(default 1000))
    --CONFIG_FILE_(PATH|NAME)[=] <path-or-name-of-file-containing-options> (i.e --CONFIG_FILE_PATH & .._NAME)
-   **Backfill related options**
+
+\x1b[1;33;100mBackfill related options\x1b[0m
    --WAIT_INDEX_BACKFILL        If specified, this program runs till backfills complete. No report or DB.
    --INDEX_NAME             [=] <idx-name> Optionally Used with WAIT_INDEX_BACKFILL, to specify WHICH idx to wait for.
    --SLEEP_INTERVAL_SEC     [=] nn  Number of seconds to sleep between check for backfill; default 30.
 
-    If STDOUT is redirected, it can be sent to  a SQL file, or gzipped, and collected for offline analysis.
+    If \x1b[1;30;43mSTDOUT\x1b[0m is redirected, it can be sent to  a SQL file, or gzipped, and collected for offline analysis.
     You may abbreviate option names up to the minimum required for uniqueness.
     Options can be set via --cmd-line, or via environment, or both, or via a "config_file".
     We look for config files by default at --CONFIG_FILE_PATH=/home/yugabyte with a name "*.yba.rc".
@@ -198,7 +199,7 @@ sub Collect_Follower_Lag_metrics{
 sub Initialize{
 
     GetOptions (\%opt, qw[DEBUG! HELP! VERSION!
-                        API_TOKEN=s YBA_HOST=s UNIVERSE=s
+                        API_TOKEN|TOKEN=s YBA_HOST=s UNIVERSE=s
                         GZIP! DBFILE=s SQLITE=s GZIP! DROPTABLES!
                         HTTPCONNECT=s CURL=s FOLLOWER_LAG_MINIMUM=i
                         CONFIG_FILE_PATH=s CONFIG_FILE_NAME=s CUSTOMER=s
@@ -328,9 +329,13 @@ sub Initialize{
 
   $db->CreateTable("metrics",qw|metric_name node_uuid entity_name entity_uuid|,"value NUMERIC");
 
-  Handle_xCluster_Data() # Uses Globals :$db,$universe;
+  Handle_xCluster_Data(); # Uses Globals :$db,$universe;
   # Since we have SELECTed the sqlite file handle, we need funny-looking "print" statements
   # to get SQLITE to display our "progress" messages. (Old SQLITE does not support ".print", so we use SELECTs)
+  $universe->Get_runtime_config_w_callback(undef, # Global scope 
+              sub{ my ($cfg) = @_;
+                   $db->putsql("INSERT INTO gflags VALUES ('RUNTIMECFG','$cfg->{key}','$cfg->{value}');");
+              });
 }
 #----------------------------------------------------------------------------------------------
 sub Setup_Output_Processing{
@@ -469,8 +474,13 @@ sub Handle_xCluster_Data{
 #------------------------------------------------------------------------------------------------
 sub Extract_gflags{
   my ($univ_hash) = @_;
+
+  for my $k (qw| uuid clusterType |){
+     next unless defined ( my $v= $univ_hash->{universeDetails}{clusters}[0]{$k} );
+     $db->putsql("INSERT INTO gflags VALUES ('CLUSTER','$k','$v');");
+  }
   for my $k (qw|universeName provider providerType replicationFactor numNodes ybSoftwareVersion enableYCQL
-               enableYSQL enableYEDIS nodePrefix |){
+               enableYSQL enableYEDIS nodePrefix instanceType useSystemd useTimeSync|){
      next unless defined ( my $v= $univ_hash->{universeDetails}{clusters}[0]{userIntent}{$k} );
      $db->putsql("INSERT INTO gflags VALUES ('CLUSTER','$k','$v');");
   }
@@ -861,28 +871,35 @@ sub Create_Views{
   WHERE t.NAMESPACE=d.NAMESPACE 
   GROUP BY T.NAMESPACE;
 
-SELECT '-- The following reports are available --';
+ SELECT char(27) ||  '[1;40;36;4m-- The following reports are available --' || char(27) ||"[0;2m" ; -- Cyan on Black,UL - then FAINT
 .tables
-SELECT '-- S u m m a r y--';
+SELECT  char(27) || '[40;1;93;4m -- S u m m a r y --' || char(27) ||"[0m" ; -- Bright yellow on black,UL
 
- select   (SELECT count(*) from node) ||' Nodes;  ' 
+ CREATE VIEW IF NOT EXISTS Summary AS 
+ SELECT   (SELECT count(*) from node) || ' Nodes ('
+       || (SELECT count(DISTINCT region) from node) || ' Regions, '
+       || (SELECT count(DISTINCT az) from node) || ' AZs), '
        || (SELECT count(*) from tablet)||' Tablets ('
+       || (SELECT count(*) from tablet WHERE state='TABLET_DATA_TOMBSTONED') || ' Tombstoned, '
        || (SELECT count(*)  from leaderless) || ' Leaderless). '
-       || (select count(*) from metrics) || ' metrics.'; 
+       || (select count(*) from metrics) || ' metrics.'  AS Summary;
+ 
+ SELECT * from Summary;
+
  SELECT tablet_count ||' tablets have '||replicas || ' replicas.' FROM tablet_replica_summary;
- SELECT 'WARNING: ' || nodeName||'('|| node_uuid || ') has '|| metric_name || '='||value  
-         || ' microseconds'
+ SELECT char(27) || '[93;1mWARNING:' || char(27) ||"[0m " || nodeName||'('|| node_uuid || ') has '|| metric_name || '='||value  
+         || ' (microseconds)'
  FROM  metrics,node
  WHERE node_uuid=nodeUuid and  node_uuid like 'Master-%' and metric_name='log_append_latency_avg' 
        and value+0 >= $opt{FOLLOWER_LAG_MINIMUM} * 1000;
- SELECT 'WARNING: Node ' || nodeName||'('|| node_uuid || ') has '|| metric_name || '='||value  
-         || ' microseconds'
+ SELECT char(27) || '[93;1mWARNING:' || char(27) ||"[0m" || ' Node ' || nodeName||'('|| node_uuid || ') has '|| metric_name || '='||value  
+         || ' (microseconds)'
  FROM  metrics,node
  WHERE node_uuid=nodeUuid and metric_name IN ('hybrid_clock_skew')
       and value+0 >= $opt{FOLLOWER_LAG_MINIMUM}; -- Treat this as microsec for this metric
- SELECT 'WARNING: Node ' || nodeName||'('|| node_uuid || ') has '|| metric_name || '='||value 
-        || CASE WHEN entity_uuid != '0' THEN '(' || entity_name || ' ' || entity_uuid || ')'
-           ELSE '' END || ' microseconds'
+ SELECT  char(27) || '[93;1mWARNING:' || char(27) ||"[0m" ||' Node ' || nodeName||'('|| node_uuid || ') has '|| metric_name || '='||value 
+        || CASE WHEN entity_uuid != '0' THEN ' (' || entity_name || ' ' || entity_uuid || ')'
+           ELSE '' END || ' (microseconds)'
  FROM  metrics,node 
  WHERE node_uuid=nodeUuid and metric_name IN ('tserver_read_latency_p99', 'tserver_write_latency_p99',
                        'async_replication_committed_lag_micros','async_replication_sent_lag_micros')
@@ -1224,6 +1241,16 @@ sub Check_placementModificationTaskUuid{
   return unless  $self->{placementModificationTaskUuid};
   $db->putlog("Found placementModificationTaskUuid in Universe: ". $self->{placementModificationTaskUuid});
   $db->Append_Pending_Message("WARNING: Universe $self->{name} has a pending  placementModification Task - Please get assiance to clear it.");
+}
+
+sub Get_runtime_config_w_callback{
+  my ($self, $scope,$callback) = @_;
+
+  $scope ||= '00000000-0000-0000-0000-000000000000'; # Global
+  my $config= $self->{YBA_API}->Get("/runtime_config/$scope","BASE_URL_API_CUSTOMER");
+  #http://35.247.114.189/api/v1/customers/8ebe5e15-1ce5-425f-9f7d-1b3a68186554/runtime_config/00000000-0000-0000-0000-000000000000
+  #{"type":"GLOBAL","uuid":"00000000-0000-0000-0000-000000000000","mutableScope":false,"configEntries":[]}
+  $callback->($_) for @{ $config->{configEntries} };
 }
 
 1;

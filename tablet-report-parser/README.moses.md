@@ -49,9 +49,10 @@
 
 Moses.pl is intended to replace the current (multi-step) process of obtaining and analyzing a tablet report (yugatool/tablet-report-parser).
 
-In a single step, **moses.pl** collects tablet, configuration, and some metrics information, analyzes it, and produces a 
+In a single step, **moses.pl** collects tablet, configuration, xCluster and some metrics information, analyzes it, and produces a 
 sqlite database, and a summary report.
 
+In "Wait for Index backfill" mode (--WAIT_INDEX_BACKFILL), moses.pl will wait untill backfill completes. This can be used to automate index creation.
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
@@ -91,6 +92,14 @@ The host must have perl >= 5.16 installed.
 |   `--FOLLOWER_LAG_MINIMUM`   |[=] \<value> (milisec)(collect tablet follower lag for values >= this value(default 1000))\|
 |   `--CONFIG_FILE_(PATH\|NAME)`|[=] <path-or-name-of-file-containing-options> (i.e --CONFIG_FILE_PATH & .._NAME)\|
    
+   **Backfill related options**
+| Option name  | Value/explanation |
+| ------------- |-------------|
+|   `--WAIT_INDEX_BACKFILL` |        If specified, this program runs till backfills complete. No report or DB.|
+|   `--INDEX_NAME         ` |    [=] <idx-name> Optionally Used with WAIT_INDEX_BACKFILL, to specify WHICH idx to wait for.|
+|   `--SLEEP_INTERVAL_SEC ` |    [=] nn  Number of seconds to sleep between check for backfill; default 30.|
+
+
 * If STDOUT is redirected, it can be sent to  a SQL file, or gzipped, and collected for offline analysis.\
    (Similar to `--gzip`)
 * You may abbreviate option names up to the minimum required for uniqueness.
