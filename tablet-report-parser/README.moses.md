@@ -88,9 +88,9 @@ The host must have perl >= 5.16 installed.
    **ADVANCED options**
 | Option name  | Value/explanation |
 | ------------- |-------------|
-|   `--HTTPCONNECT`            |[=] [curl | tiny]    (Optional. Whether to use 'curl' or HTTP::Tiny(Default))\|
-|   `--FOLLOWER_LAG_MINIMUM`   |[=] \<value> (milisec)(collect tablet follower lag for values >= this value(default 1000))\|
-|   `--CONFIG_FILE_(PATH\|NAME)`|[=] <path-or-name-of-file-containing-options> (i.e --CONFIG_FILE_PATH & .._NAME)\|
+|   `--HTTPCONNECT`            |[=] [curl \| tiny]    (Optional. Whether to use 'curl' or HTTP::Tiny(Default))|
+|   `--FOLLOWER_LAG_MINIMUM`   |[=] \<value> (milisec)(collect tablet follower lag for values >= this value(default 1000))|
+|   `--CONFIG_FILE_(PATH\|NAME)`|[=] <path-or-name-of-file-containing-options> (i.e --CONFIG_FILE_PATH & .._NAME)|
    
    **Backfill related options**
 | Option name  | Value/explanation |
