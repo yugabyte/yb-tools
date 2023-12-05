@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.27";
+our $VERSION = "0.29";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, \x1b[1;33;100mmoses.pl\x1b[0m  Version $VERSION
                ========
@@ -564,7 +564,7 @@ sub save_metric{
 }
 #------------------------------------------------------------------------------------------------
 sub Check_Index_Backfill_complete{
-  $opt{DEBUG} and print TimeDelta("DEBUG:Getting Index backfill from $opt{MASTER_LEADER}..."),"';\n";  
+  $opt{DEBUG} and print TimeDelta("DEBUG:Getting Index backfill from $universe->{MASTER_LEADER_NODE}->{private_ip} ..."),"';\n";  
   my $task_list = $universe->Get_Master_leader_Endpoint_data("/tasks?raw",1);
   my $active_backfills = 0;
   Read_this_buffer_HTML_Table_w_callback(
@@ -587,14 +587,20 @@ sub Read_this_buffer_HTML_Table_w_callback{
    open my $f,"<",$buf_ref or die "Cannot open buffer as file:$!";
    local $/= "</tr>\n"; # "Line" separator 
    my $row=0;
-   my $header =<$f>;
-   $header or die "ERROR: Cant read header from  HTML";
-   #print "HDR: $header";
-   my @fields = map{tr/ -/_/;uc } $header=~m{<th>([^<]+)</th>}sg;
+
+   my @fields; # = map{tr/ -/_/;uc } $header=~m{<th>([^<]+)</th>}sg;
 
    while(<$f>){
+      if (m{</?table[^>]+>}){
+          @fields=();
+          $row = 0;
+      }
+      if (0 == scalar(@fields)  and  m{<tr><th>}m){
+         @fields = map{tr/ -/_/;uc } m{<th>([^<]+)</th>}gm;
+         next;
+      }
       my $h=0;
-      my %val = map{$fields[$h++] => defined $_?$_:''} $_=~m{<td>(.*?)</td>}gs; # Can have empty <td>'s
+      my %val = map{$fields[$h++] => defined $_?$_:''} $_=~m{<t[hd]>(.*?)</t[hd]>}gm; # Can have empty <td>'s
       $callback->(\%val,\@fields,$_,++$row);
    }
    close $f;
