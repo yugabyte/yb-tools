@@ -91,15 +91,15 @@ The host must have perl >= 5.16 installed.
 | `--DBFILE` | [=] <Name/fullpath of the output sqlite db file>|
 |   `--HTTPCONNECT`            |[=] [curl \| tiny]    (Optional. Whether to use 'curl' or HTTP::Tiny(Default))|
 |   `--FOLLOWER_LAG_MINIMUM`   |[=] \<value> (milisec)(collect tablet follower lag for values >= this value(default 1000))|
-|   `--CONFIG_FILE_(PATH\|NAME)`|[=] <path-or-name-of-file-containing-options> (i.e --CONFIG_FILE_PATH & .._NAME)|
-|   `--CURL`                    | [=] <path to curl binary>|
-|   `--SQLITE`                  | [=] <path to sqlite3 binary>|
+|   `--CONFIG_FILE_(PATH\|NAME)`|[=] \<path-or-name-of-file-containing-options> (i.e --CONFIG_FILE_PATH & .._NAME)|
+|   `--CURL`                    | [=] \<path to curl binary>|
+|   `--SQLITE`                  | [=] \<path to sqlite3 binary>|
    
    **Backfill related options**
 | Option name  | Value/explanation |
 | ------------- |-------------|
 |   `--WAIT_INDEX_BACKFILL` |        If specified, this program runs till backfills complete. No report or DB.|
-|   `--INDEX_NAME` |    [=] <idx-name> Optionally Used with WAIT_INDEX_BACKFILL, to specify WHICH idx to wait for.|
+|   `--INDEX_NAME` |    [=] \<idx-name> Optionally Used with WAIT_INDEX_BACKFILL, to specify WHICH idx to wait for.|
 |   `--SLEEP_INTERVAL_SEC` |    [=] nn  Number of seconds to sleep between check for backfill; default 30.|
 
 
