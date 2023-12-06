@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.29";
+our $VERSION = "0.30";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, \x1b[1;33;100mmoses.pl\x1b[0m  Version $VERSION
                ========
@@ -576,7 +576,9 @@ sub Check_Index_Backfill_complete{
        print "Backfill#$active_backfills: $v->{STATE} ",
               $v->{START_TIME}, ", running for ",
               $v->{DURATION},": $v->{DESCRIPTION}.\n";
-             
+       return unless $opt{INDEX_NAME};
+       return if $v->{DESCRIPTION} =~m/\b$opt{INDEX_NAME}\b/i; # Target index is still being backfilled
+       $active_backfills--; # THe index we were looking for is NOT in backfill list
     },
   );
   return $active_backfills;
