@@ -832,7 +832,8 @@ sub Create_Views{
    from tablet t,node ,tablet_replica_detail trd
    WHERE  node.isTserver  AND nodeuuid=node_uuid
          AND  t.tablet_uuid=trd.tablet_uuid  
-       AND trd.leader_count !=1;
+       AND trd.leader_count !=1
+       AND t.state = 'RUNNING';
   CREATE VIEW IF NOT EXISTS table_sizes AS 
   SELECT T.NAMESPACE,T.TABLE_NAME,count(*) as tablets,RF1_tablets,
      sum(T.NUM_SST_FILES) as sst_files, -- D.sst_files as RF1_SST_files,
