@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.30";
+our $VERSION = "0.31";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, \x1b[1;33;100mmoses.pl\x1b[0m  Version $VERSION
                ========
@@ -12,10 +12,13 @@ my $HELP_TEXT = << "__HELPTEXT__";
 \x1b[1;33;100mRun options:\x1b[0;1m
    --YBA_HOST         [=] <YBA hostname or IP> (Required) "[http(s)://]<hostname-or-ip>[:<port>]"
    --API_TOKEN        [=] <API access token>   (Required)
-   --UNIVERSE         [=] <Universe-Name-or-uuid>  (Required. Name Can be partial, sufficient to be Unique)
+   --UNIVERSE         [=] <Universe-Name-or-uuid>  (Required(*). Name Can be partial, sufficient to be Unique)
    --CUSTOMER         [=] <Customer-uuid-or-name> (Optional. Required if more than one customer exists)
    --GZIP             Use this if you want to create a sql.gz for export, instead of a sqlite DB
                       In addition, this collects additional debug info as a comment in the SQL.
+   --OMNIVERSE        Selects ALL universes and exports(gzip) their Universe JSON. (*) Do not specify --UNIVERSE.
+   --DBFILE           [=] <output-file-name> (Optional. Generated if unspecified)
+
 \x1b[1;33;100mADVANCED options\x1b[0m
    --HTTPCONNECT            [=] [curl | tiny]    (Optional. Whether to use 'curl' or HTTP::Tiny(Default))
    --FOLLOWER_LAG_MINIMUM   [=] <value> (milisec)(collect tablet follower lag for values >= this value(default 1000))
@@ -75,6 +78,7 @@ my %opt = (
    WAIT_INDEX_BACKFILL  => 0,
    INDEX_NAME           => undef,
    SLEEP_INTERVAL_SEC   => 30,
+   OMNIVERSE            => 0,  # If set, capture ALL universe's JSON
 );
 
 #---- Start ---
@@ -205,7 +209,7 @@ sub Initialize{
                         CONFIG_FILE_PATH=s CONFIG_FILE_NAME=s CUSTOMER=s
                         WAIT_INDEX_BACKFILL|WAITINDEXBACKFILL|WAITBACKFILL|WAIT_BACKFILL!
                         INDEX_NAME|INDEXNAME=s SLEEP_INTERVAL_SEC|INTERVAL=i
-                        ]
+                        OMNIVERSE|KRAMER!]
                ) or die "ERROR: Invalid command line option(s). Try --help.";
 
     if ($opt{HELP}){
@@ -274,12 +278,17 @@ sub Initialize{
    }
    for my $u (@{$opt{UNIVERSE_LIST}}){ # Try regex match
       $opt{DEBUG} and print "--DEBUG: Scanning Universe: $u->{name}\t $u->{universeUUID}\n";
+      next if $opt{OMNIVERSE};
       last if $YBA_API->{"UNIV_UUID"}; # Already set 
       if ($opt{UNIVERSE}  and  $u->{name} =~/$opt{UNIVERSE}/i){
          $opt{DEBUG} and print  "-- Selected Universe $u->{name}\t $u->{universeUUID}\n";
          $YBA_API->Set_Value("UNIV_UUID",$u->{universeUUID});
          last;
       }
+   }
+   if ( $opt{OMNIVERSE} ){
+      Capture_All_UNiverses_JSON();
+      exit 0;
    }
    if (! $YBA_API->{"UNIV_UUID"}){
        warn "Please select a universe name (or unique part thereof) from:\n";
@@ -582,6 +591,30 @@ sub Check_Index_Backfill_complete{
     },
   );
   return $active_backfills;
+}
+#------------------------------------------------------------------------------------------------
+sub Capture_All_UNiverses_JSON{ # Handles $opt{OMNIVERSE}
+  warn TimeDelta("Getting JSON for " 
+             . scalar(@{$opt{UNIVERSE_LIST}}) . " Universes..."), "\n";
+  my $output_sqlite_dbfilename = $opt{DBFILE} ||=
+      join(".", unixtime_to_printable($opt{STARTTIME},"YYYY-MM-DD"),$opt{LOCALHOST},"UniverseInfo","gz");
+
+  open ($SQL_OUTPUT_FH, "|-", "gzip -c > $output_sqlite_dbfilename")
+         or die "ERROR: Could not start gzip : $!";
+  for my $u (@{$opt{UNIVERSE_LIST}}){
+      $opt{DEBUG} and warn "--DEBUG: Scanning Universe: $u->{name}\t $u->{universeUUID}\n";
+      $YBA_API->Set_Value("UNIV_UUID",$u->{universeUUID});
+      $universe = UniverseClass::->new($YBA_API) ; # $YBA_API->Get(""); # Huge Univ JSON 
+      
+      $universe->{name} or  die "ERROR: Universe info not found for $u->{universeUUID} \n";
+
+      my $entities = $universe->Get_Master_leader_Endpoint_data("/dump-entities", 0);
+      print $SQL_OUTPUT_FH "-- Universe $u->{name} JSON --\n",  $universe->{JSON_STRING},"\n";
+      print "-- ENTITIES --\n",  $YBA_API->{json_string},"\n\n";
+  }
+  
+  close $SQL_OUTPUT_FH;
+  warn TimeDelta("COMPLETED. '$opt{DBFILE}' Created " , $opt{STARTTIME}),"\n";
 }
 #------------------------------------------------------------------------------------------------
 sub Read_this_buffer_HTML_Table_w_callback{
