@@ -73,9 +73,12 @@ v 1.20
 v 1.21
     Added YBA connectivity check and retry to start of script
     Refactored --verify function to make more readable
+v 1.22
+    Added check in clusters list for PlacementTaskUUID check.
+    Added master stepdown call to yb-admin prior to node shutdown see 'LEADER_STEP_DOWN_COMMAND' variable
 '''
 
-Version = "1.21"
+Version = "1.22"
 
 import argparse
 import requests
@@ -116,8 +119,9 @@ ENV_FILE_PATTERN = '.yba*.rc'
 PLACEMENT_TASK_FIELD = 'placementModificationTaskUuid'
 MAX_TIME_TO_SLEEP_SECONDS = 30
 LOG_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
-MAINTENANCE_WINDOW_NAME = "OS Patching - "
+MAINTENANCE_WINDOW_NAME = 'OS Patching - '
 MAINTENANCE_WINDOW_DURATION_MINUTES = 20
+LEADER_STEP_DOWN_COMMAND = 'yb-admin -master_addresses {} -certs_dir_name $TLSDIR'
 
 # Global scope variables - do not change!
 LOG_TO_TERMINAL = True
@@ -450,6 +454,38 @@ def stop_node(api_host, customer_uuid, universe, api_token, node):
         else:
             log('No x-cluster replications were found to pause')
 
+        ## Step down if master
+        log('\n - Checking if node is leader before shutting down')
+        resp = requests.get(
+            api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe['universeUUID'] + '/leader',
+            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
+        ldr = resp.json()
+        if ldr['privateIP'] == node['cloudInfo']['private_ip']:
+            log('   Node is currently leader - stepping down before shutdown')
+            max_tries = 10
+            stepdown_tries = 1
+            while stepdown_tries <= max_tries:
+                status = subprocess.check_output(LEADER_STEP_DOWN_COMMAND.format(ldr['privateIP'] + ' master_leader_stepdown'), shell=True, stderr=subprocess.STDOUT)
+                time.sleep(1)
+                resp = requests.get(
+                    api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe[
+                        'universeUUID'] + '/leader',
+                    headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
+                ldr = resp.json()
+                if ldr['privateIP'] == node['cloudInfo']['private_ip']:
+                    stepdown_tries += 1
+                    if stepdown_tries > max_tries:
+                        log('Could not step down master node after {} tries'.format(max_tries), True)
+                        log('\n' + datetime.now().strftime(
+                            LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
+                        exit(NODE_DB_ERROR)
+
+                else:
+                    log('   Leader {} stepped down'.format(ldr['privateIP']))
+                    break
+        else:
+            log('  Node is currently follower - no step down needed')
+
         ## Shutdown server
         log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) +  ' Shutting down DB server')
         response = requests.put(
@@ -499,8 +535,10 @@ def health_check(api_host, customer_uuid, universe, api_token, node=None):
             log('Found node ' + node['nodeName'] + ' in Universe ' + universe['name'] + ' - UUID ' + universe['universeUUID'])
 
         log('- Checking for task placement UUID')
-        if PLACEMENT_TASK_FIELD in universe and len(universe[PLACEMENT_TASK_FIELD]) > 0:
+        if (PLACEMENT_TASK_FIELD in universe and len(universe[PLACEMENT_TASK_FIELD]) > 0) or \
+                (PLACEMENT_TASK_FIELD in universe['universeDetails'] and len(universe['universeDetails'][PLACEMENT_TASK_FIELD]) > 0):
             log('Non-empty ' + PLACEMENT_TASK_FIELD + ' found in universe', True)
+            errcount +=1
         else:
             log('  Passed placement task test')
 
@@ -711,7 +749,7 @@ def health_check(api_host, customer_uuid, universe, api_token, node=None):
 def fix(api_host, customer_uuid, universe, api_token, dbhost, fix_list):
     log('Fixing the following items in the universe: ' + str(fix_list))
     mods = []
-    f = copy.deepcopy(universe)
+    f = universe['universeDetails']
     if 'placement' in fix_list:
         if PLACEMENT_TASK_FIELD in f and len(f[PLACEMENT_TASK_FIELD]) > 0:
             f[PLACEMENT_TASK_FIELD] = ''
@@ -742,13 +780,24 @@ def fix(api_host, customer_uuid, universe, api_token, dbhost, fix_list):
 
     if mods:
         log('Updating universe config with the following fixed items: ' + str(mods))
+        if 'tserverGFlags' not in f:
+            f['tserverGFlags'] = {"vmodule": "secure1*"}
+        if 'masterGFlags' not in f:
+            f['masterGFlags'] = {"vmodule": "secure1*"}
+        f['upgradeOption'] = "Non-Restart"
+        f['sleepAfterMasterRestartMillis'] = 0
+        f['sleepAfterTServerRestartMillis'] = 0
+        #f['kubernetesUpgradeSupported'] = False
         response = requests.post(api_host + '/api/v1/customers/' + customer_uuid + '/universes/' +
                                  universe['universeUUID'] + '/upgrade/gflags',
             headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
             json=f)
         task = response.json()
+        print(task)
         if wait_for_task(api_host, customer_uuid, task['taskUUID'], api_token):
             log('Server items fixed')
+        else:
+            log('Fix task failed', True)
     else:
         log('No items exist to fix')
 
