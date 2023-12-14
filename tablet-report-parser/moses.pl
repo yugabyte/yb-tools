@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.31";
+our $VERSION = "0.32";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, \x1b[1;33;100mmoses.pl\x1b[0m  Version $VERSION
                ========
@@ -16,7 +16,7 @@ my $HELP_TEXT = << "__HELPTEXT__";
    --CUSTOMER         [=] <Customer-uuid-or-name> (Optional. Required if more than one customer exists)
    --GZIP             Use this if you want to create a sql.gz for export, instead of a sqlite DB
                       In addition, this collects additional debug info as a comment in the SQL.
-   --OMNIVERSE        Selects ALL universes and exports(gzip) their Universe JSON. (*) Do not specify --UNIVERSE.
+   --OMNIVERSE        Selects ALL universes and exports(gzip) their JSON. (*) Do not specify --UNIVERSE.
    --DBFILE           [=] <output-file-name> (Optional. Generated if unspecified)
 
 \x1b[1;33;100mADVANCED options\x1b[0m
@@ -209,7 +209,7 @@ sub Initialize{
                         CONFIG_FILE_PATH=s CONFIG_FILE_NAME=s CUSTOMER=s
                         WAIT_INDEX_BACKFILL|WAITINDEXBACKFILL|WAITBACKFILL|WAIT_BACKFILL!
                         INDEX_NAME|INDEXNAME=s SLEEP_INTERVAL_SEC|INTERVAL=i
-                        OMNIVERSE|KRAMER!]
+                        OMNIVERSE|COSMOS|KRAMER!]
                ) or die "ERROR: Invalid command line option(s). Try --help.";
 
     if ($opt{HELP}){
@@ -607,10 +607,15 @@ sub Capture_All_UNiverses_JSON{ # Handles $opt{OMNIVERSE}
       $universe = UniverseClass::->new($YBA_API) ; # $YBA_API->Get(""); # Huge Univ JSON 
       
       $universe->{name} or  die "ERROR: Universe info not found for $u->{universeUUID} \n";
-
-      my $entities = $universe->Get_Master_leader_Endpoint_data("/dump-entities", 0);
       print $SQL_OUTPUT_FH "-- Universe $u->{name} JSON --\n",  $universe->{JSON_STRING},"\n";
-      print "-- ENTITIES --\n",  $YBA_API->{json_string},"\n\n";
+
+      if (my $dead_nodes = $universe->Check_Status(sub{})){
+          warn "WARNING: $dead_nodes Nodes are not LIVE, in '$universe->{name}'. Skipping ENTITIES.\n";
+      }else{
+          my $entities = $universe->Get_Master_leader_Endpoint_data("/dump-entities", 0);
+          print $SQL_OUTPUT_FH "-- ENTITIES --\n",  $YBA_API->{json_string},"\n\n";
+      }
+      print $SQL_OUTPUT_FH "\n"; # Extra blank line after universe data 
   }
   
   close $SQL_OUTPUT_FH;
@@ -1240,9 +1245,11 @@ sub _Extract_nodes{
 sub _Get_Master_Leader{
   my ($self) = @_;
   # Find Master/Leader 
+  $self->{MASTER_LEADER_NODE} = undef;
   my $leader_IP  = $self->{YBA_API}->Get("/leader")->{privateIP};
   if (! $leader_IP ){
-    die "ERROR:Could not get Master/Leader:\n\t" . $YBA_API->{json_string};
+    warn "WARNING:Could not get Master/Leader:\n\t" . $YBA_API->{json_string};
+    return undef;
   }
   $opt{DEBUG} and print "--DEBUG:Master/Leader JSON:",$YBA_API->{json_string},". IP is $leader_IP .\n";
   ( $self->{MASTER_LEADER_NODE} ) = grep {$_->{private_ip} eq $leader_IP } @{ $self->{NODES} } or die "ERROR : No Master/Leader NODE found for $leader_IP ";
