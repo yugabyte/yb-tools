@@ -84,12 +84,12 @@ The host must have perl >= 5.16 installed.
 | ------------- |-------------|
 |  `--YBA_HOST`        | [=] \<YBA hostname or IP> (Required) "[http(s)://]\<hostname-or-ip>[:\<port>]"|
 |  `--API_TOKEN` or `--TOKEN` | [=] \<API access token>   (Required)|
-|  `--UNIVERSE`        | [=] \<Universe-Name-or-uuid>  (Required. Name Can be partial, sufficient to be Unique)|
+|  `--UNIVERSE`        | [=] \<Universe-Name-or-uuid>  (\* Required. Name Can be partial, sufficient to be Unique)|
 |  `--CUSTOMER`        | [=] \<Customer-uuid-or-name> (Optional. Required if more than one customer exists)|
 |  `--GZIP`            | Use this if you want to create a sql.gz for export, instead of a sqlite DB<br/> In addition, this collects additional debug info as a comment in the SQL.|
 |  `--DEBUG`           | Shows additional debugging  information|
-|  `--OMNIVERSE`       | Selects ALL universes and exports(gzip) their JSON. (*) Do not specify `--UNIVERSE`.|
-|  `--DBFILE`          | [=] <output-file-name> (Optional. Generated if unspecified)|
+|  `--OMNIVERSE` or `--COSMOS` or `--kramer` | Selects ALL universes and exports(gzip) their JSON. (*) Do not specify `--UNIVERSE`. |
+|  `--DBFILE`          | [=] \<output-file-name> (Optional. Generated if unspecified)|
 
    **ADVANCED options** 
 | Option name  | Value/explanation |
