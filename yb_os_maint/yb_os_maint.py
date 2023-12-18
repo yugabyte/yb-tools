@@ -76,6 +76,9 @@ v 1.21
 v 1.22
     Added check in clusters list for PlacementTaskUUID check.
     Added master stepdown call to yb-admin prior to node shutdown see 'LEADER_STEP_DOWN_COMMAND' variable
+v 1.23
+    Added variables for yb-admin command (YB_ADMIN_COMMAND) and tls_dir (YB_ADMIN_TLS_DIR)
+    Modified logic to retry xcluster pause/resume when alter replication task fails
 '''
 
 Version = "1.22"
@@ -121,8 +124,9 @@ MAX_TIME_TO_SLEEP_SECONDS = 30
 LOG_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 MAINTENANCE_WINDOW_NAME = 'OS Patching - '
 MAINTENANCE_WINDOW_DURATION_MINUTES = 20
-LEADER_STEP_DOWN_COMMAND = 'yb-admin -master_addresses {} -certs_dir_name $TLSDIR'
-
+YB_ADMIN_COMMAND = 'home/yugabyte/tserver/bin/yb-admin'
+YB_ADMIN_TLS_DIR = '/home/yugabyte/yugabyte-tls-config'
+LEADER_STEP_DOWN_COMMAND = '{} -master_addresses {{}} -certs_dir_name {}'.format(YB_ADMIN_COMMAND, YB_ADMIN_TLS_DIR)
 # Global scope variables - do not change!
 LOG_TO_TERMINAL = True
 LOG_FILE = None
@@ -853,7 +857,7 @@ def alter_replication(api_host, api_token, customer_uuid, xcluster_action, rpl_i
         retries = 3
         while retries > 0:
             log('  ' + datetime.now().strftime(LOG_TIME_FORMAT) +
-                ' Changing state of xcluster replication ' + xcl_cfg['name'] + ' to ' + xcNewState)
+                ' Changing state of xcluster replication ' + xcl_cfg['name'] + ' from ' + xcl_cfg['status'] + ' to ' + xcNewState)
             response = requests.put(
                 api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl_id,
                 headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
@@ -865,7 +869,7 @@ def alter_replication(api_host, api_token, customer_uuid, xcluster_action, rpl_i
                     log('  ' + datetime.now().strftime(LOG_TIME_FORMAT) +
                         ' Xcluster replication ' + xcl_cfg['name'] + ' is now ' + xcNewState)
                 else:
-                    return False
+                    retries -= 1
             else:
                 retries -= 1
                 if retries > 0:
