@@ -81,7 +81,7 @@ v 1.23
     Modified logic to retry xcluster pause/resume when alter replication task fails
 '''
 
-Version = "1.22"
+Version = "1.23"
 
 import argparse
 import requests
