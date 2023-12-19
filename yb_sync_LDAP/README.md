@@ -75,5 +75,7 @@ optional arguments:
   --ldap_certificate LDAP_CERTIFICATE
                         File location that points to LDAP certificate
   --ldap_tls            LDAP Use TLS
+  --member_map REGEX ROLE
+                        Add users who meet the REGEX in the specified ROLE (NOLOGIN)      
 ```
   
