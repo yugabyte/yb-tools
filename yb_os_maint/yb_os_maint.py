@@ -127,7 +127,7 @@ MAX_TIME_TO_SLEEP_SECONDS = 30
 LOG_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 MAINTENANCE_WINDOW_NAME = 'OS Patching - '
 MAINTENANCE_WINDOW_DURATION_MINUTES = 20
-YB_ADMIN_COMMAND = 'home/yugabyte/tserver/bin/yb-admin'
+YB_ADMIN_COMMAND = '/home/yugabyte/tserver/bin/yb-admin'
 YB_ADMIN_TLS_DIR = '/home/yugabyte/yugabyte-tls-config'
 LEADER_STEP_DOWN_COMMAND = '{} -master_addresses {{}} -certs_dir_name {}'.format(YB_ADMIN_COMMAND, YB_ADMIN_TLS_DIR)
 # Global scope variables - do not change!
