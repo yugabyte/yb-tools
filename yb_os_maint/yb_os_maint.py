@@ -79,9 +79,12 @@ v 1.22
 v 1.23
     Added variables for yb-admin command (YB_ADMIN_COMMAND) and tls_dir (YB_ADMIN_TLS_DIR)
     Modified logic to retry xcluster pause/resume when alter replication task fails
+v 1.24
+    Added code to deal with change in xcluster endpoint return in YBA 2.18.  Rather than status of
+      Paused/Running, YBA 2.18 leaves status as 'Running' and introduced a 'paused' field in the return
 '''
 
-Version = "1.23"
+Version = "1.24"
 
 import argparse
 import requests
@@ -305,7 +308,15 @@ def start_node(api_host, customer_uuid, universe, api_token, node, dry_run=True)
                         api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl,
                         headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
                     xcl_cfg = response.json()
-                    log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcl_cfg['status'])
+                    xcCurrState = ''
+                    if 'paused' in xcl_cfg:
+                        if xcl_cfg['paused']:
+                            xcCurrState = 'Paused'
+                        else:
+                            xcCurrState = 'Running'
+                    else:
+                        xcCurrState = xcl_cfg['status']
+                    log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcCurrState)
                 else:
                     # Pause/resume as directed and if not in the correct state
                     if alter_replication(api_host, api_token, customer_uuid, 'resume', rpl):
@@ -321,7 +332,15 @@ def start_node(api_host, customer_uuid, universe, api_token, node, dry_run=True)
                         api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl,
                         headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
                     xcl_cfg = response.json()
-                    log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcl_cfg['status'])
+                    xcCurrState = ''
+                    if 'paused' in xcl_cfg:
+                        if xcl_cfg['paused']:
+                            xcCurrState = 'Paused'
+                        else:
+                            xcCurrState = 'Running'
+                    else:
+                        xcCurrState = xcl_cfg['status']
+                    log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcCurrState)
                 else:
                     # Pause/resume as directed and if not in the correct state
                     if alter_replication(api_host, api_token, customer_uuid, 'resume', rpl):
@@ -847,17 +866,26 @@ def alter_replication(api_host, api_token, customer_uuid, xcluster_action, rpl_i
     response = requests.get(api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl_id,
                             headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
     xcl_cfg = response.json()
-
+    # Now have 'paused = true/false' and status stays as running in yba 2.18
     xcNewState = 'Running'
     # Pause/resume as directed and if not in the correct state
     if xcluster_action == 'pause':
         xcNewState = 'Paused'
 
-    if xcl_cfg['status'] != xcNewState:
+    xcCurrState = ''
+    if 'paused' in xcl_cfg:
+        if xcl_cfg['paused']:
+            xcCurrState = 'Paused'
+        else:
+            xcCurrState = 'Running'
+    else:
+        xcCurrState = xcl_cfg['status']
+
+    if xcCurrState != xcNewState:
         retries = 3
         while retries > 0:
             log('  ' + datetime.now().strftime(LOG_TIME_FORMAT) +
-                ' Changing state of xcluster replication ' + xcl_cfg['name'] + ' from ' + xcl_cfg['status'] + ' to ' + xcNewState)
+                ' Changing state of xcluster replication ' + xcl_cfg['name'] + ' from ' + xcCurrState + ' to ' + xcNewState)
             response = requests.put(
                 api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl_id,
                 headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
