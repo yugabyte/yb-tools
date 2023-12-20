@@ -208,7 +208,8 @@ CREATE VIEW UNSAFE_Leader_create AS
 	 from tablet t,cluster ,tablet_replica_detail trd
 	 WHERE  cluster.type='TSERVER' AND cluster.uuid=node_uuid
 	       AND  t.tablet_uuid=trd.tablet_uuid  AND t.status != 'TABLET_DATA_TOMBSTONED'
-		   AND trd.leader_count !=1;
+		   AND trd.leader_count !=1
+		   AND t.state='RUNNING';
 		   
 CREATE VIEW large_wal AS 
   SELECT table_name, count(*) as tablets,  

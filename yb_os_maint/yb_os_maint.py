@@ -76,6 +76,7 @@ v 1.21
 v 1.22
     Added check in clusters list for PlacementTaskUUID check.
     Added master stepdown call to yb-admin prior to node shutdown see 'LEADER_STEP_DOWN_COMMAND' variable
+
 v 1.23
     Added variables for yb-admin command (YB_ADMIN_COMMAND) and tls_dir (YB_ADMIN_TLS_DIR)
     Modified logic to retry xcluster pause/resume when alter replication task fails
@@ -130,6 +131,7 @@ MAINTENANCE_WINDOW_DURATION_MINUTES = 20
 YB_ADMIN_COMMAND = '/home/yugabyte/tserver/bin/yb-admin'
 YB_ADMIN_TLS_DIR = '/home/yugabyte/yugabyte-tls-config'
 LEADER_STEP_DOWN_COMMAND = '{} -master_addresses {{}} -certs_dir_name {}'.format(YB_ADMIN_COMMAND, YB_ADMIN_TLS_DIR)
+
 # Global scope variables - do not change!
 LOG_TO_TERMINAL = True
 LOG_FILE = None
