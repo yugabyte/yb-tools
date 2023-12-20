@@ -76,9 +76,16 @@ v 1.21
 v 1.22
     Added check in clusters list for PlacementTaskUUID check.
     Added master stepdown call to yb-admin prior to node shutdown see 'LEADER_STEP_DOWN_COMMAND' variable
+
+v 1.23
+    Added variables for yb-admin command (YB_ADMIN_COMMAND) and tls_dir (YB_ADMIN_TLS_DIR)
+    Modified logic to retry xcluster pause/resume when alter replication task fails
+v 1.24
+    Added code to deal with change in xcluster endpoint return in YBA 2.18.  Rather than status of
+      Paused/Running, YBA 2.18 leaves status as 'Running' and introduced a 'paused' field in the return
 '''
 
-Version = "1.22"
+Version = "1.24"
 
 import argparse
 import requests
@@ -121,7 +128,9 @@ MAX_TIME_TO_SLEEP_SECONDS = 30
 LOG_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 MAINTENANCE_WINDOW_NAME = 'OS Patching - '
 MAINTENANCE_WINDOW_DURATION_MINUTES = 20
-LEADER_STEP_DOWN_COMMAND = 'yb-admin -master_addresses {} -certs_dir_name $TLSDIR'
+YB_ADMIN_COMMAND = '/home/yugabyte/tserver/bin/yb-admin'
+YB_ADMIN_TLS_DIR = '/home/yugabyte/yugabyte-tls-config'
+LEADER_STEP_DOWN_COMMAND = '{} -master_addresses {{}} -certs_dir_name {}'.format(YB_ADMIN_COMMAND, YB_ADMIN_TLS_DIR)
 
 # Global scope variables - do not change!
 LOG_TO_TERMINAL = True
@@ -301,7 +310,15 @@ def start_node(api_host, customer_uuid, universe, api_token, node, dry_run=True)
                         api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl,
                         headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
                     xcl_cfg = response.json()
-                    log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcl_cfg['status'])
+                    xcCurrState = ''
+                    if 'paused' in xcl_cfg:
+                        if xcl_cfg['paused']:
+                            xcCurrState = 'Paused'
+                        else:
+                            xcCurrState = 'Running'
+                    else:
+                        xcCurrState = xcl_cfg['status']
+                    log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcCurrState)
                 else:
                     # Pause/resume as directed and if not in the correct state
                     if alter_replication(api_host, api_token, customer_uuid, 'resume', rpl):
@@ -317,7 +334,15 @@ def start_node(api_host, customer_uuid, universe, api_token, node, dry_run=True)
                         api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl,
                         headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
                     xcl_cfg = response.json()
-                    log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcl_cfg['status'])
+                    xcCurrState = ''
+                    if 'paused' in xcl_cfg:
+                        if xcl_cfg['paused']:
+                            xcCurrState = 'Paused'
+                        else:
+                            xcCurrState = 'Running'
+                    else:
+                        xcCurrState = xcl_cfg['status']
+                    log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcCurrState)
                 else:
                     # Pause/resume as directed and if not in the correct state
                     if alter_replication(api_host, api_token, customer_uuid, 'resume', rpl):
@@ -843,17 +868,26 @@ def alter_replication(api_host, api_token, customer_uuid, xcluster_action, rpl_i
     response = requests.get(api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl_id,
                             headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
     xcl_cfg = response.json()
-
+    # Now have 'paused = true/false' and status stays as running in yba 2.18
     xcNewState = 'Running'
     # Pause/resume as directed and if not in the correct state
     if xcluster_action == 'pause':
         xcNewState = 'Paused'
 
-    if xcl_cfg['status'] != xcNewState:
+    xcCurrState = ''
+    if 'paused' in xcl_cfg:
+        if xcl_cfg['paused']:
+            xcCurrState = 'Paused'
+        else:
+            xcCurrState = 'Running'
+    else:
+        xcCurrState = xcl_cfg['status']
+
+    if xcCurrState != xcNewState:
         retries = 3
         while retries > 0:
             log('  ' + datetime.now().strftime(LOG_TIME_FORMAT) +
-                ' Changing state of xcluster replication ' + xcl_cfg['name'] + ' to ' + xcNewState)
+                ' Changing state of xcluster replication ' + xcl_cfg['name'] + ' from ' + xcCurrState + ' to ' + xcNewState)
             response = requests.put(
                 api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl_id,
                 headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
@@ -865,7 +899,7 @@ def alter_replication(api_host, api_token, customer_uuid, xcluster_action, rpl_i
                     log('  ' + datetime.now().strftime(LOG_TIME_FORMAT) +
                         ' Xcluster replication ' + xcl_cfg['name'] + ' is now ' + xcNewState)
                 else:
-                    return False
+                    retries -= 1
             else:
                 retries -= 1
                 if retries > 0:

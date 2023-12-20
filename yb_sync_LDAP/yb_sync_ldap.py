@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.35"
+VERSION = "0.37"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -647,7 +647,7 @@ class YBLDAPSync:
             member_list = group_att['member']
             logging.debug("   GROUP {}: MEMBERS {}".format(group,member_list))
             for member in member_list:
-               #logging.debug ("   Working on member {} of type {};".format(member,type(member)))
+               logging.debug ("   Working on member {} of type {};".format(member,type(member)))
                member_dn= dict( x.split('=') for x in member.decode().split(","))
                logging.debug("    Member:{}; Mem DN={}".format(member,member_dn))
                if userfield not in member_dn:
@@ -697,7 +697,7 @@ class YBLDAPSync:
         return diff_library
 
     @classmethod
-    def process_changes(cls, diff_library, target_api, owned_counts, db_nologin_role):
+    def process_changes(cls, diff_library, target_api, owned_counts, db_nologin_role, member_map):
         """
         Routine to process the computed changes back to YCQL.
         :Param diff_library -- the compute changes in dictionary form accessed by
@@ -707,10 +707,33 @@ class YBLDAPSync:
         """
         # Process new records - dictionary_item_added
         stmt_list = []
+        mmap_stmt_list = []
         stmt_type = {'AddRole':0, 'DropRole':0, 'GrantRole':0, 'Revoke':0}
         logging.debug("Change Dictionary for {}:{}".format(target_api,diff_library))
-        
-        if 'dictionary_item_added' in diff_library: # In LDAP, NOT in DB 
+        logging.debug("No Login roles for {}:{}".format(target_api, db_nologin_role))
+
+        # Process member map items
+        if 'dictionary_item_added' in diff_library: # In LDAP, NOT in DB
+            # first, build out member map for YSQL
+            if target_api == 'YSQL':
+                if member_map is not None:
+                    for m in member_map:
+                        if m[1] not in db_nologin_role:
+                            logging.debug("Creating (non-login) member mapped role {} in DB".format(m[1]))
+                            mmap_stmt_list.append(YSQL_CREATE_NOLOGIN_ROLE.format(m[1]))
+                            stmt_type['AddRole'] +=1
+                            db_nologin_role[m[1]] = []
+                        for k, v in diff_library['dictionary_item_added'].items():
+                            regex = m[0]
+                            role = m[1]
+                            usr = get_uid_from_ddiff(k)
+                            if re.search(regex, usr) is not None:
+                                grant_roles = ','.join(['{0}'.format(role) for role in v])
+                                if role not in grant_roles:
+                                    logging.debug("Adding user {} to member mapped role {} in DB".format(get_uid_from_ddiff(k), role))
+                                    mmap_stmt_list.append(YSQL_GRANT_ROLE.format(role, usr))
+                                    stmt_type['GrantRole'] += 1
+
             for key, value in diff_library['dictionary_item_added'].items():
                 logging.debug("Adding DB role for {}".format(key))
                 stmt_type['AddRole'] +=1
@@ -784,21 +807,29 @@ class YBLDAPSync:
                             db_nologin_role[grant_role] = 1
                         if grant_roles != role_to_modify:
                             stmt_list.append(YSQL_GRANT_ROLE.format(grant_roles, role_to_modify))
+
         # Process changed records - delete attribute - iterable_item_removed
-        if 'iterable_items_removed_at_indexes' in diff_library: # Permission is in DB, not in LDAP 
+        if 'iterable_items_removed_at_indexes' in diff_library: # Permission is in DB, not in LDAP
+            mmap_roles = []
+            for m in member_map:
+                mmap_roles.append(m[1])
             for key, value in diff_library['iterable_items_removed_at_indexes'].items():
                 logging.debug("Revoking DB role for {}".format(key))
                 role_to_modify = get_uid_from_ddiff(key)
                 revoke_role_list = []
                 for revoke_role in value.values():
+                    if revoke_role in mmap_roles:
+                        continue  # Do not revoke member mapped roles
                     stmt_type['Revoke'] +=1
                     if target_api == 'YCQL':
                         stmt_list.append(YCQL_REVOKE_ROLE.format(revoke_role, role_to_modify))
                     else:
                         revoke_role_list.append(revoke_role)
-                if target_api == 'YSQL':
+                if target_api == 'YSQL' and len(revoke_role_list) > 0:
                     revoke_roles = ','.join(['"{0}"'.format(role) for role in revoke_role_list])
                     stmt_list.append(YSQL_REVOKE_ROLE.format(revoke_roles, role_to_modify))
+        # add member map to end of statements
+        stmt_list.extend(mmap_stmt_list)
         print ('Prepared {} database update statements: {}'.format(len(stmt_list), stmt_type))
         return stmt_list
 
@@ -835,7 +866,7 @@ class YBLDAPSync:
                 logging.info('Applying statement: %s', stmt)
             session.execute(stmt)
 
-    def apply_changes(self, process_diff, universe, owned_counts, db_nologin_role):
+    def apply_changes(self, process_diff, universe, owned_counts, db_nologin_role, member_map=None):
         """
         Routine to apply changes to the given universe
         :Param process_diff - dictionary of changes that will be used to generate a list
@@ -843,7 +874,7 @@ class YBLDAPSync:
         """
         stmt_list = None
         db_certificate = universe['db_certificate']
-        stmt_list = self.process_changes(process_diff, self.args.target_api, owned_counts, db_nologin_role)
+        stmt_list = self.process_changes(process_diff, self.args.target_api, owned_counts, db_nologin_role, member_map)
         if "DBUPDATES" in self.args.reports or "ALL" in self.args.reports:
            self.Print_Report("DB UPDATES",stmt_list,0)
         if self.args.dryrun:
@@ -891,6 +922,7 @@ class YBLDAPSync:
             (db_role_dict, db_nologin_role, owned_counts) = self.ysql_auth_to_dict(self.ysql_session, self.args.allow_drop_superuser)
         logging.info("Loaded {} DB Users (allow_drop_superuser={}).".format(len(db_role_dict),self.args.allow_drop_superuser))
         logging.debug(" DB Users:{}; NO-Login:{}".format(db_role_dict, db_nologin_role))
+
         if "DBROLE" in self.args.reports or "ALL" in self.args.reports:
            self.Print_Report("DB ROLE (allow_drop_superuser={})".format(self.args.allow_drop_superuser),db_role_dict)
         return db_role_dict,owned_counts,db_nologin_role
@@ -1045,6 +1077,9 @@ class YBLDAPSync:
                             help="Allow this code to DROP a superuser role if absent in LDAP")
         parser.add_argument('--ldap_testvalue', required=False, help=argparse.SUPPRESS,default=os.getenv("LDAP_TESTVALUE"))
                    # This is a HIDDEN arg for TESTING, containing a stringified LDAP search result (if you dont have an LDAP test srv)
+        parser.add_argument('--member_map', dest='mmap', nargs='+', action='append',
+                            help="Additional YSQL roles to add users to - in the form of [<user regex> <rolename>]")
+
         return parser.parse_args()
 
     def run(self):
@@ -1111,7 +1146,7 @@ class YBLDAPSync:
             (db_role_dict,owned_counts,db_nologin_role) = self.query_db_state(universe)
             process_db_diff = self.compute_changes(new_ldap_data, db_role_dict)
             if process_db_diff:
-                self.apply_changes(process_db_diff, universe, owned_counts, db_nologin_role)
+                self.apply_changes(process_db_diff, universe, owned_counts, db_nologin_role, self.args.mmap)
             else:
                 print("No DB changes. LDAP and {} are in sync.".format(self.args.target_api))
             if self.ycql_session:
