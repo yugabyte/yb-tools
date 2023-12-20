@@ -647,7 +647,7 @@ class YBLDAPSync:
             member_list = group_att['member']
             logging.debug("   GROUP {}: MEMBERS {}".format(group,member_list))
             for member in member_list:
-               #logging.debug ("   Working on member {} of type {};".format(member,type(member)))
+               logging.debug ("   Working on member {} of type {};".format(member,type(member)))
                member_dn= dict( x.split('=') for x in member.decode().split(","))
                logging.debug("    Member:{}; Mem DN={}".format(member,member_dn))
                if userfield not in member_dn:
