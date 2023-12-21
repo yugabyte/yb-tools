@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.32";
+our $VERSION = "0.33";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, \x1b[1;33;100mmoses.pl\x1b[0m  Version $VERSION
                ========
@@ -167,7 +167,7 @@ sub Get_and_Parse_tablets_from_tservers{
       Get_Node_Metrics($n);
       $db->putsql("END TRANSACTION; --Tablets for  tserver $n->{nodeName}");
       $db->putlog("Found $tabletCount tablets on $n->{nodeName}:"
-          . join (", ",map{ " $leaders{$_} leaders  on $_" } sort keys %leaders));
+          . join (",\n ",map{ " $leaders{$_} leaders  on $_" } sort keys %leaders));
       $prev_node_msg= "(Idx $n->{nodeIdx} had $tabletCount tablets, "
                     . ($leaders{$n->{private_ip}} || 0) . " leaders"
                     . ")";
@@ -305,6 +305,10 @@ sub Initialize{
      die "ERROR: Universe info not found \n";
   }
   $universe->Check_Status(sub{warn "WARNING:$_[0]\n"});
+
+  if (! $universe->{MASTER_LEADER_NODE}){
+     die "ERROR: Cannot find Master/Leader for this universe";
+  }
 
   if ($opt{WAIT_INDEX_BACKFILL}){
      return; # No need to create output etc...
@@ -533,13 +537,13 @@ sub Get_Node_Metrics{
      'handler_latency_yb_tserver_TabletServerService_Write{quantile="p99'
                         => sub{my ($val)=$_[1]=~/\s(\d+)/;save_metric('tserver_write_latency_p99',$_[0],0,$val)},
   );
-  my $regex = "^(" . join("|^",map {quotemeta} keys(%metric_handler)). ")";
+  my $regex = "(^" . join("|^",map {quotemeta} keys(%metric_handler)). ")";
 
   if ($n->{isTserver}){
       my $metrics_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/prometheus-metrics?reset_histograms=false",
                                       "BASE_URL_UNIVERSE",1); # RAW
 
-      while($metrics_raw=~/$regex(.+$)/mg){
+      while($metrics_raw=~/$regex(.+)$/mg){
         $metric_handler{$1}-> ($n->{Tserver_UUID},"$1$2");
       }
   }
@@ -569,6 +573,7 @@ sub Get_Node_Metrics{
 #------------------------------------------------------------------------------------------------
 sub save_metric{
   my ($metric,$node_uuid,$table_uuid,$value)=@_;
+  return unless defined $metric  and  defined $value;
   $db->putsql("INSERT INTO METRICS VALUES('$metric','$node_uuid','TABLE','$table_uuid',$value);");
 }
 #------------------------------------------------------------------------------------------------
