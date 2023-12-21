@@ -648,7 +648,9 @@ class YBLDAPSync:
             logging.debug("   GROUP {}: MEMBERS {}".format(group,member_list))
             for member in member_list:
                logging.debug ("   Working on member {} of type {};".format(member,type(member)))
-               member_dn= dict( x.split('=') for x in member.decode().split(","))
+               # member_dn= dict( x.split('=') for x in member.decode().split(","))
+               # The "CN" part of the name may contain escaped commas, so translate those before split on comma.
+               member_dn =  dict( x.split('=') for x in member.replace('\\,','/').split(","))
                logging.debug("    Member:{}; Mem DN={}".format(member,member_dn))
                if userfield not in member_dn:
                   logging.debug("User {} does not contain a {} (userfield). Fetching user details...".format(member, userfield))
