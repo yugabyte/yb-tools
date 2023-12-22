@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.33";
+our $VERSION = "0.34";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, \x1b[1;33;100mmoses.pl\x1b[0m  Version $VERSION
                ========
@@ -167,7 +167,7 @@ sub Get_and_Parse_tablets_from_tservers{
       Get_Node_Metrics($n);
       $db->putsql("END TRANSACTION; --Tablets for  tserver $n->{nodeName}");
       $db->putlog("Found $tabletCount tablets on $n->{nodeName}:"
-          . join (",\n ",map{ " $leaders{$_} leaders  on $_" } sort keys %leaders));
+          . join (",\n\t ",map{ " $leaders{$_} leaders  on $_" } sort keys %leaders));
       $prev_node_msg= "(Idx $n->{nodeIdx} had $tabletCount tablets, "
                     . ($leaders{$n->{private_ip}} || 0) . " leaders"
                     . ")";
@@ -323,7 +323,7 @@ sub Initialize{
   $db->Insert_nodes($universe->{NODES});
   $db->CreateTable("gflags",qw|type key  value|);
   $opt{DEBUG} and print "SELECT '",TimeDelta("DEBUG:Extracting gflags..."),"';\n";
-  Extract_gflags($universe);
+  $universe->Extract_gflags_into_DB($db);
   $universe->Check_placementModificationTaskUuid($db);
   
   # Get dump_entities JSON from MASTER_LEADER
@@ -484,36 +484,7 @@ sub Handle_xCluster_Data{
     }
   );
 }
-#------------------------------------------------------------------------------------------------
-sub Extract_gflags{
-  my ($univ_hash) = @_;
 
-  for my $k (qw| uuid clusterType |){
-     next unless defined ( my $v= $univ_hash->{universeDetails}{clusters}[0]{$k} );
-     $db->putsql("INSERT INTO gflags VALUES ('CLUSTER','$k','$v');");
-  }
-  for my $k (qw|universeName provider providerType replicationFactor numNodes ybSoftwareVersion enableYCQL
-               enableYSQL enableYEDIS nodePrefix instanceType useSystemd useTimeSync|){
-     next unless defined ( my $v= $univ_hash->{universeDetails}{clusters}[0]{userIntent}{$k} );
-     $db->putsql("INSERT INTO gflags VALUES ('CLUSTER','$k','$v');");
-  }
-  for my $flagtype (qw|masterGFlags tserverGFlags |){
-     next unless my $flag = $univ_hash->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
-     for my $k(sort keys %$flag){
-        (my $v = $flag->{$k}) =~tr/'/~/; # Zap potential single quote in gflag value 
-        $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
-     }
-  }
-  for my $flagtype (qw|MASTER TSERVER |){ # New gflag location for 2.18
-     next unless my $flag = $univ_hash->{universeDetails}{clusters}[0]{userIntent}{specificGFlags};
-     next unless $flag = $flag->{perProcessFlags}{value}{$flagtype};
-     for my $k(sort keys %$flag){
-        (my $v = $flag->{$k}) =~tr/'/~/; # Zap potential single quote in gflag value 
-        $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
-     }
-  }
-
-}
 #------------------------------------------------------------------------------------------------
 sub Get_Node_Metrics{
   my ($n) = @_; # NODE 
@@ -1268,24 +1239,38 @@ sub Get_Master_leader_Endpoint_data{
   return $self->{YBA_API}->Get("/proxy/$self->{MASTER_LEADER_NODE}->{private_ip}:$master_http_port$endpoint","BASE_URL_UNIVERSE",$RAW); # Get RAW data
 }
 
-sub GetFlags_with_callback{
-  my ($self, $callback,$escape_quote) = @_;
-    for my $flagtype (qw|masterGFlags tserverGFlags |){
-     next unless my $flag = $self->{UNIV}->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
+
+#------------------------------------------------------------------------------------------------
+sub Extract_gflags_into_DB{
+  my ($self, $db) = @_;
+
+  for my $k (qw| platformVersion universeUUID ybcSoftwareVersion|){
+     next unless defined ( my $v= $self->{$k} );
+     $db->putsql("INSERT INTO gflags VALUES ('CLUSTER','$k','$v');");
+  }
+  for my $k (qw| uuid clusterType |){
+     next unless defined ( my $v= $self->{universeDetails}{clusters}[0]{$k} );
+     $db->putsql("INSERT INTO gflags VALUES ('CLUSTER','$k','$v');");
+  }
+  for my $k (qw|universeName provider providerType replicationFactor numNodes ybSoftwareVersion enableYCQL
+               enableYSQL enableYEDIS nodePrefix instanceType useSystemd useTimeSync|){
+     next unless defined ( my $v= $self->{universeDetails}{clusters}[0]{userIntent}{$k} );
+     $db->putsql("INSERT INTO gflags VALUES ('CLUSTER','$k','$v');");
+  }
+  for my $flagtype (qw|masterGFlags tserverGFlags |){
+     next unless my $flag = $self->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
      for my $k(sort keys %$flag){
-        my $v = $flag->{$k};
-        $escape_quote and $v =~tr/'/~/; # Zap potential single quote in gflag value 
-        # $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
-        $callback->($flagtype,$k,$v)
+        (my $v = $flag->{$k}) =~tr/'/~/; # Zap potential single quote in gflag value 
+        $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
      }
   }
-}
-
-sub GetFlags_JSON{
-  my ($self) = @_;
-    for my $flagtype (qw|masterGFlags tserverGFlags |){
-     next unless my $flag = $self->{UNIV}->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
-
+  for my $flagtype (qw|MASTER TSERVER |){ # New gflag location for 2.18
+     next unless my $flag = $self->{universeDetails}{clusters}[0]{userIntent}{specificGFlags};
+     next unless $flag = $flag->{perProcessFlags}{value}{$flagtype};
+     for my $k(sort keys %$flag){
+        (my $v = $flag->{$k}) =~tr/'/~/; # Zap potential single quote in gflag value 
+        $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
+     }
   }
 }
 
