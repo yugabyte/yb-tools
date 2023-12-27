@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.37"
+VERSION = "0.38"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -650,7 +650,7 @@ class YBLDAPSync:
                logging.debug ("   Working on member {} of type {};".format(member,type(member)))
                # member_dn= dict( x.split('=') for x in member.decode().split(","))
                # The "CN" part of the name may contain escaped commas, so translate those before split on comma.
-               member_dn =  dict( x.split('=') for x in member.replace('\\,','/').split(","))
+               member_dn =  dict( x.split('=') for x in member.decode().replace('\\,','/').split(","))
                logging.debug("    Member:{}; Mem DN={}".format(member,member_dn))
                if userfield not in member_dn:
                   logging.debug("User {} does not contain a {} (userfield). Fetching user details...".format(member, userfield))
