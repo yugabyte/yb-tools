@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.38"
+VERSION = "0.39"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -813,8 +813,9 @@ class YBLDAPSync:
         # Process changed records - delete attribute - iterable_item_removed
         if 'iterable_items_removed_at_indexes' in diff_library: # Permission is in DB, not in LDAP
             mmap_roles = []
-            for m in member_map:
-                mmap_roles.append(m[1])
+            if member_map is not None:
+                for m in member_map:
+                   mmap_roles.append(m[1])
             for key, value in diff_library['iterable_items_removed_at_indexes'].items():
                 logging.debug("Revoking DB role for {}".format(key))
                 role_to_modify = get_uid_from_ddiff(key)
