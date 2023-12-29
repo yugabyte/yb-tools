@@ -34,7 +34,7 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.39"
+VERSION = "0.40"
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -864,7 +864,12 @@ class YBLDAPSync:
         """
         for stmt in stmt_list:
             if stmt.startswith('CREATE ROLE'):
-                logging.info('Creating new user: %s.',stmt.split(" ")[5]) # after 'IF NOT EXISTS'
+                user_name = re.search('CREATE ROLE\s+(?:IF NOT EXISTS\s*)?[\'"]?([\w\-]+)',stmt,re.IGNORECASE)
+                if user_name:
+                   user_name = user_name.group(1) 
+                else:
+                   user_name = "*Unable to extract username from:" + stmt
+                logging.info('Creating new user: %s.',user_name) # after 'IF NOT EXISTS'
             else:
                 logging.info('Applying statement: %s', stmt)
             session.execute(stmt)
