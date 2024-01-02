@@ -829,7 +829,7 @@ class YBLDAPSync:
                     else:
                         revoke_role_list.append(revoke_role)
                 if target_api == 'YSQL' and len(revoke_role_list) > 0:
-                    revoke_roles = ','.join(['"{0}"'.format(role) for role in revoke_role_list])
+                    revoke_roles = ','.join(['{0}'.format(role) for role in revoke_role_list])
                     stmt_list.append(YSQL_REVOKE_ROLE.format(revoke_roles, role_to_modify))
         # add member map to end of statements
         stmt_list.extend(mmap_stmt_list)
