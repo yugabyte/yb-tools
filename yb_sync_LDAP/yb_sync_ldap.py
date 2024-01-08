@@ -34,7 +34,9 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
+
 VERSION = "0.41"
+
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -651,6 +653,7 @@ class YBLDAPSync:
                # member_dn= dict( x.split('=') for x in member.decode().split(","))
                # The "CN" part of the name may contain escaped commas, so translate those before split on comma.
                member_dn =  dict( x.split('=') for x in member.decode().replace('\\,','/').split(","))
+
                logging.debug("    Member:{}; Mem DN={}".format(member,member_dn))
                if userfield not in member_dn:
                   logging.debug("User {} does not contain a {} (userfield). Fetching user details...".format(member, userfield))
@@ -813,6 +816,7 @@ class YBLDAPSync:
         # Process changed records - delete attribute - iterable_item_removed
         if 'iterable_items_removed_at_indexes' in diff_library: # Permission is in DB, not in LDAP
             mmap_roles = []
+
             if member_map is not None:
                 for m in member_map:
                    mmap_roles.append(m[1])
