@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.31";
+our $VERSION = "1.32";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -710,7 +710,8 @@ sub Handle_Table_Description{
         #                           name TEXT, type TEXT, partitionKey TEXT, clusteringKey TEXT);
         for my $c (@{$bj->{tableDetails}{columns}}){
            print {$self->{OUTPUT_FH}} "INSERT INTO tablecol VALUES('", $bj->{tableUUID},"'",
-                 map ({",'" .($c->{$_}||"") . "'"} qw|isPartitionKey isClusteringKey columnOrder sortOrder name type partitionKey clusteringKey|),
+                 map ({defined $c->{$_} ? ",'" .($c->{$_}||"") . "'"  :  ",NULL"}
+                           qw|isPartitionKey isClusteringKey columnOrder sortOrder name type partitionKey clusteringKey|),
                  ");\n";
         };
 		delete $self->{TABLE_HDR};
@@ -808,13 +809,22 @@ sub Process_file_and_create_Sqlite{
     $self->Initialize_SQLITE_Output();
 	# Incomplete file or bad JSON may cause the next parse to fail:
 	eval { $self->{INPUT}->parse($self, \&Parse_Body_Record) };
-    if ($@){
+  if ($@){
        print {$self->{OUTPUT_FH}} "SELECT '-- ERROR Parsing input:$@ --';\n";
 	}else{
        print {$self->{OUTPUT_FH}} "SELECT 'All input records processed.';\n";
-    }
-	$self->{TYPE_EXISTS}{ycql} and $self->Create_and_run_views_for_ycql();
-	$self->{TYPE_EXISTS}{ysql} and $self->Create_and_run_views_for_ysql();
+  }
+	if ($self->{TYPE_EXISTS}{ycql}){
+     $self->Create_and_run_views_for_ycql();
+  }else{
+      print {$self->{OUTPUT_FH}} "SELECT 'NO YCQL queries recorded.';\n";
+  }
+  if ($self->{TYPE_EXISTS}{ysql}){
+     $self->Create_and_run_views_for_ysql();
+  }else{
+      print {$self->{OUTPUT_FH}} "SELECT 'NO YSQL queries recorded.';\n";
+  }
+	
 	close $self->{OUTPUT_FH};
 	print "--For detailed analysis, run: $opt{SQLITE} -header -column $self->{SQLITE_FILENAME}\n";
 	return;
@@ -930,7 +940,13 @@ sub Initialize_SQLITE_Output{
 		}else{
 			die "ERROR: The only valid OUTPUT option is STDOUT in --analyze mode. use --DB.\n";
 		}
-	}
+	}elsif ($opt{DB} and $opt{DB}=~/^STDOUT$/i){
+     # Pretend like they specified OUTPUT=STDOUT 
+     $opt{OUTPUT} = $opt{DB};
+     $opt{DB} = undef;
+     $self->Initialize_SQLITE_Output(); # Recurse
+     return;
+  }
 	my ($sqlite_version) = $opt{SQLITE} ? do {my $vv=qx|$opt{SQLITE} --version|;chomp $vv;$vv=~/([\d\.]+)/}
 	                       : ("N/A");
 	$! and die "ERROR: Cannot run $opt{SQLITE} :$!";
