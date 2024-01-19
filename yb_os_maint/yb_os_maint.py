@@ -82,9 +82,11 @@ v 1.23
 v 1.24
     Added code to deal with change in xcluster endpoint return in YBA 2.18.  Rather than status of
       Paused/Running, YBA 2.18 leaves status as 'Running' and introduced a 'paused' field in the return
+v 1.25
+    Fixes spelling typos, added doc 
 '''
 
-Version = "1.24"
+Version = "1.25"
 
 import argparse
 import requests
@@ -192,7 +194,7 @@ def yba_server(host, action, isDryRun):
                             o = subprocess.check_output('systemctl start {}.service'.format(svc), shell=True, stderr=subprocess.STDOUT)
                             log(datetime.now().strftime(LOG_TIME_FORMAT) + '  Service ' + svc + ' started')
                         except subprocess.CalledProcessError as err:
-                            log('Error stopping service' + svc + '- see output below', True)
+                            log('Error starting service' + svc + '- see output below', True)
                             log(err)
                             log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_YBA_ERROR))
                             exit(NODE_YBA_ERROR)
@@ -1058,7 +1060,7 @@ def main():
         if action == 'health':
             log('--- Health Check only - all checks will be done, but nothing will be stopped or resumed ')
             if args.health == '<localhost>' and dbhost is None:
-                log('Helthcheck is not being run from a DB node - Specify a universe name or "ALL" to check all Universes from a non-DB node.', True)
+                log('Healthcheck is not being run from a DB node - Specify a universe name or "ALL" to check all Universes from a non-DB node.', True)
                 log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
                 if (not LOG_TO_TERMINAL):
                     LOG_FILE.close()
@@ -1066,7 +1068,7 @@ def main():
             hc_host = dbhost
             if args.health != '<localhost>':
                 if dbhost is not None:
-                    log('Helthcheck universes specified from a DB node - checking health for universe "{}" instead'.format(args.health))
+                    log('Healthcheck universes specified from a DB node - checking health for universe "{}" instead'.format(args.health))
                     hc_host = None
                 if str(args.health).upper() == 'ALL':
                     for hc_universe in universes:
