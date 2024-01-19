@@ -76,16 +76,17 @@ v 1.21
 v 1.22
     Added check in clusters list for PlacementTaskUUID check.
     Added master stepdown call to yb-admin prior to node shutdown see 'LEADER_STEP_DOWN_COMMAND' variable
-
 v 1.23
     Added variables for yb-admin command (YB_ADMIN_COMMAND) and tls_dir (YB_ADMIN_TLS_DIR)
     Modified logic to retry xcluster pause/resume when alter replication task fails
 v 1.24
     Added code to deal with change in xcluster endpoint return in YBA 2.18.  Rather than status of
       Paused/Running, YBA 2.18 leaves status as 'Running' and introduced a 'paused' field in the return
+v 1.25
+    Fixes spelling typos, added doc
 '''
 
-Version = "1.24"
+Version = "1.25"
 
 import argparse
 import requests
@@ -131,7 +132,6 @@ MAINTENANCE_WINDOW_DURATION_MINUTES = 20
 YB_ADMIN_COMMAND = '/home/yugabyte/tserver/bin/yb-admin'
 YB_ADMIN_TLS_DIR = '/home/yugabyte/yugabyte-tls-config'
 LEADER_STEP_DOWN_COMMAND = '{} -master_addresses {{}} -certs_dir_name {}'.format(YB_ADMIN_COMMAND, YB_ADMIN_TLS_DIR)
-
 # Global scope variables - do not change!
 LOG_TO_TERMINAL = True
 LOG_FILE = None
@@ -194,7 +194,7 @@ def yba_server(host, action, isDryRun):
                             o = subprocess.check_output('systemctl start {}.service'.format(svc), shell=True, stderr=subprocess.STDOUT)
                             log(datetime.now().strftime(LOG_TIME_FORMAT) + '  Service ' + svc + ' started')
                         except subprocess.CalledProcessError as err:
-                            log('Error stopping service' + svc + '- see output below', True)
+                            log('Error starting service' + svc + '- see output below', True)
                             log(err)
                             log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_YBA_ERROR))
                             exit(NODE_YBA_ERROR)
@@ -446,6 +446,12 @@ def verify(api_host, customer_uuid, universe, api_token, node):
         raise Exception("Node process verification failed")
     return True
 
+# get Master leader
+def get_master_leader_ip(api_host, customer_uuid, api_token, universe):
+    resp = requests.get(
+        api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe['universeUUID'] + '/leader',
+        headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
+    return resp.json()['privateIP']
 
 # Stop x-cluster and then the node processes
 def stop_node(api_host, customer_uuid, universe, api_token, node):
@@ -480,36 +486,23 @@ def stop_node(api_host, customer_uuid, universe, api_token, node):
             log('No x-cluster replications were found to pause')
 
         ## Step down if master
-        log('\n - Checking if node is leader before shutting down')
-        resp = requests.get(
-            api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe['universeUUID'] + '/leader',
-            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
-        ldr = resp.json()
-        if ldr['privateIP'] == node['cloudInfo']['private_ip']:
-            log('   Node is currently leader - stepping down before shutdown')
-            max_tries = 10
-            stepdown_tries = 1
-            while stepdown_tries <= max_tries:
-                status = subprocess.check_output(LEADER_STEP_DOWN_COMMAND.format(ldr['privateIP'] + ' master_leader_stepdown'), shell=True, stderr=subprocess.STDOUT)
-                time.sleep(1)
-                resp = requests.get(
-                    api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe[
-                        'universeUUID'] + '/leader',
-                    headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
-                ldr = resp.json()
-                if ldr['privateIP'] == node['cloudInfo']['private_ip']:
-                    stepdown_tries += 1
-                    if stepdown_tries > max_tries:
-                        log('Could not step down master node after {} tries'.format(max_tries), True)
-                        log('\n' + datetime.now().strftime(
-                            LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
-                        exit(NODE_DB_ERROR)
-
-                else:
-                    log('   Leader {} stepped down'.format(ldr['privateIP']))
-                    break
+        log('\n - Checking if node {} is master leader before shutting down'.format(node['cloudInfo']['private_ip']))
+        ldr_ip = get_master_leader_ip(api_host, customer_uuid, api_token, universe)
+        current_tries = 1
+        while ldr_ip == node['cloudInfo']['private_ip'] and current_tries <= 5:
+            log('   Node is currently master leader - stepping down before shutdown - attempt number: {}'.format(current_tries))
+            status = subprocess.check_output(LEADER_STEP_DOWN_COMMAND.format(ldr_ip + ' master_leader_stepdown'), shell=True, stderr=subprocess.STDOUT)
+            time.sleep(1)
+            ldr_ip = get_master_leader_ip(api_host, customer_uuid, api_token, universe)
+            current_tries += 1
+        if current_tries == 1:
+            log('   Node is currently follower - no step down needed as leader is {}'.format(ldr_ip))
+        elif current_tries >= 5:
+            log('Could not step down master node after 5 attempts', True)
+            log('\n' + datetime.now().strftime( LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
+            exit(NODE_DB_ERROR)
         else:
-            log('  Node is currently follower - no step down needed')
+            log('   New Leader {} elected after {} attempts'.format(ldr_ip, current_tries - 1))
 
         ## Shutdown server
         log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) +  ' Shutting down DB server')
@@ -1060,7 +1053,7 @@ def main():
         if action == 'health':
             log('--- Health Check only - all checks will be done, but nothing will be stopped or resumed ')
             if args.health == '<localhost>' and dbhost is None:
-                log('Helthcheck is not being run from a DB node - Specify a universe name or "ALL" to check all Universes from a non-DB node.', True)
+                log('Healthcheck is not being run from a DB node - Specify a universe name or "ALL" to check all Universes from a non-DB node.', True)
                 log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
                 if (not LOG_TO_TERMINAL):
                     LOG_FILE.close()
@@ -1068,7 +1061,7 @@ def main():
             hc_host = dbhost
             if args.health != '<localhost>':
                 if dbhost is not None:
-                    log('Helthcheck universes specified from a DB node - checking health for universe "{}" instead'.format(args.health))
+                    log('Healthcheck universes specified from a DB node - checking health for universe "{}" instead'.format(args.health))
                     hc_host = None
                 if str(args.health).upper() == 'ALL':
                     for hc_universe in universes:
