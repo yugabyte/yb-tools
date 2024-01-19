@@ -76,6 +76,7 @@ v 1.21
 v 1.22
     Added check in clusters list for PlacementTaskUUID check.
     Added master stepdown call to yb-admin prior to node shutdown see 'LEADER_STEP_DOWN_COMMAND' variable
+
 v 1.23
     Added variables for yb-admin command (YB_ADMIN_COMMAND) and tls_dir (YB_ADMIN_TLS_DIR)
     Modified logic to retry xcluster pause/resume when alter replication task fails
@@ -87,6 +88,7 @@ v 1.25
 '''
 
 Version = "1.25"
+
 
 import argparse
 import requests
@@ -132,6 +134,7 @@ MAINTENANCE_WINDOW_DURATION_MINUTES = 20
 YB_ADMIN_COMMAND = '/home/yugabyte/tserver/bin/yb-admin'
 YB_ADMIN_TLS_DIR = '/home/yugabyte/yugabyte-tls-config'
 LEADER_STEP_DOWN_COMMAND = '{} -master_addresses {{}} -certs_dir_name {}'.format(YB_ADMIN_COMMAND, YB_ADMIN_TLS_DIR)
+
 # Global scope variables - do not change!
 LOG_TO_TERMINAL = True
 LOG_FILE = None
@@ -1061,6 +1064,7 @@ def main():
             log('--- Health Check only - all checks will be done, but nothing will be stopped or resumed ')
             if args.health == '<localhost>' and dbhost is None:
                 log('Healthcheck is not being run from a DB node - Specify a universe name or "ALL" to check all Universes from a non-DB node.', True)
+
                 log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
                 if (not LOG_TO_TERMINAL):
                     LOG_FILE.close()
@@ -1069,6 +1073,7 @@ def main():
             if args.health != '<localhost>':
                 if dbhost is not None:
                     log('Healthcheck universes specified from a DB node - checking health for universe "{}" instead'.format(args.health))
+
                     hc_host = None
                 if str(args.health).upper() == 'ALL':
                     for hc_universe in universes:

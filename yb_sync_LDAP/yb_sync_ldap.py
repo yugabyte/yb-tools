@@ -34,7 +34,10 @@ from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
-VERSION = "0.37"
+
+VERSION = "0.41"
+
+
 
 YW_LOGIN_API = "{}://{}:{}/api/v1/login"
 YW_API_TOKEN = "{}://{}:{}/api/v1/customers/{}/api_token"
@@ -648,7 +651,10 @@ class YBLDAPSync:
             logging.debug("   GROUP {}: MEMBERS {}".format(group,member_list))
             for member in member_list:
                logging.debug ("   Working on member {} of type {};".format(member,type(member)))
-               member_dn= dict( x.split('=') for x in member.decode().split(","))
+               # member_dn= dict( x.split('=') for x in member.decode().split(","))
+               # The "CN" part of the name may contain escaped commas, so translate those before split on comma.
+               member_dn =  dict( x.split('=') for x in member.decode().replace('\\,','/').split(","))
+
                logging.debug("    Member:{}; Mem DN={}".format(member,member_dn))
                if userfield not in member_dn:
                   logging.debug("User {} does not contain a {} (userfield). Fetching user details...".format(member, userfield))
@@ -811,8 +817,10 @@ class YBLDAPSync:
         # Process changed records - delete attribute - iterable_item_removed
         if 'iterable_items_removed_at_indexes' in diff_library: # Permission is in DB, not in LDAP
             mmap_roles = []
-            for m in member_map:
-                mmap_roles.append(m[1])
+
+            if member_map is not None:
+                for m in member_map:
+                   mmap_roles.append(m[1])
             for key, value in diff_library['iterable_items_removed_at_indexes'].items():
                 logging.debug("Revoking DB role for {}".format(key))
                 role_to_modify = get_uid_from_ddiff(key)
@@ -826,7 +834,7 @@ class YBLDAPSync:
                     else:
                         revoke_role_list.append(revoke_role)
                 if target_api == 'YSQL' and len(revoke_role_list) > 0:
-                    revoke_roles = ','.join(['"{0}"'.format(role) for role in revoke_role_list])
+                    revoke_roles = ','.join(['{0}'.format(role) for role in revoke_role_list])
                     stmt_list.append(YSQL_REVOKE_ROLE.format(revoke_roles, role_to_modify))
         # add member map to end of statements
         stmt_list.extend(mmap_stmt_list)
@@ -861,7 +869,12 @@ class YBLDAPSync:
         """
         for stmt in stmt_list:
             if stmt.startswith('CREATE ROLE'):
-                logging.info('Creating new user: %s.',stmt.split(" ")[5]) # after 'IF NOT EXISTS'
+                user_name = re.search('CREATE ROLE\s+(?:IF NOT EXISTS\s*)?[\'"]?([\w\-]+)',stmt,re.IGNORECASE)
+                if user_name:
+                   user_name = user_name.group(1) 
+                else:
+                   user_name = "*Unable to extract username from:" + stmt
+                logging.info('Creating new user: %s.',user_name) # after 'IF NOT EXISTS'
             else:
                 logging.info('Applying statement: %s', stmt)
             session.execute(stmt)
