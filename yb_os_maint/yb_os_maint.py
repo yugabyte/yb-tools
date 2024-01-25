@@ -142,6 +142,7 @@ YB_ADMIN_COMMAND = '/home/yugabyte/tserver/bin/yb-admin'
 YB_ADMIN_TLS_DIR = '/home/yugabyte/yugabyte-tls-config'
 LEADER_STEP_DOWN_COMMAND = '{} -master_addresses {{}} -certs_dir_name {}'.format(YB_ADMIN_COMMAND, YB_ADMIN_TLS_DIR)
 LOCALHOST = '<localhost>'
+
 # Global scope variables - do not change!
 LOG_TO_TERMINAL = True
 LOG_FILE = None
@@ -491,7 +492,6 @@ def stop_node(api_host, customer_uuid, universe, api_token, node, skip_xcluster=
                         paused_count += 1
                     else:
                         raise Exception("Failed to pause x-cluster replication")
-
             ## pause target replication
             if 'targetXClusterConfigs' in universe['universeDetails']:
                 for rpl in universe['universeDetails']['targetXClusterConfigs']:
@@ -1093,6 +1093,7 @@ def main():
         ## first, do healthcheck if specified
         if action == 'health':
             log('--- Health Check only - all checks will be done, but nothing will be stopped or resumed ')
+
             if args.health == LOCALHOST and len(dbhost_list) < 1:
                 log('Healthcheck is not being run from a DB node - Specify a universe name or "ALL" to check all Universes from a non-DB node.', True)
                 log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
