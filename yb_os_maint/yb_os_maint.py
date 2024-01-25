@@ -84,9 +84,18 @@ v 1.24
       Paused/Running, YBA 2.18 leaves status as 'Running' and introduced a 'paused' field in the return
 v 1.25
     Fixes spelling typos, added doc
+v 1.26
+    New functionality to stop/resume all nodes in a region or region and availability zonw
+    Pause/resume of xcluster can now be disabled via param
+    Creation/deletion of maintenance window can now be disabled via param
+    Added the following parameters:
+      --region : Stops or Resumes all nodes in the given region - only applies to stop/resume.  Required if passing availbility_zone
+      --availability_zone : Stops or Resumes all nodes in the given AZ - only applies to stop/resume.
+      --skip_xcluster : Skips pausing and resuming of xCluter - only applies to stop/resume (forced when shutting down a region / az)
+      --skip_maint_window: Skips maintenance window creation/removal - only applies to stop/resume (forced when shutting down a region / az)
 '''
 
-Version = "1.25"
+Version = "1.26"
 
 import argparse
 import requests
@@ -132,6 +141,7 @@ MAINTENANCE_WINDOW_DURATION_MINUTES = 20
 YB_ADMIN_COMMAND = '/home/yugabyte/tserver/bin/yb-admin'
 YB_ADMIN_TLS_DIR = '/home/yugabyte/yugabyte-tls-config'
 LEADER_STEP_DOWN_COMMAND = '{} -master_addresses {{}} -certs_dir_name {}'.format(YB_ADMIN_COMMAND, YB_ADMIN_TLS_DIR)
+LOCALHOST = '<localhost>'
 # Global scope variables - do not change!
 LOG_TO_TERMINAL = True
 LOG_FILE = None
@@ -265,9 +275,9 @@ def find_window_by_name(api_host, customer_uuid, api_token, host):
     return None
 
 # Start node, then x-cluster - only print xluster status if dry run
-def start_node(api_host, customer_uuid, universe, api_token, node, dry_run=True):
+def start_node(api_host, customer_uuid, universe, api_token, node, dry_run=True, skip_xcluster=False, skip_maint_window=False):
     try:
-        log('Found node ' + node['nodeName'] + ' in Universe ' + universe['name'] + ' - UUID ' + universe[
+        log('  Found node ' + node['nodeName'] + ' in Universe ' + universe['name'] + ' - UUID ' + universe[
             'universeUUID'])
         if dry_run:
             log('--- Dry run only - all checks will be done, but replication will not be resumed and nothing will be started ')
@@ -300,66 +310,71 @@ def start_node(api_host, customer_uuid, universe, api_token, node, dry_run=True)
                     raise Exception("Failed to resume DB Node")
 
         ## Resume x-cluster replication
-        ## resume source replication
-        log('\n- Resuming x-cluster replication')
-        resume_count = 0
-        if 'sourceXClusterConfigs' in universe['universeDetails']:
-            for rpl in universe['universeDetails']['sourceXClusterConfigs']:
-                if dry_run:
-                    response = requests.get(
-                        api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl,
-                        headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
-                    xcl_cfg = response.json()
-                    xcCurrState = ''
-                    if 'paused' in xcl_cfg:
-                        if xcl_cfg['paused']:
-                            xcCurrState = 'Paused'
-                        else:
-                            xcCurrState = 'Running'
-                    else:
-                        xcCurrState = xcl_cfg['status']
-                    log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcCurrState)
-                else:
-                    # Pause/resume as directed and if not in the correct state
-                    if alter_replication(api_host, api_token, customer_uuid, 'resume', rpl):
-                        resume_count += 1
-                    else:
-                        raise Exception("Failed to resume x-cluster replication")
-
-        ## resume target replication
-        if 'targetXClusterConfigs' in universe['universeDetails']:
-            for rpl in universe['universeDetails']['targetXClusterConfigs']:
-                if dry_run:
-                    response = requests.get(
-                        api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl,
-                        headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
-                    xcl_cfg = response.json()
-                    xcCurrState = ''
-                    if 'paused' in xcl_cfg:
-                        if xcl_cfg['paused']:
-                            xcCurrState = 'Paused'
-                        else:
-                            xcCurrState = 'Running'
-                    else:
-                        xcCurrState = xcl_cfg['status']
-                    log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcCurrState)
-                else:
-                    # Pause/resume as directed and if not in the correct state
-                    if alter_replication(api_host, api_token, customer_uuid, 'resume', rpl):
-                        resume_count += 1
-                    else:
-                        raise Exception("Failed to resume x-cluster replication")
-        if resume_count > 0:
-            if dry_run:
-                log('  ' + str(resume_count) + ' x-cluster streams were found, but not resumed due to dry run')
-            else:
-                log('  ' + str(resume_count) + ' x-cluster streams are now running')
+        if skip_xcluster:
+            log('\n- Skipping resume of x-cluster replication')
         else:
-            log('No x-cluster replications were found to resume')
+            ## resume source replication
+            log('\n- Resuming x-cluster replication')
+            resume_count = 0
+            if 'sourceXClusterConfigs' in universe['universeDetails']:
+                for rpl in universe['universeDetails']['sourceXClusterConfigs']:
+                    if dry_run:
+                        response = requests.get(
+                            api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl,
+                            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
+                        xcl_cfg = response.json()
+                        xcCurrState = ''
+                        if 'paused' in xcl_cfg:
+                            if xcl_cfg['paused']:
+                                xcCurrState = 'Paused'
+                            else:
+                                xcCurrState = 'Running'
+                        else:
+                            xcCurrState = xcl_cfg['status']
+                        log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcCurrState)
+                    else:
+                        # Pause/resume as directed and if not in the correct state
+                        if alter_replication(api_host, api_token, customer_uuid, 'resume', rpl):
+                            resume_count += 1
+                        else:
+                            raise Exception("Failed to resume x-cluster replication")
+
+            ## resume target replication
+            if 'targetXClusterConfigs' in universe['universeDetails']:
+                for rpl in universe['universeDetails']['targetXClusterConfigs']:
+                    if dry_run:
+                        response = requests.get(
+                            api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl,
+                            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
+                        xcl_cfg = response.json()
+                        xcCurrState = ''
+                        if 'paused' in xcl_cfg:
+                            if xcl_cfg['paused']:
+                                xcCurrState = 'Paused'
+                            else:
+                                xcCurrState = 'Running'
+                        else:
+                            xcCurrState = xcl_cfg['status']
+                        log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcCurrState)
+                    else:
+                        # Pause/resume as directed and if not in the correct state
+                        if alter_replication(api_host, api_token, customer_uuid, 'resume', rpl):
+                            resume_count += 1
+                        else:
+                            raise Exception("Failed to resume x-cluster replication")
+            if resume_count > 0:
+                if dry_run:
+                    log('  ' + str(resume_count) + ' x-cluster streams were found, but not resumed due to dry run')
+                else:
+                    log('  ' + str(resume_count) + ' x-cluster streams are now running')
+            else:
+                log('  No x-cluster replications were found to resume')
+
 
         # Remove existing maintenence window
-        maintenance_window(api_host, customer_uuid, universe, api_token, node['nodeName'], 'remove')
-        
+        if not skip_maint_window:
+            maintenance_window(api_host, customer_uuid, universe, api_token, node['nodeName'], 'remove')
+
     except Exception as e:
         log(e, True)
         log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
@@ -454,36 +469,40 @@ def get_master_leader_ip(api_host, customer_uuid, api_token, universe):
     return resp.json()['privateIP']
 
 # Stop x-cluster and then the node processes
-def stop_node(api_host, customer_uuid, universe, api_token, node):
+def stop_node(api_host, customer_uuid, universe, api_token, node, skip_xcluster=False, skip_maint_window=False):
     try:
         # Add maintenence window
-        maintenance_window(api_host, customer_uuid, universe, api_token, node['nodeName'], 'create')
+        if not skip_maint_window:
+            maintenance_window(api_host, customer_uuid, universe, api_token, node['nodeName'], 'create')
 
-        ## Pause x-cluster replication
-        ## pause source replication
-        log('\n- Pausing x-cluster replication')
-        ## First, sleep a bit to prevent race condition when patching multiple servers concurrently
-        time.sleep(random.randint(1, MAX_TIME_TO_SLEEP_SECONDS))
-        paused_count = 0
-        ## pause source replication
-        if 'sourceXClusterConfigs' in universe['universeDetails']:
-            for rpl in universe['universeDetails']['sourceXClusterConfigs']:
-                if alter_replication(api_host, api_token, customer_uuid, 'pause', rpl):
-                    paused_count += 1
-                else:
-                    raise Exception("Failed to pause x-cluster replication")
-
-        ## pause target replication
-        if 'targetXClusterConfigs' in universe['universeDetails']:
-            for rpl in universe['universeDetails']['targetXClusterConfigs']:
-                if alter_replication(api_host, api_token, customer_uuid, 'pause', rpl):
-                    paused_count += 1
-                else:
-                    raise Exception("Failed to pause x-cluster replication")
-        if paused_count > 0:
-            log('  ' + str(paused_count) + ' x-cluster streams are currently paused')
+        ## Pause x-cluster replication if specified
+        if skip_xcluster:
+            log('\n- Skipping pause of x-cluster replication')
         else:
-            log('No x-cluster replications were found to pause')
+            ## pause source replication
+            log('\n- Pausing x-cluster replication')
+            ## First, sleep a bit to prevent race condition when patching multiple servers concurrently
+            time.sleep(random.randint(1, MAX_TIME_TO_SLEEP_SECONDS))
+            paused_count = 0
+            ## pause source replication
+            if 'sourceXClusterConfigs' in universe['universeDetails']:
+                for rpl in universe['universeDetails']['sourceXClusterConfigs']:
+                    if alter_replication(api_host, api_token, customer_uuid, 'pause', rpl):
+                        paused_count += 1
+                    else:
+                        raise Exception("Failed to pause x-cluster replication")
+
+            ## pause target replication
+            if 'targetXClusterConfigs' in universe['universeDetails']:
+                for rpl in universe['universeDetails']['targetXClusterConfigs']:
+                    if alter_replication(api_host, api_token, customer_uuid, 'pause', rpl):
+                        paused_count += 1
+                    else:
+                        raise Exception("Failed to pause x-cluster replication")
+            if paused_count > 0:
+                log('  ' + str(paused_count) + ' x-cluster streams are currently paused')
+            else:
+                log('  No x-cluster replications were found to pause')
 
         ## Step down if master
         log('\n - Checking if node {} is master leader before shutting down'.format(node['cloudInfo']['private_ip']))
@@ -505,7 +524,7 @@ def stop_node(api_host, customer_uuid, universe, api_token, node):
             log('   New Leader {} elected after {} attempts'.format(ldr_ip, current_tries - 1))
 
         ## Shutdown server
-        log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) +  ' Shutting down DB server')
+        log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) +  ' Shutting down DB server' + str(node['nodeName']))
         response = requests.put(
             api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe[
                 'universeUUID'] + '/nodes/' + node['nodeName'],
@@ -594,7 +613,7 @@ def health_check(api_host, customer_uuid, universe, api_token, node=None):
         master_node = None
         for masternode in universe['universeDetails']['nodeDetailsSet']:
             if masternode['isMaster'] and masternode['state'] == 'Live':
-                master_node = masternode['cloudInfo']['private_ip'] + ':' + str(node['masterHttpPort'])
+                master_node = masternode['cloudInfo']['private_ip'] + ':' + str(masternode['masterHttpPort'])
                 break
 
         try:  # try both http and https endpoints
@@ -764,7 +783,7 @@ def health_check(api_host, customer_uuid, universe, api_token, node=None):
         log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
         exit(NODE_DB_ERROR)
 
-def fix(api_host, customer_uuid, universe, api_token, dbhost, fix_list):
+def fix(api_host, customer_uuid, universe, api_token, fix_list):
     log('Fixing the following items in the universe: ' + str(fix_list))
     mods = []
     f = universe['universeDetails']
@@ -772,29 +791,6 @@ def fix(api_host, customer_uuid, universe, api_token, dbhost, fix_list):
         if PLACEMENT_TASK_FIELD in f and len(f[PLACEMENT_TASK_FIELD]) > 0:
             f[PLACEMENT_TASK_FIELD] = ''
             mods.append('placement')
-
-    # Do not allow master/tserver fix for now.
-    """
-    if 'tserver' in fix_list or 'master' in fix_list:
-        i = 0
-        found = False
-        # find correct node to fix
-        while not found:
-            if dbhost['nodeUuid'] == f['universeDetails']['nodeDetailsSet'][i]['nodeUuid']:
-                found = True
-            else:
-                i+=1
-
-        if 'master' in fix_list:
-            if not f['universeDetails']['nodeDetailsSet'][i]['isMaster']:
-                f['universeDetails']['nodeDetailsSet'][i]['isMaster'] = True
-                mods.append('master')
-
-        if 'tserver' in fix_list:
-            if not f['universeDetails']['nodeDetailsSet'][i]['isTserver']:
-                f['universeDetails']['nodeDetailsSet'][i]['isTserver'] = True
-                mods.append('tserver')
-    """
 
     if mods:
         log('Updating universe config with the following fixed items: ' + str(mods))
@@ -811,7 +807,6 @@ def fix(api_host, customer_uuid, universe, api_token, dbhost, fix_list):
             headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
             json=f)
         task = response.json()
-        print(task)
         if wait_for_task(api_host, customer_uuid, task['taskUUID'], api_token):
             log('Server items fixed')
         else:
@@ -819,23 +814,43 @@ def fix(api_host, customer_uuid, universe, api_token, dbhost, fix_list):
     else:
         log('No items exist to fix')
 
-def get_db_node_and_universe(universes, hostname, ip, universe_name):
+def get_db_nodes_and_universe(universes, hostname, ip, universe_name, region=None, az=None):
     if universes is None or len(universes) < 1:
         log('No Universes found - cannot determine if this a DB node', True)
         log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
         raise Exception("No Universes found")
     univ_to_return = None
-    for universe in universes:
+    nodes = []
+    curnode = None
 
-        for node in universe['universeDetails']['nodeDetailsSet']:
-            if str(node['nodeName']).upper() in hostname.upper() or hostname.upper() in str(
-                    node['nodeName']).upper() or \
-                    node['cloudInfo']['private_ip'] == ip or node['cloudInfo']['public_ip'] == ip:
-                return node, universe
-            if universe_name is not None and universe_name != 'ALL':
-                if str(universe['name']).upper() == universe_name.upper():
+    # First, get universe
+    for universe in universes:
+        if universe_name == LOCALHOST:
+            for node in universe['universeDetails']['nodeDetailsSet']:
+                if str(node['nodeName']).upper() in hostname.upper() or hostname.upper() in \
+                    str( node['nodeName']).upper() or \
+                        node['cloudInfo']['private_ip'] == ip or node['cloudInfo']['public_ip'] == ip:
                     univ_to_return = universe
-    return None, univ_to_return
+                    curnode = node
+                    break
+        if universe_name != LOCALHOST and universe_name != 'ALL':
+            if str(universe['name']).upper() == universe_name.upper():
+                univ_to_return = universe
+                break
+
+    # Get node(s) for given universe
+    if region is not None:
+        for node in univ_to_return['universeDetails']['nodeDetailsSet']:
+            if node['cloudInfo']['region'].upper() == region.upper():
+                if az is not None:
+                    if node['cloudInfo']['az'].upper() == az.upper():
+                        nodes.append(node)
+                else:
+                    nodes.append(node)
+    else:
+        nodes.append(curnode)
+
+    return nodes, univ_to_return
 
 def wait_for_task(api_host, customer_uuid, task_uuid, api_token):
     done = False
@@ -919,7 +934,7 @@ def main():
                          help='Resume services for YB host after O/S patch')
     mxgroup.add_argument('-t', '--health',
                          nargs='?',
-                         const='<localhost>',
+                         const=LOCALHOST,
                          type=str,
                          action='store',
                          help='Healthcheck only - specify Universe Name or "ALL" if not running on a DB Node')
@@ -938,13 +953,29 @@ def main():
                         action='store',
                         help='Log file folder location.  Output is sent to terminal stdout if not specified.',
                         required=False)
-
+    parser.add_argument('-x', '--skip_xcluster',
+                        action='store_true',
+                        help='Skip Pause or Resume of xCluster replication when stopping or resuming nodes - False if not specified, forced to True if stopping multiple nodes in a region/AZ.',
+                        required=False,
+                        default=False)
+    parser.add_argument('-m', '--skip_maint_window',
+                        action='store_true',
+                        help='Skip creation/removal of maintenence window when stopping or resuming nodes - False if not specified, forced to True if stopping multiple nodes in a region/AZ.',
+                        required=False,
+                        default=False)
+    parser.add_argument('-g', '--region',
+                        action='store',
+                        help='Region for nodes to be stopped/resumed - action taken on local node if not specified.',
+                        required=False)
+    parser.add_argument('-a', '--availability_zone',
+                        action='store',
+                        help='AZ for nodes to be stopped/resumed - action taken on local node if not specified.  Script will abort if --region is not specified along with the AZ',
+                        required=False)
     args = parser.parse_args()
 
     hostname = str(socket.gethostname())
     ip = socket.gethostbyname(hostname)
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
     dry_run = args.dryrun
     action = ''
     if args.health:
@@ -976,6 +1007,11 @@ def main():
 
     log('\n--------------------------------------')
     log(datetime.now().strftime(LOG_TIME_FORMAT) + ' script version {} started'.format(Version))
+    if args.availability_zone is not None and args.region is None:
+        log('--region parameter must be specified when --availability_zone is specified', True)
+        if (not LOG_TO_TERMINAL):
+            LOG_FILE.close()
+        exit(OTHER_ERROR)
     # find env variable file - should be only 1
     flist = fnmatch.filter(os.listdir(ENV_FILE_PATH), ENV_FILE_PATTERN)
     if len(flist) < 1:
@@ -1046,30 +1082,33 @@ def main():
 
     log('Retrieving Universes from YBA server at ' + api_host)
     universes = get_universes(api_host, customer_uuid, api_token)
-    dbhost, universe = get_db_node_and_universe(universes, hostname, ip, args.health)
+    rg = None
+    az = None
+    if action == 'stop' or action == 'resume':
+        rg = args.region
+        az = args.availability_zone
+    dbhost_list, universe = get_db_nodes_and_universe(universes, hostname, ip, args.health, rg, az)
 
     try:
         ## first, do healthcheck if specified
         if action == 'health':
             log('--- Health Check only - all checks will be done, but nothing will be stopped or resumed ')
-            if args.health == '<localhost>' and dbhost is None:
+            if args.health == LOCALHOST and len(dbhost_list) < 1:
                 log('Healthcheck is not being run from a DB node - Specify a universe name or "ALL" to check all Universes from a non-DB node.', True)
                 log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
                 if (not LOG_TO_TERMINAL):
                     LOG_FILE.close()
                 exit(OTHER_ERROR)
-            hc_host = dbhost
-            if args.health != '<localhost>':
-                if dbhost is not None:
-                    log('Healthcheck universes specified from a DB node - checking health for universe "{}" instead'.format(args.health))
-                    hc_host = None
+            if args.health != LOCALHOST:
+                if len(dbhost_list) < 1:
+                    log('Healthcheck universe name specified from a DB node - checking health for universe "{}" instead of universe associated with the node'.format(args.health))
                 if str(args.health).upper() == 'ALL':
                     for hc_universe in universes:
                         log('\n')
-                        health_check(api_host, customer_uuid, hc_universe, api_token, hc_host)
+                        health_check(api_host, customer_uuid, hc_universe, api_token, None)
                 else:
                     if universe is not None:
-                        health_check(api_host, customer_uuid, universe, api_token, hc_host)
+                        health_check(api_host, customer_uuid, universe, api_token, None)
                     else:
                         log('Could not find universe with name "{}" exiting'.format(args.health), True)
                         log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
@@ -1077,10 +1116,13 @@ def main():
                             LOG_FILE.close()
                         exit(OTHER_ERROR)
             else:
+                dbhost = None
+                if len(dbhost_list) > 0:
+                    dbhost = dbhost_list[0]
                 health_check(api_host, customer_uuid, universe, api_token, dbhost)
 
         else: # not a healthckeck only, so proceed
-            if dbhost is None: # running from YBA instance
+            if len(dbhost_list) < 1: # running from YBA instance
                 if yba_server(ip, action, dry_run):
                     exit_code = NODE_YBA_SUCCESS
                     if not action in ACTIONS_ALLOWED_ON_YBA :
@@ -1094,27 +1136,42 @@ def main():
                     exit(exit_code)
                 else: # not YBA or DB node, and not running a healthcheck
                     log('\n' + datetime.now().strftime(
-                        LOG_TIME_FORMAT) + ' Node is neither a DB host nor a YBA host - exiting with code ' + str(
-                        OTHER_ERROR))
+                        LOG_TIME_FORMAT) + ' Node is neither a DB host nor a YBA host - exiting with code ' + str(OTHER_ERROR))
                     if (not LOG_TO_TERMINAL):
                         LOG_FILE.close()
                     exit(OTHER_ERROR)
-            else: # running from a DBnode
+            else: # running from a DBnode or region specified
+                skip_xc = args.skip_xcluster
+                skip_maint = args.skip_maint_window
+                node_list_text = ''
+                for dbhost in dbhost_list:
+                    node_list_text = node_list_text + str(dbhost['nodeName']) + ', '
+                node_list_text = node_list_text.rstrip(', ')
+                if len(dbhost_list) > 1:
+                    skip_xc = True
+                    skip_maint = True
                 if action == 'stop':
+                    log(' The following nodes were found to stop: {}\n'.format(node_list_text))
                     if dry_run:
                         log('--- Dry run only - all checks will be done, but replication will not be paused and nothing will be stopped ')
-                    health_check(api_host, customer_uuid, universe, api_token, dbhost)
-                    if not dry_run:
-                        stop_node(api_host, customer_uuid, universe, api_token, dbhost)
-                    else:
+                    health_check(api_host, customer_uuid, universe, api_token, dbhost_list[0])
+                    if dry_run:
                         log('--- Dry run only - Exiting')
+                    else:
+                        for dbhost in dbhost_list:
+                            stop_node(api_host, customer_uuid, universe, api_token, dbhost, skip_xc, skip_maint)
                 elif action == 'resume':
-                    start_node(api_host, customer_uuid, universe, api_token, dbhost, dry_run)
+                    log(' The following nodes were found to resume: {}\n'.format(node_list_text))
+                    if dry_run:
+                        log('--- Dry run only - Exiting')
+                    else:
+                        for dbhost in dbhost_list:
+                            start_node(api_host, customer_uuid, universe, api_token, dbhost, dry_run, skip_xc, skip_maint)
                 elif action == 'fix':
-                    fix(api_host, customer_uuid, universe, api_token, dbhost, args.fix)
+                    fix(api_host, customer_uuid, universe, api_token, args.fix)
                 elif action == 'verify':
-                    verify(api_host, customer_uuid, universe, api_token, dbhost)
-
+                    for dbhost in dbhost_list:
+                        verify(api_host, customer_uuid, universe, api_token, dbhost)
     except Exception as e:
         log(e, True)
         log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
