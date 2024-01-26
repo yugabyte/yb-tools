@@ -91,11 +91,15 @@ v 1.26
     Added the following parameters:
       --region : Stops or Resumes all nodes in the given region - only applies to stop/resume.  Required if passing availbility_zone
       --availability_zone : Stops or Resumes all nodes in the given AZ - only applies to stop/resume.
-      --skip_xcluster : Skips pausing and resuming of xCluter - only applies to stop/resume (forced when shutting down a region / az)
+      --skip_xcluster : Skips pausing and resuming of xCluster - only applies to stop/resume (forced when shutting down a region / az)
       --skip_maint_window: Skips maintenance window creation/removal - only applies to stop/resume (forced when shutting down a region / az)
+v 1.27
+    Added check for privateIP to match hostname in get_db_nodes_and_universe as it may contain a name in some cases
+    Shored up yb-admin command to look up IP if master leader endpoint returns a hostname
+     shutdown now continues if stepdown fails or errors out
 '''
 
-Version = "1.26"
+Version = "1.27"
 
 import argparse
 import requests
@@ -506,22 +510,29 @@ def stop_node(api_host, customer_uuid, universe, api_token, node, skip_xcluster=
 
         ## Step down if master
         log('\n - Checking if node {} is master leader before shutting down'.format(node['cloudInfo']['private_ip']))
-        ldr_ip = get_master_leader_ip(api_host, customer_uuid, api_token, universe)
-        current_tries = 1
-        while ldr_ip == node['cloudInfo']['private_ip'] and current_tries <= 5:
-            log('   Node is currently master leader - stepping down before shutdown - attempt number: {}'.format(current_tries))
-            status = subprocess.check_output(LEADER_STEP_DOWN_COMMAND.format(ldr_ip + ' master_leader_stepdown'), shell=True, stderr=subprocess.STDOUT)
-            time.sleep(1)
+        try:
             ldr_ip = get_master_leader_ip(api_host, customer_uuid, api_token, universe)
-            current_tries += 1
-        if current_tries == 1:
-            log('   Node is currently follower - no step down needed as leader is {}'.format(ldr_ip))
-        elif current_tries >= 5:
-            log('Could not step down master node after 5 attempts', True)
-            log('\n' + datetime.now().strftime( LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
-            exit(NODE_DB_ERROR)
-        else:
-            log('   New Leader {} elected after {} attempts'.format(ldr_ip, current_tries - 1))
+            # Check if our leader address is actually an IP, otherwise get the ip for the yb-admin command
+            try:
+                socket.inet_aton(ldr_ip)
+            except:
+                ldr_ip = socket.gethostbyname(ldr_ip)
+            current_tries = 1
+            while ldr_ip == node['cloudInfo']['private_ip'] and current_tries <= 5:
+                log('   Node is currently master leader - stepping down before shutdown - attempt number: {}'.format(current_tries))
+                status = subprocess.check_output(LEADER_STEP_DOWN_COMMAND.format(ldr_ip + ' master_leader_stepdown'), shell=True, stderr=subprocess.STDOUT)
+                time.sleep(1)
+                ldr_ip = get_master_leader_ip(api_host, customer_uuid, api_token, universe)
+                current_tries += 1
+            if current_tries == 1:
+                log('   Node is currently follower - no step down needed as leader is {}'.format(ldr_ip))
+            elif current_tries >= 5:
+                log('   Could not step down master node after 5 attempts - proceeding with shutdown')
+            else:
+                log('   New Leader {} elected after {} attempts'.format(ldr_ip, current_tries - 1))
+        except:
+            log('   An error occurred while trying to step down master node  - proceeding with shutdown')
+            pass
 
         ## Shutdown server
         log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) +  ' Shutting down DB server' + str(node['nodeName']))
@@ -828,13 +839,15 @@ def get_db_nodes_and_universe(universes, hostname, ip, universe_name, region=Non
         if universe_name == LOCALHOST:
             for node in universe['universeDetails']['nodeDetailsSet']:
                 if str(node['nodeName']).upper() in hostname.upper() or hostname.upper() in \
-                    str( node['nodeName']).upper() or \
-                        node['cloudInfo']['private_ip'] == ip or node['cloudInfo']['public_ip'] == ip:
+                    str(node['nodeName']).upper() or \
+                        node['cloudInfo']['private_ip'] == ip or \
+                        node['cloudInfo']['public_ip'] == ip or \
+                        node['cloudInfo']['private_ip'].upper() in hostname.upper():
                     univ_to_return = universe
                     curnode = node
                     break
         if universe_name != LOCALHOST and universe_name != 'ALL':
-            if str(universe['name']).upper() == universe_name.upper():
+            if str(universe['name']).upper() == str(universe_name).upper():
                 univ_to_return = universe
                 break
 
@@ -1084,10 +1097,13 @@ def main():
     universes = get_universes(api_host, customer_uuid, api_token)
     rg = None
     az = None
+    univ_name = LOCALHOST
+    if action == 'health':
+        univ_name = args.health
     if action == 'stop' or action == 'resume':
         rg = args.region
         az = args.availability_zone
-    dbhost_list, universe = get_db_nodes_and_universe(universes, hostname, ip, args.health, rg, az)
+    dbhost_list, universe = get_db_nodes_and_universe(universes, hostname, ip, univ_name, rg, az)
 
     try:
         ## first, do healthcheck if specified
