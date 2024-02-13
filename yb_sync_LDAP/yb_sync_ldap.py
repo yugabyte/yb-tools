@@ -35,7 +35,7 @@ from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
 
-VERSION = "0.41"
+VERSION = "0.42"
 
 
 
@@ -806,7 +806,7 @@ class YBLDAPSync:
                         stmt_list.append(YCQL_GRANT_ROLE.format(grant_role, role_to_modify))
                     else:
                         grant_role_list.append(grant_role)
-                        grant_roles = ','.join(['"{0}"'.format(role) for role in grant_role_list])
+                        grant_roles = ','.join(['{0}'.format(role) for role in grant_role_list])
                         if not grant_role in db_nologin_role:
                             logging.debug("CREATing (non-login) role {} in DB, to assign to {}".format(grant_role, key))
                             stmt_list.append(YSQL_CREATE_NOLOGIN_ROLE.format(grant_role, grant_role))
