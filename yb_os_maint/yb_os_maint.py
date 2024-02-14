@@ -5,8 +5,7 @@
 ###############################################################
 
 ##  08/09/2022
-##  Mike LaSpina - Yugabyte
-##  mlaspina@yugabyte.com
+##  Original Author: Mike LaSpina - Yugabyte
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version
@@ -97,9 +96,11 @@ v 1.27
     Added check for privateIP to match hostname in get_db_nodes_and_universe as it may contain a name in some cases
     Shored up yb-admin command to look up IP if master leader endpoint returns a hostname
      shutdown now continues if stepdown fails or errors out
+v 1.28
+    Added generic retry logic, log timestamp option. Wait for tasks that may be "Running" at 100%.
 '''
 
-Version = "1.27"
+Version = "1.28"
 
 import argparse
 import requests
@@ -116,6 +117,7 @@ import os
 import fnmatch
 import random
 import copy
+from urllib3.exceptions import InsecureRequestWarning
 
 ## Return value constants
 OTHER_ERROR = 1
@@ -154,13 +156,18 @@ LOG_FILE = None
 ## Custom Functions
 
 # Log messages to output - all messages go thru this function
-def log(msg, isError=False):
+def log(msg, isError=False, logTime=False):
+    output_msg = ''
     if isError:
-        msg = '*** Error ***: ' + str(msg)
+        output_msg = '*** Error ***: '
+    if logTime:
+        output_msg = output_msg + ' ' + datetime.now().strftime(LOG_TIME_FORMAT) + " "
+    output_msg = output_msg + str(msg) # Stringify in case msg was of type "exception"
+
     if LOG_TO_TERMINAL:
-        print(msg)
+        print(output_msg)
     else:
-        LOG_FILE.write(msg + '\n')
+        LOG_FILE.write(output_msg + '\n')
 
 # Check to see if we are on a YBA server by hitting up port 9090 - try both http and https
 def yba_server(host, action, isDryRun):
@@ -179,7 +186,7 @@ def yba_server(host, action, isDryRun):
             log('Host is YBA Server - Dry run or Health check specified:no action taken')
         else:
             if action == 'stop':
-                log(datetime.now().strftime(LOG_TIME_FORMAT) + ' Host is YBA Server - Shutting down services...')
+                log(' Host is YBA Server - Shutting down services...', logTime=True)
                 for svc in YBA_PROCESS_STOP_LIST:
                     try:
                         # This call triggers an error if the process is not active.
@@ -187,9 +194,9 @@ def yba_server(host, action, isDryRun):
                         status = subprocess.check_output('systemctl is-active {}.service'.format(svc), shell=True, stderr=subprocess.STDOUT)
                         try:
                             o = subprocess.check_output('systemctl stop {}.service'.format(svc), shell=True, stderr=subprocess.STDOUT)
-                            log(datetime.now().strftime(LOG_TIME_FORMAT) + '  Service ' + svc + ' stopped')
+                            log('  Service ' + svc + ' stopped', logTime=True)
                         except subprocess.CalledProcessError as err:
-                            log('Error stopping service' + svc + '- see output below', True)
+                            log('Error stopping service' + svc + '- see output below', isError=True)
                             log(err)
                             log('\nProcess failed - exiting with code ' + str(NODE_YBA_ERROR))
                             exit(NODE_YBA_ERROR)
@@ -197,7 +204,7 @@ def yba_server(host, action, isDryRun):
                         log('  Service {} is not running - skipping'.format(svc))
 
             if action == 'resume':
-                log(datetime.now().strftime(LOG_TIME_FORMAT) + ' Host is YBA Server - Starting up services...')
+                log(' Host is YBA Server - Starting up services...', logTime=True)
                 for svc in reversed(YBA_PROCESS_STOP_LIST):
                     try:
                         # This call triggers an error if the process is not active.
@@ -207,11 +214,11 @@ def yba_server(host, action, isDryRun):
                     except subprocess.CalledProcessError as e: # This is the code path if the service is not running
                         try:
                             o = subprocess.check_output('systemctl start {}.service'.format(svc), shell=True, stderr=subprocess.STDOUT)
-                            log(datetime.now().strftime(LOG_TIME_FORMAT) + '  Service ' + svc + ' started')
+                            log('  Service ' + svc + ' started', logTime=True)
                         except subprocess.CalledProcessError as err:
-                            log('Error starting service' + svc + '- see output below', True)
+                            log('Error starting service' + svc + '- see output below', isError=True)
                             log(err)
-                            log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_YBA_ERROR))
+                            log(' Process failed - exiting with code ' + str(NODE_YBA_ERROR), logTime=True)
                             exit(NODE_YBA_ERROR)
         return(True)
     else:
@@ -222,7 +229,7 @@ def yba_server(host, action, isDryRun):
 # Get all universes on YBA deployment.  Note that a list of nodes is included here, so we return the entire universes array
 def get_universes(api_host, customer_uuid, api_token):
     response = requests.get(api_host + '/api/customers/' + customer_uuid + '/universes',
-                            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
+                            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token}, verify=False)
     return (response.json())
 
 def maintenance_window(api_host, customer_uuid, universe, api_token, host, action):
@@ -289,12 +296,12 @@ def start_node(api_host, customer_uuid, universe, api_token, node, dry_run=True,
             log('Node ' + node['nodeName'] + ' state: ' + node['state'])
         else:
             ## Startup server
-            log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Starting up DB server')
+            log(' Starting up DB server', logTime=True)
             if node['state'] != 'Stopped':
                 if node['state'] != 'Live':
                     log('  Node ' + node['nodeName'] + ' is in "' + node['state'] +
                         '" state - needs to be in "Stopped" or "Live" state to continue')
-                    log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
+                    log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
                     exit(NODE_DB_ERROR)
                 log('  Node ' + node['nodeName'] + ' is already in "Live" state - skipping startup')
             else:
@@ -305,11 +312,11 @@ def start_node(api_host, customer_uuid, universe, api_token, node, dry_run=True,
                     json=json.loads('{"nodeAction": "START"}'))
                 task = response.json()
                 if 'error' in task:
-                    log('Could not start node : ' + task['error'], True)
-                    log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
+                    log('Could not start node : ' + task['error'], logTime=True,isError=True)
+                    log('Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
                     exit(NODE_DB_ERROR)
                 if wait_for_task(api_host, customer_uuid, task['taskUUID'], api_token):
-                    log(datetime.now().strftime(LOG_TIME_FORMAT) + ' Server startup complete')
+                    log(' Server startup complete', logTime=True)
                     restarted = True
                 else:
                     raise Exception("Failed to resume DB Node")
@@ -382,7 +389,7 @@ def start_node(api_host, customer_uuid, universe, api_token, node, dry_run=True,
 
     except Exception as e:
         log(e, True)
-        log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
+        log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
         exit(NODE_DB_ERROR)
 
 def get_node_health (node_type, node, yba_state):
@@ -471,7 +478,49 @@ def get_master_leader_ip(api_host, customer_uuid, api_token, universe):
     resp = requests.get(
         api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe['universeUUID'] + '/leader',
         headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
-    return resp.json()['privateIP']
+    j = resp.json()
+    print('----------------------')
+    print(j)
+    if not isinstance(j, dict):
+        raise Exception("Call to get leader IP returned {} instead of dict".format(type(j)))
+    if not 'privateIP' in j:
+        raise Exception("Could not determine master leader - privateIP was not found in {}".format(j))
+    return(get_node_ip(j['privateIP']))
+
+
+def get_node_ip(addr):
+    try:
+        socket.inet_aton(addr)
+        return(addr)
+    except:
+        return(socket.gethostbyname(addr))
+
+def retry_successful(retriable_function_call, params=None, retry=10, verbose=False, sleep=.5, fatal=False):
+    for i in range(retry):
+        try:
+            verbose and log("Attempt {} running {}".format(i, retriable_function_call.__name__),logTime=True)
+            time.sleep(sleep * i)
+            retval = retriable_function_call(*params)
+            verbose and log(
+                "  Returned {} from called function {} on attempt {}".format(retval, retriable_function_call.__name__, i))
+            return True
+        except Exception as errorMsg:
+            preserve_errmsg = errorMsg
+            verbose and log("Hit exception {} in attempt {}".format(errorMsg, i))
+            if fatal and i == (retry - 1):
+                raise  # Re-raise current exception
+            continue
+
+    return False
+
+def stepdown_master(api_host, customer_uuid, api_token, universe, node, ldr_ip):
+    status = subprocess.check_output(LEADER_STEP_DOWN_COMMAND.format(ldr_ip + ' master_leader_stepdown'),
+                                             shell=True, stderr=subprocess.STDOUT)
+    time.sleep(random.randint(10, MAX_TIME_TO_SLEEP_SECONDS))
+    new_ldr = get_master_leader_ip(api_host, customer_uuid, api_token, universe)
+    if new_ldr == ldr_ip:
+        raise Exception('   An error occurred while trying to step down master node  - proceeding with shutdown' )
+
 
 # Stop x-cluster and then the node processes
 def stop_node(api_host, customer_uuid, universe, api_token, node, skip_xcluster=False, skip_maint_window=False):
@@ -485,13 +534,13 @@ def stop_node(api_host, customer_uuid, universe, api_token, node, skip_xcluster=
             log('\n- Skipping pause of x-cluster replication')
         else:
             ## pause source replication
-            log('\n- Pausing x-cluster replication')
-            ## First, sleep a bit to prevent race condition when patching multiple servers concurrently
-            time.sleep(random.randint(1, MAX_TIME_TO_SLEEP_SECONDS))
+            log('\n- Pausing x-cluster replication', logTime=True)
             paused_count = 0
             ## pause source replication
             if 'sourceXClusterConfigs' in universe['universeDetails']:
                 for rpl in universe['universeDetails']['sourceXClusterConfigs']:
+                    ## First, sleep a bit to prevent race condition when patching multiple servers concurrently
+                    time.sleep(random.randint(1, MAX_TIME_TO_SLEEP_SECONDS))
                     if alter_replication(api_host, api_token, customer_uuid, 'pause', rpl):
                         paused_count += 1
                     else:
@@ -499,43 +548,29 @@ def stop_node(api_host, customer_uuid, universe, api_token, node, skip_xcluster=
             ## pause target replication
             if 'targetXClusterConfigs' in universe['universeDetails']:
                 for rpl in universe['universeDetails']['targetXClusterConfigs']:
+                    ## First, sleep a bit to prevent race condition when patching multiple servers concurrently
+                    time.sleep(random.randint(1, MAX_TIME_TO_SLEEP_SECONDS))
                     if alter_replication(api_host, api_token, customer_uuid, 'pause', rpl):
                         paused_count += 1
                     else:
                         raise Exception("Failed to pause x-cluster replication")
             if paused_count > 0:
-                log('  ' + str(paused_count) + ' x-cluster streams are currently paused')
+                log('  ' + str(paused_count) + ' x-cluster streams are currently paused', logTime=True)
             else:
-                log('  No x-cluster replications were found to pause')
+                log('  No x-cluster replications were found to pause', logTime=True)
 
         ## Step down if master
         log('\n - Checking if node {} is master leader before shutting down'.format(node['cloudInfo']['private_ip']))
-        try:
-            ldr_ip = get_master_leader_ip(api_host, customer_uuid, api_token, universe)
-            # Check if our leader address is actually an IP, otherwise get the ip for the yb-admin command
-            try:
-                socket.inet_aton(ldr_ip)
-            except:
-                ldr_ip = socket.gethostbyname(ldr_ip)
-            current_tries = 1
-            while ldr_ip == node['cloudInfo']['private_ip'] and current_tries <= 5:
-                log('   Node is currently master leader - stepping down before shutdown - attempt number: {}'.format(current_tries))
-                status = subprocess.check_output(LEADER_STEP_DOWN_COMMAND.format(ldr_ip + ' master_leader_stepdown'), shell=True, stderr=subprocess.STDOUT)
-                time.sleep(1)
-                ldr_ip = get_master_leader_ip(api_host, customer_uuid, api_token, universe)
-                current_tries += 1
-            if current_tries == 1:
-                log('   Node is currently follower - no step down needed as leader is {}'.format(ldr_ip))
-            elif current_tries >= 5:
-                log('   Could not step down master node after 5 attempts - proceeding with shutdown')
+        ldr_ip = get_master_leader_ip(api_host, customer_uuid, api_token, universe)
+        if ldr_ip == get_node_ip(node['cloudInfo']['private_ip']):
+            log('   Node is currently master leader - stepping down before shutdown')
+            if retry_successful(stepdown_master, params=[api_host, customer_uuid, api_token, universe, node, ldr_ip], verbose=True):
+                log('Master stepdown succeeded', logTime=True)
             else:
-                log('   New Leader {} elected after {} attempts'.format(ldr_ip, current_tries - 1))
-        except:
-            log('   An error occurred while trying to step down master node  - proceeding with shutdown')
-            pass
+                log('Failed to stepdown master', logTime=True)
 
         ## Shutdown server
-        log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) +  ' Shutting down DB server' + str(node['nodeName']))
+        log(' Shutting down DB server' + str(node['nodeName']), logTime=True)
         response = requests.put(
             api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe[
                 'universeUUID'] + '/nodes/' + node['nodeName'],
@@ -544,16 +579,16 @@ def stop_node(api_host, customer_uuid, universe, api_token, node, skip_xcluster=
         task = response.json()
         if 'error' in task:
             log('Could not shut down node : ' + task['error'], True)
-            log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
+            log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
             exit(NODE_DB_ERROR)
         if wait_for_task(api_host, customer_uuid, task['taskUUID'], api_token):
-            log(datetime.now().strftime(LOG_TIME_FORMAT) + ' Server shut down and ready for maintenance')
+            log(' Server shut down and ready for maintenance', logTime=True)
         else:
-            log(datetime.now().strftime(LOG_TIME_FORMAT) + ' Error stopping node', True)
+            log(' Error stopping node', True, logTime=True)
             raise Exception("Failed to stop Node")
     except Exception as e:
         log(e, True)
-        log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
+        log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
         exit(NODE_DB_ERROR)
 
 
@@ -791,7 +826,7 @@ def health_check(api_host, customer_uuid, universe, api_token, node=None):
 
     except Exception as e:
         log(e, True)
-        log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
+        log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
         exit(NODE_DB_ERROR)
 
 def fix(api_host, customer_uuid, universe, api_token, fix_list):
@@ -827,8 +862,8 @@ def fix(api_host, customer_uuid, universe, api_token, fix_list):
 
 def get_db_nodes_and_universe(universes, hostname, ip, universe_name, region=None, az=None):
     if universes is None or len(universes) < 1:
-        log('No Universes found - cannot determine if this a DB node', True)
-        log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
+        log('No Universes found - cannot determine if this a DB node', isError=True)
+        log(' Process failed - exiting with code ' + str(OTHER_ERROR), logTime=True)
         raise Exception("No Universes found")
     univ_to_return = None
     nodes = []
@@ -851,6 +886,11 @@ def get_db_nodes_and_universe(universes, hostname, ip, universe_name, region=Non
                 univ_to_return = universe
                 break
 
+    if univ_to_return == None:
+        log("Did not find any universe for host {} IP {}. This code runs only on DB nodes. This does not seem to be one.".format(hostname,ip),
+             isError=True,logTime=True)
+        raise Exception("No Universe for node {} IP {}".format(hostname,ip))
+    
     # Get node(s) for given universe
     if region is not None:
         for node in univ_to_return['universeDetails']['nodeDetailsSet']:
@@ -875,9 +915,11 @@ def wait_for_task(api_host, customer_uuid, task_uuid, api_token):
         jsonResponse = response.json()
         if jsonResponse['status'] == 'Failure' or jsonResponse['percent'] == 100.0:
             done = True
+        if jsonResponse['status'] == 'Running':
+            done = False
 
     if jsonResponse['status'] != 'Success':
-        log('Task failed - see below for details', True)
+        log('Task failed - see below for details', isError=True,logTime=True)
         log(json.dumps(jsonResponse, indent=2))
         return False
     else:
@@ -907,8 +949,7 @@ def alter_replication(api_host, api_token, customer_uuid, xcluster_action, rpl_i
     if xcCurrState != xcNewState:
         retries = 3
         while retries > 0:
-            log('  ' + datetime.now().strftime(LOG_TIME_FORMAT) +
-                ' Changing state of xcluster replication ' + xcl_cfg['name'] + ' from ' + xcCurrState + ' to ' + xcNewState)
+            log( ' Changing state of xcluster replication ' + xcl_cfg['name'] + ' from ' + xcCurrState + ' to ' + xcNewState, logTime=True)
             response = requests.put(
                 api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl_id,
                 headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
@@ -917,8 +958,7 @@ def alter_replication(api_host, api_token, customer_uuid, xcluster_action, rpl_i
                 retries = 0
                 task = response.json()
                 if wait_for_task(api_host, customer_uuid, task['taskUUID'], api_token):
-                    log('  ' + datetime.now().strftime(LOG_TIME_FORMAT) +
-                        ' Xcluster replication ' + xcl_cfg['name'] + ' is now ' + xcNewState)
+                    log( ' Xcluster replication ' + xcl_cfg['name'] + ' is now ' + xcNewState, logTime=True)
                 else:
                     retries -= 1
             else:
@@ -1019,7 +1059,7 @@ def main():
                         + '_' + action + '.log', "a")
 
     log('\n--------------------------------------')
-    log(datetime.now().strftime(LOG_TIME_FORMAT) + ' script version {} started'.format(Version))
+    log(' script version {} started'.format(Version), logTime=True)
     if args.availability_zone is not None and args.region is None:
         log('--region parameter must be specified when --availability_zone is specified', True)
         if (not LOG_TO_TERMINAL):
@@ -1028,7 +1068,7 @@ def main():
     # find env variable file - should be only 1
     flist = fnmatch.filter(os.listdir(ENV_FILE_PATH), ENV_FILE_PATTERN)
     if len(flist) < 1:
-        log('No environment variable file found in ' + ENV_FILE_PATH, True)
+        log('No environment variable file found in ' + ENV_FILE_PATH, isError=True,logTime=True)
         log('\nProcess failed - exiting with code ' + str(OTHER_ERROR))
         if (not LOG_TO_TERMINAL):
             LOG_FILE.close()
@@ -1036,7 +1076,7 @@ def main():
     if len(flist) > 1:
         log('Multiple environment variable files found in ' + ENV_FILE_PATH, True)
         log('Found the following files: ' + str(flist)[1:-1])
-        log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
+        log(' Process failed - exiting with code ' + str(OTHER_ERROR), logTime=True)
         if (not LOG_TO_TERMINAL):
             LOG_FILE.close()
         exit(OTHER_ERROR)
@@ -1067,7 +1107,7 @@ def main():
         log('Environment variable CUST_UUID not found', True)
         missingEnv = True
     if missingEnv:
-        log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
+        log(' Process failed - exiting with code ' + str(OTHER_ERROR), logTime=True)
         if (not LOG_TO_TERMINAL):
             LOG_FILE.close()
         exit(OTHER_ERROR)
@@ -1078,19 +1118,20 @@ def main():
             log('Attempt {} to communicate with YBA host at {}'.format(num_retries, api_host))
             response = requests.get(api_host + '/api/customers/' + customer_uuid,
                                 headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
-                                timeout=5)
+                                timeout=5, verify=False)
+            response.raise_for_status()
             num_retries = 999
-        except:
+        except requests.exceptions.HTTPError as err:
             if num_retries >= 5:
-                log(datetime.now().strftime(LOG_TIME_FORMAT) + ' Could not establish communication with YBA server at {} after {} attempts - exiting'.format(api_host, num_retries), True)
-                log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code {}'.format(NODE_YBA_ERROR))
+                log(' Could not establish communication with YBA server at {} after {} attempts Err {}- exiting'.format(api_host, num_retries,err),isError=True, logTime=True)
+                log(' Process failed - exiting with code {}'.format(NODE_YBA_ERROR), logTime=True)
                 if (not LOG_TO_TERMINAL):
                     LOG_FILE.close()
                 exit(NODE_YBA_ERROR)
             else:
                 num_retries += 1
                 sleeptime = random.randint(5, MAX_TIME_TO_SLEEP_SECONDS)
-                log(datetime.now().strftime(LOG_TIME_FORMAT) + 'Could not establish communication with YBA server at {} trying again in {} seconds'.format(api_host, sleeptime))
+                log('Could not establish communication with YBA server at {} trying again in {} seconds. Err: {}'.format(api_host, sleeptime,err), logTime=True)
                 pass
 
     log('Retrieving Universes from YBA server at ' + api_host)
@@ -1112,7 +1153,7 @@ def main():
 
             if args.health == LOCALHOST and len(dbhost_list) < 1:
                 log('Healthcheck is not being run from a DB node - Specify a universe name or "ALL" to check all Universes from a non-DB node.', True)
-                log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
+                log(' Process failed - exiting with code ' + str(OTHER_ERROR), logTime=True)
                 if (not LOG_TO_TERMINAL):
                     LOG_FILE.close()
                 exit(OTHER_ERROR)
@@ -1127,8 +1168,8 @@ def main():
                     if universe is not None:
                         health_check(api_host, customer_uuid, universe, api_token, None)
                     else:
-                        log('Could not find universe with name "{}" exiting'.format(args.health), True)
-                        log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
+                        log('Could not find universe with name "{}" exiting'.format(args.health), isError=True)
+                        log(' Process failed - exiting with code ' + str(OTHER_ERROR), logTime=True)
                         if (not LOG_TO_TERMINAL):
                             LOG_FILE.close()
                         exit(OTHER_ERROR)
@@ -1143,17 +1184,16 @@ def main():
                 if yba_server(ip, action, dry_run):
                     exit_code = NODE_YBA_SUCCESS
                     if not action in ACTIONS_ALLOWED_ON_YBA :
-                        log('Cannot run {} command from a YBA server - run from the node instead'.format(action), True)
-                        log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_YBA_ERROR))
+                        log('Cannot run {} command from a YBA server - run from the node instead'.format(action), isError=True)
+                        log(' Process failed - exiting with code ' + str(NODE_YBA_ERROR), logTime=True)
                         exit_code = NODE_YBA_ERROR
                     else:
-                        log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process completed successfully - exiting with code ' + str(NODE_YBA_SUCCESS))
+                        log(' Process completed successfully - exiting with code ' + str(NODE_YBA_SUCCESS), logTime=True)
                     if (not LOG_TO_TERMINAL):
                         LOG_FILE.close()
                     exit(exit_code)
                 else: # not YBA or DB node, and not running a healthcheck
-                    log('\n' + datetime.now().strftime(
-                        LOG_TIME_FORMAT) + ' Node is neither a DB host nor a YBA host - exiting with code ' + str(OTHER_ERROR))
+                    log(' Node is neither a DB host nor a YBA host - exiting with code ' + str(OTHER_ERROR), logTime=True)
                     if (not LOG_TO_TERMINAL):
                         LOG_FILE.close()
                     exit(OTHER_ERROR)
@@ -1191,13 +1231,13 @@ def main():
                         verify(api_host, customer_uuid, universe, api_token, dbhost)
     except Exception as e:
         log(e, True)
-        log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(OTHER_ERROR))
+        log(' Process failed - exiting with code ' + str(OTHER_ERROR), logTime=True)
         if(not LOG_TO_TERMINAL):
             LOG_FILE.close()
         #traceback.print_exc()
         exit(OTHER_ERROR)
 
-    log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process completed successfully - exiting with code ' + str(NODE_DB_SUCCESS))
+    log(' Process completed successfully - exiting with code ' + str(NODE_DB_SUCCESS), logTime=True)
     if(not LOG_TO_TERMINAL):
         LOG_FILE.close()
 
