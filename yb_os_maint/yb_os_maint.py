@@ -96,11 +96,13 @@ v 1.27
     Added check for privateIP to match hostname in get_db_nodes_and_universe as it may contain a name in some cases
     Shored up yb-admin command to look up IP if master leader endpoint returns a hostname
      shutdown now continues if stepdown fails or errors out
-v 1.28
+v 1.28 (Last fixes from Mike L)
     Added generic retry logic, log timestamp option. Wait for tasks that may be "Running" at 100%.
+v 1.29
+    Allow node ops (as no-error,no-op) from un-configured nodes. 
 '''
 
-Version = "1.28"
+Version = "1.29"
 
 import argparse
 import requests
@@ -178,16 +180,26 @@ def yba_server(host, action, isDryRun):
         if '{}.service'.format(YBA_PROCESS_STOP_LIST[0]) in str(r):
             found = True
     except subprocess.CalledProcessError as e:
-        log('Error checking for process: ', True)
+        log('Error checking for YBA process: ', isError=True,logTime=True)
         log(e.output)
 
     if found:
+        activePath = subprocess.check_output(['readlink','-f','/opt/yugabyte/software/active'],text=True)
+        ybaVersion = activePath.rstrip('\n').split("/")[-1] # Last dir is a version like '2.18.5.2-b1'
         if isDryRun:
-            log('Host is YBA Server - Dry run or Health check specified:no action taken')
+            log('Host is YBA Server {} - Dry run or Health check specified:no action taken'.format(ybaVersion),logTime=True)
         else:
             if action == 'stop':
-                log(' Host is YBA Server - Shutting down services...', logTime=True)
-                for svc in YBA_PROCESS_STOP_LIST:
+                log(' Host is YBA Server {} - Shutting down services...'.format(ybaVersion), logTime=True)
+                if ybaVersion >= '2.18.0':
+                    try:
+                        status=subprocess.check_output(['yba-ctl','stop'], shell=True, stderr=subprocess.STDOUT) # No output
+                        status=subprocess.check_output(['yba-ctl','status'], shell=True, stderr=subprocess.STDOUT) # No output
+                        log(status,logTime=True)
+                    except subprocess.CalledProcessError as e:
+                        log('  yba-ctl stop failed - skipping. Err:{}'.format(str(e)),logTime=True)
+                else:    
+                  for svc in YBA_PROCESS_STOP_LIST:
                     try:
                         # This call triggers an error if the process is not active.
                         log('  Stopping service ' + svc)
@@ -205,6 +217,14 @@ def yba_server(host, action, isDryRun):
 
             if action == 'resume':
                 log(' Host is YBA Server - Starting up services...', logTime=True)
+                if ybaVersion >= '2.18.0':
+                    try:
+                        status=subprocess.check_output(['yba-ctl','start'], shell=True, stderr=subprocess.STDOUT) # No output
+                        status=subprocess.check_output(['yba-ctl','status'], shell=True, stderr=subprocess.STDOUT) # No output
+                        log(status,logTime=True)
+                    except subprocess.CalledProcessError as e:
+                        log('  yba-ctl start failed. Err:{}'.format(str(e)),logTime=True,isError=True)
+                        exit(NODE_YBA_ERROR)
                 for svc in reversed(YBA_PROCESS_STOP_LIST):
                     try:
                         # This call triggers an error if the process is not active.
@@ -250,28 +270,31 @@ def maintenance_window(api_host, customer_uuid, universe, api_token, host, actio
              }
         }
         if w_id is not None:
-            log('\n- Updating existing Maintenance window "{}" for {} minutes'.format(MAINTENANCE_WINDOW_NAME + host,
-                                                                           str(MAINTENANCE_WINDOW_DURATION_MINUTES)))
+            log('\n- Updating existing Maintenance window "{}" for {} minutes' \
+                .format(MAINTENANCE_WINDOW_NAME + host, str(MAINTENANCE_WINDOW_DURATION_MINUTES)) \
+                , logTime=True)
             j['uuid'] = w_id
             response = requests.put(
                 api_host + '/api/v1/customers/' + customer_uuid + '/maintenance_windows/' + w_id,
                 headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
                 json = j)
         else:
-            log('\n- Creating Maintenance window "{}" for {} minutes'.format(MAINTENANCE_WINDOW_NAME + host,
-                                                                           str(MAINTENANCE_WINDOW_DURATION_MINUTES)))
+            log('\n- Creating Maintenance window "{}" for {} minutes' \
+                .format(MAINTENANCE_WINDOW_NAME + host, str(MAINTENANCE_WINDOW_DURATION_MINUTES)) \
+                , logTime=True)
             response = requests.post(
                 api_host + '/api/v1/customers/' + customer_uuid + '/maintenance_windows',
                 headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
                 json = j)
     else:
         if w_id is not None:
-            log('\n- Removing Maintenance window "{}"'.format(MAINTENANCE_WINDOW_NAME + host))
+            log('\n- Removing Maintenance window "{}"'.format(MAINTENANCE_WINDOW_NAME + host), logTime=True)
             response = requests.delete(
                 api_host + '/api/v1/customers/' + customer_uuid + '/maintenance_windows/' + w_id,
                 headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
         else:
-            log('\n- No existing Maintenance window "{}" found to remove'.format(MAINTENANCE_WINDOW_NAME + host))
+            log('\n- No existing Maintenance window "{}" found to remove' \
+                .format(MAINTENANCE_WINDOW_NAME + host), logTime=True)
 
 
 
@@ -862,9 +885,10 @@ def fix(api_host, customer_uuid, universe, api_token, fix_list):
 
 def get_db_nodes_and_universe(universes, hostname, ip, universe_name, region=None, az=None):
     if universes is None or len(universes) < 1:
-        log('No Universes found - cannot determine if this a DB node', isError=True)
-        log(' Process failed - exiting with code ' + str(OTHER_ERROR), logTime=True)
-        raise Exception("No Universes found")
+        log('No Universes found - cannot determine if this a DB node. **EXITING NORMALLY**', isError=True, logTime=True)
+        #log(' Process failed - exiting with code ' + str(OTHER_ERROR), logTime=True)
+        #raise Exception("No Universes found")
+        exit(0)
     univ_to_return = None
     nodes = []
     curnode = None
@@ -885,12 +909,7 @@ def get_db_nodes_and_universe(universes, hostname, ip, universe_name, region=Non
             if str(universe['name']).upper() == str(universe_name).upper():
                 univ_to_return = universe
                 break
-
-    if univ_to_return == None:
-        log("Did not find any universe for host {} IP {}. This code runs only on DB nodes. This does not seem to be one.".format(hostname,ip),
-             isError=True,logTime=True)
-        raise Exception("No Universe for node {} IP {}".format(hostname,ip))
-    
+   
     # Get node(s) for given universe
     if region is not None:
         for node in univ_to_return['universeDetails']['nodeDetailsSet']:
