@@ -102,11 +102,11 @@ v 1.29
     Allow node ops (as no-error,no-op) from un-configured nodes. 
 v 1.30
     BugFix - for universe==None case for functionality for "New" nodes
-v 1.31, 1.32 
+v 1.31, 1.32 , 1.33
     BugFix - check if YBA before giving up on "New node"
 '''
 
-Version = "1.32"
+Version = "1.33"
 
 import argparse
 import requests
@@ -177,7 +177,7 @@ def log(msg, isError=False, logTime=False):
 
 # Check to see if we are on a YBA server by hitting up port 9090 - try both http and https
 def yba_server(host, action, isDryRun):
-    log('Checking if host ' + host + ' is YBA Instance...')
+    log('Checking if host ' + host + ' is YBA Instance for "' + action + '"...')
     found = False
     try:
         r = subprocess.check_output("systemctl list-units --all '{}.service'".format(YBA_PROCESS_STOP_LIST[0]), shell=True, stderr=subprocess.STDOUT)
@@ -201,8 +201,10 @@ def yba_server(host, action, isDryRun):
                 if ybaVersion >= '2.18.0':
                     try:
                         status=subprocess.check_output(['yba-ctl','stop'],  stderr=subprocess.STDOUT) # No output
+                        time.sleep(2)
                         status=subprocess.check_output(['yba-ctl','status'],stderr=subprocess.STDOUT,text=True) 
                         log(status,logTime=True)
+                        return(True)
                     except subprocess.CalledProcessError as e:
                         log('  yba-ctl stop failed - skipping. Err:{}'.format(str(e)),logTime=True)
                 else:    
@@ -227,8 +229,10 @@ def yba_server(host, action, isDryRun):
                 if ybaVersion >= '2.18.0':
                     try:
                         status=subprocess.check_output(['yba-ctl','start'],  stderr=subprocess.STDOUT) # No output
+                        time.sleep(2)
                         status=subprocess.check_output(['yba-ctl','status'], stderr=subprocess.STDOUT,text=True)
                         log(status,logTime=True)
+                        return(True)
                     except subprocess.CalledProcessError as e:
                         log('  yba-ctl start failed. Err:{}'.format(str(e)),logTime=True,isError=True)
                         exit(NODE_YBA_ERROR)
@@ -1139,6 +1143,10 @@ def main():
         if (not LOG_TO_TERMINAL):
             LOG_FILE.close()
         exit(OTHER_ERROR)
+
+    if action == 'resume' and yba_server(hostname,'test',True):
+        # YBA host is down, so NO API is available -- just restart it...
+        yba_server(hostname,action,dry_run)
 
     num_retries = 1
     while num_retries <= 5:
