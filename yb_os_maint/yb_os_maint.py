@@ -102,11 +102,11 @@ v 1.29
     Allow node ops (as no-error,no-op) from un-configured nodes. 
 v 1.30
     BugFix - for universe==None case for functionality for "New" nodes
-v 1.31 
+v 1.31, 1.32 
     BugFix - check if YBA before giving up on "New node"
 '''
 
-Version = "1.31"
+Version = "1.32"
 
 import argparse
 import requests
@@ -200,8 +200,8 @@ def yba_server(host, action, isDryRun):
                 log(' Host is YBA Server {} - Shutting down services...'.format(ybaVersion), logTime=True)
                 if ybaVersion >= '2.18.0':
                     try:
-                        status=subprocess.check_output(['yba-ctl','stop'], shell=True, stderr=subprocess.STDOUT) # No output
-                        status=subprocess.check_output(['yba-ctl','status'], shell=True, stderr=subprocess.STDOUT) # No output
+                        status=subprocess.check_output(['yba-ctl','stop'],  stderr=subprocess.STDOUT) # No output
+                        status=subprocess.check_output(['yba-ctl','status'],stderr=subprocess.STDOUT,text=True) 
                         log(status,logTime=True)
                     except subprocess.CalledProcessError as e:
                         log('  yba-ctl stop failed - skipping. Err:{}'.format(str(e)),logTime=True)
@@ -226,8 +226,8 @@ def yba_server(host, action, isDryRun):
                 log(' Host is YBA Server - Starting up services...', logTime=True)
                 if ybaVersion >= '2.18.0':
                     try:
-                        status=subprocess.check_output(['yba-ctl','start'], shell=True, stderr=subprocess.STDOUT) # No output
-                        status=subprocess.check_output(['yba-ctl','status'], shell=True, stderr=subprocess.STDOUT) # No output
+                        status=subprocess.check_output(['yba-ctl','start'],  stderr=subprocess.STDOUT) # No output
+                        status=subprocess.check_output(['yba-ctl','status'], stderr=subprocess.STDOUT,text=True)
                         log(status,logTime=True)
                     except subprocess.CalledProcessError as e:
                         log('  yba-ctl start failed. Err:{}'.format(str(e)),logTime=True,isError=True)
@@ -1175,6 +1175,7 @@ def main():
     dbhost_list, universe = get_db_nodes_and_universe(universes, hostname, ip, univ_name, rg, az)
     if universe == None:
         if yba_server(hostname,'test',dry_run):
+            dbhost_list=[] # Zap the incorrect [None] value 
             pass #no op
         else:
             log("Did not find any universe for host {} IP {}. Ignoring unknown host and *EXITING NORMALLY*".format(hostname,ip),
