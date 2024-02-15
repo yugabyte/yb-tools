@@ -100,6 +100,8 @@ v 1.28 (Last fixes from Mike L)
     Added generic retry logic, log timestamp option. Wait for tasks that may be "Running" at 100%.
 v 1.29
     Allow node ops (as no-error,no-op) from un-configured nodes. 
+v 1.30
+    BugFix - for universe==None case for functionality for "New" nodes
 '''
 
 Version = "1.29"
@@ -1164,7 +1166,10 @@ def main():
         rg = args.region
         az = args.availability_zone
     dbhost_list, universe = get_db_nodes_and_universe(universes, hostname, ip, univ_name, rg, az)
-
+    if universe == None:
+        log("Did not find any universe for host {} IP {}. Ignoring unknown host and *EXITING NORMALLY*".format(hostname,ip),
+             isError=True,logTime=True)
+        exit(0)
     try:
         ## first, do healthcheck if specified
         if action == 'health':
