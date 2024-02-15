@@ -102,11 +102,11 @@ v 1.29
     Allow node ops (as no-error,no-op) from un-configured nodes. 
 v 1.30
     BugFix - for universe==None case for functionality for "New" nodes
-v 1.31, 1.32 , 1.33
+v 1.31, 1.32 , 1.33, 1.34
     BugFix - check if YBA before giving up on "New node"
 '''
 
-Version = "1.33"
+Version = "1.34"
 
 import argparse
 import requests
@@ -1147,6 +1147,8 @@ def main():
     if action == 'resume' and yba_server(hostname,'test',True):
         # YBA host is down, so NO API is available -- just restart it...
         yba_server(hostname,action,dry_run)
+        log(' Resume completed successfully - exiting with code ' + str(NODE_DB_SUCCESS), logTime=True)
+        exit(0) # No furthur processing .. YBA processes are not fully up yet.
 
     num_retries = 1
     while num_retries <= 5:
