@@ -102,9 +102,11 @@ v 1.29
     Allow node ops (as no-error,no-op) from un-configured nodes. 
 v 1.30
     BugFix - for universe==None case for functionality for "New" nodes
+v 1.31 
+    BugFix - check if YBA before giving up on "New node"
 '''
 
-Version = "1.29"
+Version = "1.31"
 
 import argparse
 import requests
@@ -181,11 +183,14 @@ def yba_server(host, action, isDryRun):
         r = subprocess.check_output("systemctl list-units --all '{}.service'".format(YBA_PROCESS_STOP_LIST[0]), shell=True, stderr=subprocess.STDOUT)
         if '{}.service'.format(YBA_PROCESS_STOP_LIST[0]) in str(r):
             found = True
+
     except subprocess.CalledProcessError as e:
         log('Error checking for YBA process: ', isError=True,logTime=True)
         log(e.output)
 
     if found:
+        if action == "test":
+            return (True) # Caller just checking if this is a YBA 
         activePath = subprocess.check_output(['readlink','-f','/opt/yugabyte/software/active'],text=True)
         ybaVersion = activePath.rstrip('\n').split("/")[-1] # Last dir is a version like '2.18.5.2-b1'
         if isDryRun:
@@ -244,6 +249,8 @@ def yba_server(host, action, isDryRun):
                             exit(NODE_YBA_ERROR)
         return(True)
     else:
+        if action == 'test':
+            return (False)
         log('  Host is NOT YBA Instance - checking if it is a DB Node')
         return (False)
 
@@ -1167,9 +1174,12 @@ def main():
         az = args.availability_zone
     dbhost_list, universe = get_db_nodes_and_universe(universes, hostname, ip, univ_name, rg, az)
     if universe == None:
-        log("Did not find any universe for host {} IP {}. Ignoring unknown host and *EXITING NORMALLY*".format(hostname,ip),
-             isError=True,logTime=True)
-        exit(0)
+        if yba_server(hostname,'test',dry_run):
+            pass #no op
+        else:
+            log("Did not find any universe for host {} IP {}. Ignoring unknown host and *EXITING NORMALLY*".format(hostname,ip),
+                 isError=True,logTime=True)
+            exit(0)
     try:
         ## first, do healthcheck if specified
         if action == 'health':
