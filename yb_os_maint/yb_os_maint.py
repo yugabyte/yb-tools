@@ -104,9 +104,11 @@ v 1.30
     BugFix - for universe==None case for functionality for "New" nodes
 v 1.31, 1.32 , 1.33, 1.34
     BugFix - check if YBA before giving up on "New node"
+v 1.35a
+    Re-factor to O-O.(a)YBA-OK, YBDB--health OK. more to do...
 '''
 
-Version = "1.34"
+Version = "1.35"
 
 import argparse
 import requests
@@ -137,7 +139,7 @@ NODE_YBA_ERROR = 1
 MIN_MOST_RECENT_UPTIME_SECONDS = 60
 TASK_WAIT_TIME_SECONDS = 2
 TASK_COMPLETE_WAIT_TIME_SECONDS = 10
-YBA_PROCESS_STOP_LIST = ['yb-platform', 'prometheus', 'rh-nginx118-nginx', 'rh-postgresql10-postgresql']
+
 TABLET_BALANCE_TEXT = 'Cluster Load is Balanced'
 PROMETHEUS_PORT = 9090
 MASTER_LAG_THRESHOLD_SECONDS = 60
@@ -158,7 +160,6 @@ LOCALHOST = '<localhost>'
 # Global scope variables - do not change!
 LOG_TO_TERMINAL = True
 LOG_FILE = None
-
 ## Custom Functions
 
 # Log messages to output - all messages go thru this function
@@ -175,362 +176,6 @@ def log(msg, isError=False, logTime=False):
     else:
         LOG_FILE.write(output_msg + '\n')
 
-# Check to see if we are on a YBA server by hitting up port 9090 - try both http and https
-def yba_server(host, action, isDryRun):
-    log('Checking if host ' + host + ' is YBA Instance for "' + action + '"...')
-    found = False
-    try:
-        r = subprocess.check_output("systemctl list-units --all '{}.service'".format(YBA_PROCESS_STOP_LIST[0]), shell=True, stderr=subprocess.STDOUT)
-        if '{}.service'.format(YBA_PROCESS_STOP_LIST[0]) in str(r):
-            found = True
-
-    except subprocess.CalledProcessError as e:
-        log('Error checking for YBA process: ', isError=True,logTime=True)
-        log(e.output)
-
-    if found:
-        if action == "test":
-            return (True) # Caller just checking if this is a YBA 
-        activePath = subprocess.check_output(['readlink','-f','/opt/yugabyte/software/active'],text=True)
-        ybaVersion = activePath.rstrip('\n').split("/")[-1] # Last dir is a version like '2.18.5.2-b1'
-        if isDryRun:
-            log('Host is YBA Server {} - Dry run or Health check specified:no action taken'.format(ybaVersion),logTime=True)
-        else:
-            if action == 'stop':
-                log(' Host is YBA Server {} - Shutting down services...'.format(ybaVersion), logTime=True)
-                if ybaVersion >= '2.18.0':
-                    try:
-                        status=subprocess.check_output(['yba-ctl','stop'],  stderr=subprocess.STDOUT) # No output
-                        time.sleep(2)
-                        status=subprocess.check_output(['yba-ctl','status'],stderr=subprocess.STDOUT,text=True) 
-                        log(status,logTime=True)
-                        return(True)
-                    except subprocess.CalledProcessError as e:
-                        log('  yba-ctl stop failed - skipping. Err:{}'.format(str(e)),logTime=True)
-                else:    
-                  for svc in YBA_PROCESS_STOP_LIST:
-                    try:
-                        # This call triggers an error if the process is not active.
-                        log('  Stopping service ' + svc)
-                        status = subprocess.check_output('systemctl is-active {}.service'.format(svc), shell=True, stderr=subprocess.STDOUT)
-                        try:
-                            o = subprocess.check_output('systemctl stop {}.service'.format(svc), shell=True, stderr=subprocess.STDOUT)
-                            log('  Service ' + svc + ' stopped', logTime=True)
-                        except subprocess.CalledProcessError as err:
-                            log('Error stopping service' + svc + '- see output below', isError=True)
-                            log(err)
-                            log('\nProcess failed - exiting with code ' + str(NODE_YBA_ERROR))
-                            exit(NODE_YBA_ERROR)
-                    except subprocess.CalledProcessError as e:
-                        log('  Service {} is not running - skipping'.format(svc))
-
-            if action == 'resume':
-                log(' Host is YBA Server - Starting up services...', logTime=True)
-                if ybaVersion >= '2.18.0':
-                    try:
-                        status=subprocess.check_output(['yba-ctl','start'],  stderr=subprocess.STDOUT) # No output
-                        time.sleep(2)
-                        status=subprocess.check_output(['yba-ctl','status'], stderr=subprocess.STDOUT,text=True)
-                        log(status,logTime=True)
-                        return(True)
-                    except subprocess.CalledProcessError as e:
-                        log('  yba-ctl start failed. Err:{}'.format(str(e)),logTime=True,isError=True)
-                        exit(NODE_YBA_ERROR)
-                for svc in reversed(YBA_PROCESS_STOP_LIST):
-                    try:
-                        # This call triggers an error if the process is not active.
-                        log('  Stopping service ' + svc)
-                        status = subprocess.check_output('systemctl is-active {}.service'.format(svc), shell=True, stderr=subprocess.STDOUT)
-                        log('  Service {} is already running - skipping'.format(svc))
-                    except subprocess.CalledProcessError as e: # This is the code path if the service is not running
-                        try:
-                            o = subprocess.check_output('systemctl start {}.service'.format(svc), shell=True, stderr=subprocess.STDOUT)
-                            log('  Service ' + svc + ' started', logTime=True)
-                        except subprocess.CalledProcessError as err:
-                            log('Error starting service' + svc + '- see output below', isError=True)
-                            log(err)
-                            log(' Process failed - exiting with code ' + str(NODE_YBA_ERROR), logTime=True)
-                            exit(NODE_YBA_ERROR)
-        return(True)
-    else:
-        if action == 'test':
-            return (False)
-        log('  Host is NOT YBA Instance - checking if it is a DB Node')
-        return (False)
-
-
-# Get all universes on YBA deployment.  Note that a list of nodes is included here, so we return the entire universes array
-def get_universes(api_host, customer_uuid, api_token):
-    response = requests.get(api_host + '/api/customers/' + customer_uuid + '/universes',
-                            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token}, verify=False)
-    return (response.json())
-
-def maintenance_window(api_host, customer_uuid, universe, api_token, host, action):
-    w_id = find_window_by_name(api_host, customer_uuid, api_token, host)
-    if action == 'create':
-        mins_to_add = timedelta(minutes=MAINTENANCE_WINDOW_DURATION_MINUTES)
-        j = {"customerUUID" : customer_uuid,
-             "name" : MAINTENANCE_WINDOW_NAME + host,
-             "description" : MAINTENANCE_WINDOW_NAME + host,
-             "startTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-             "endTime": (datetime.now() + mins_to_add).strftime("%Y-%m-%d %H:%M:%S"),
-             "alertConfigurationFilter": {
-                 "targetType": "UNIVERSE",
-                 "target": {
-                     "all": False,
-                     "uuids": [universe['universeUUID']]
-                 }
-             }
-        }
-        if w_id is not None:
-            log('\n- Updating existing Maintenance window "{}" for {} minutes' \
-                .format(MAINTENANCE_WINDOW_NAME + host, str(MAINTENANCE_WINDOW_DURATION_MINUTES)) \
-                , logTime=True)
-            j['uuid'] = w_id
-            response = requests.put(
-                api_host + '/api/v1/customers/' + customer_uuid + '/maintenance_windows/' + w_id,
-                headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
-                json = j)
-        else:
-            log('\n- Creating Maintenance window "{}" for {} minutes' \
-                .format(MAINTENANCE_WINDOW_NAME + host, str(MAINTENANCE_WINDOW_DURATION_MINUTES)) \
-                , logTime=True)
-            response = requests.post(
-                api_host + '/api/v1/customers/' + customer_uuid + '/maintenance_windows',
-                headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
-                json = j)
-    else:
-        if w_id is not None:
-            log('\n- Removing Maintenance window "{}"'.format(MAINTENANCE_WINDOW_NAME + host), logTime=True)
-            response = requests.delete(
-                api_host + '/api/v1/customers/' + customer_uuid + '/maintenance_windows/' + w_id,
-                headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
-        else:
-            log('\n- No existing Maintenance window "{}" found to remove' \
-                .format(MAINTENANCE_WINDOW_NAME + host), logTime=True)
-
-
-
-def find_window_by_name(api_host, customer_uuid, api_token, host):
-    name = MAINTENANCE_WINDOW_NAME + host
-    response = requests.post(
-        api_host + '/api/v1/customers/' + customer_uuid + '/maintenance_windows/list',
-        headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
-        json={})
-    for w in response.json():
-        if w['name'] == name:
-            return(w['uuid'])
-    return None
-
-# Start node, then x-cluster - only print xluster status if dry run
-def start_node(api_host, customer_uuid, universe, api_token, node, dry_run=True, skip_xcluster=False, skip_maint_window=False):
-    try:
-        log('  Found node ' + node['nodeName'] + ' in Universe ' + universe['name'] + ' - UUID ' + universe[
-            'universeUUID'])
-        if dry_run:
-            log('--- Dry run only - all checks will be done, but replication will not be resumed and nothing will be started ')
-            log('Node ' + node['nodeName'] + ' state: ' + node['state'])
-        else:
-            ## Startup server
-            log(' Starting up DB server', logTime=True)
-            if node['state'] != 'Stopped':
-                if node['state'] != 'Live':
-                    log('  Node ' + node['nodeName'] + ' is in "' + node['state'] +
-                        '" state - needs to be in "Stopped" or "Live" state to continue')
-                    log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
-                    exit(NODE_DB_ERROR)
-                log('  Node ' + node['nodeName'] + ' is already in "Live" state - skipping startup')
-            else:
-                response = requests.put(
-                    api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe[
-                        'universeUUID'] + '/nodes/' + node['nodeName'],
-                    headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
-                    json=json.loads('{"nodeAction": "START"}'))
-                task = response.json()
-                if 'error' in task:
-                    log('Could not start node : ' + task['error'], logTime=True,isError=True)
-                    log('Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
-                    exit(NODE_DB_ERROR)
-                if wait_for_task(api_host, customer_uuid, task['taskUUID'], api_token):
-                    log(' Server startup complete', logTime=True)
-                    restarted = True
-                else:
-                    raise Exception("Failed to resume DB Node")
-
-        ## Resume x-cluster replication
-        if skip_xcluster:
-            log('\n- Skipping resume of x-cluster replication')
-        else:
-            ## resume source replication
-            log('\n- Resuming x-cluster replication')
-            resume_count = 0
-            if 'sourceXClusterConfigs' in universe['universeDetails']:
-                for rpl in universe['universeDetails']['sourceXClusterConfigs']:
-                    if dry_run:
-                        response = requests.get(
-                            api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl,
-                            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
-                        xcl_cfg = response.json()
-                        xcCurrState = ''
-                        if 'paused' in xcl_cfg:
-                            if xcl_cfg['paused']:
-                                xcCurrState = 'Paused'
-                            else:
-                                xcCurrState = 'Running'
-                        else:
-                            xcCurrState = xcl_cfg['status']
-                        log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcCurrState)
-                    else:
-                        # Pause/resume as directed and if not in the correct state
-                        if alter_replication(api_host, api_token, customer_uuid, 'resume', rpl):
-                            resume_count += 1
-                        else:
-                            raise Exception("Failed to resume x-cluster replication")
-
-            ## resume target replication
-            if 'targetXClusterConfigs' in universe['universeDetails']:
-                for rpl in universe['universeDetails']['targetXClusterConfigs']:
-                    if dry_run:
-                        response = requests.get(
-                            api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl,
-                            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
-                        xcl_cfg = response.json()
-                        xcCurrState = ''
-                        if 'paused' in xcl_cfg:
-                            if xcl_cfg['paused']:
-                                xcCurrState = 'Paused'
-                            else:
-                                xcCurrState = 'Running'
-                        else:
-                            xcCurrState = xcl_cfg['status']
-                        log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcCurrState)
-                    else:
-                        # Pause/resume as directed and if not in the correct state
-                        if alter_replication(api_host, api_token, customer_uuid, 'resume', rpl):
-                            resume_count += 1
-                        else:
-                            raise Exception("Failed to resume x-cluster replication")
-            if resume_count > 0:
-                if dry_run:
-                    log('  ' + str(resume_count) + ' x-cluster streams were found, but not resumed due to dry run')
-                else:
-                    log('  ' + str(resume_count) + ' x-cluster streams are now running')
-            else:
-                log('  No x-cluster replications were found to resume')
-
-
-        # Remove existing maintenence window
-        if not skip_maint_window:
-            maintenance_window(api_host, customer_uuid, universe, api_token, node['nodeName'], 'remove')
-
-    except Exception as e:
-        log(e, True)
-        log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
-        exit(NODE_DB_ERROR)
-
-def get_node_health (node_type, node, yba_state):
-    uri = None
-    can_reach = True
-    if node_type.lower() == 'master':
-        uri = node['cloudInfo']['private_ip'] + ':' + str(node['masterHttpPort']) + '/api/v1/health-check'
-    elif node_type.lower() == 'tserver':
-        uri = node['cloudInfo']['private_ip'] + ':' + str(node['tserverHttpPort']) + '/api/v1/health-check'
-    else:
-        raise Exception('Invalid node type "{}" for node health'.format(node_type))
-
-    try:
-        resp = requests.get('http://' + uri)
-    except:
-        try:
-            resp = requests.get('https://' + uri)
-        except:
-            can_reach = False
-            pass
-
-    if yba_state == 'Live':
-        if can_reach:
-            return True, None
-        else:
-            return False, '{} is running according to YBA, but stopped or uncommunicative'.format(node_type)
-    else:
-        if can_reach:
-            return False, '{} is stopped according to YBA, but running on node'.format(node_type)
-        else:
-            return True, None
-
-
-# Verify tServer/Master processes are in same state as YBA thinks they are
-def verify(api_host, customer_uuid, universe, api_token, node):
-    log('Verifying Master and tServer on node {} are in correct state per YBA'.format(node['cloudInfo']['private_ip']))
-    log(' - YBA shows node as being {}'.format(node['state']))
-    errs = 0
-
-    if node['state'] == 'Live':
-        if node['isMaster']:
-            log('   YBA shows node as having a Master - checking for process')
-            passed, message = get_node_health('Master', node, node['state'])
-            if passed:
-                log('     Check passed: master process found on node')
-            else:
-                log(message, True)
-                errs += 1
-        else:
-            log('   YBA shows node as NOT having a Master - skipping check')
-
-        if node['isTserver']:
-            log('   YBA shows node as having a tServer - checking for process')
-            passed, message = get_node_health('tServer', node, node['state'])
-            if passed:
-                log('     Check passed: tServer process found on node')
-            else:
-                log(message, True)
-                errs += 1
-        else:
-            log('   YBA shows node as NOT having a  tServer - skipping check')
-    elif node['state'] == 'Stopped':
-        passed, message = get_node_health('Master', node, node['state'])
-        if passed:
-            log('     Check passed: No master process found on node')
-        else:
-            log(message, True)
-            errs += 1
-
-        passed, message = get_node_health('Tserver', node, node['state'])
-        if passed:
-            log('     Check passed: No tServer process found on node')
-        else:
-            log(message, True)
-            errs += 1
-    else:
-        log('Node is in state "' + node['state'] + '" and cannot be verified.  Node must be LIVE or STOPPED to run verification', True)
-        errs += 1
-
-    if errs > 0:
-        raise Exception("Node process verification failed")
-    return True
-
-# get Master leader
-def get_master_leader_ip(api_host, customer_uuid, api_token, universe):
-    resp = requests.get(
-        api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe['universeUUID'] + '/leader',
-        headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
-    j = resp.json()
-    print('----------------------')
-    print(j)
-    if not isinstance(j, dict):
-        raise Exception("Call to get leader IP returned {} instead of dict".format(type(j)))
-    if not 'privateIP' in j:
-        raise Exception("Could not determine master leader - privateIP was not found in {}".format(j))
-    return(get_node_ip(j['privateIP']))
-
-
-def get_node_ip(addr):
-    try:
-        socket.inet_aton(addr)
-        return(addr)
-    except:
-        return(socket.gethostbyname(addr))
-
 def retry_successful(retriable_function_call, params=None, retry=10, verbose=False, sleep=.5, fatal=False):
     for i in range(retry):
         try:
@@ -546,96 +191,126 @@ def retry_successful(retriable_function_call, params=None, retry=10, verbose=Fal
             if fatal and i == (retry - 1):
                 raise  # Re-raise current exception
             continue
-
     return False
 
-def stepdown_master(api_host, customer_uuid, api_token, universe, node, ldr_ip):
-    status = subprocess.check_output(LEADER_STEP_DOWN_COMMAND.format(ldr_ip + ' master_leader_stepdown'),
-                                             shell=True, stderr=subprocess.STDOUT)
-    time.sleep(random.randint(10, MAX_TIME_TO_SLEEP_SECONDS))
-    new_ldr = get_master_leader_ip(api_host, customer_uuid, api_token, universe)
-    if new_ldr == ldr_ip:
-        raise Exception('   An error occurred while trying to step down master node  - proceeding with shutdown' )
-
-
-# Stop x-cluster and then the node processes
-def stop_node(api_host, customer_uuid, universe, api_token, node, skip_xcluster=False, skip_maint_window=False):
+def get_node_ip(addr): # Returns dotted-decimal addr
     try:
-        # Add maintenence window
-        if not skip_maint_window:
-            maintenance_window(api_host, customer_uuid, universe, api_token, node['nodeName'], 'create')
+        socket.inet_aton(addr)
+        return(addr)
+    except:
+        return(socket.gethostbyname(addr))
 
-        ## Pause x-cluster replication if specified
-        if skip_xcluster:
-            log('\n- Skipping pause of x-cluster replication')
-        else:
-            ## pause source replication
-            log('\n- Pausing x-cluster replication', logTime=True)
-            paused_count = 0
-            ## pause source replication
-            if 'sourceXClusterConfigs' in universe['universeDetails']:
-                for rpl in universe['universeDetails']['sourceXClusterConfigs']:
-                    ## First, sleep a bit to prevent race condition when patching multiple servers concurrently
-                    time.sleep(random.randint(1, MAX_TIME_TO_SLEEP_SECONDS))
-                    if alter_replication(api_host, api_token, customer_uuid, 'pause', rpl):
-                        paused_count += 1
-                    else:
-                        raise Exception("Failed to pause x-cluster replication")
-            ## pause target replication
-            if 'targetXClusterConfigs' in universe['universeDetails']:
-                for rpl in universe['universeDetails']['targetXClusterConfigs']:
-                    ## First, sleep a bit to prevent race condition when patching multiple servers concurrently
-                    time.sleep(random.randint(1, MAX_TIME_TO_SLEEP_SECONDS))
-                    if alter_replication(api_host, api_token, customer_uuid, 'pause', rpl):
-                        paused_count += 1
-                    else:
-                        raise Exception("Failed to pause x-cluster replication")
-            if paused_count > 0:
-                log('  ' + str(paused_count) + ' x-cluster streams are currently paused', logTime=True)
+#-------------- Class definitions ---------------------------------------
+class NotMyTypeException(Exception):
+    pass
+
+class YBA_Node:
+    _YBA_PROCESS_STOP_LIST = ['yb-platform', 'prometheus', 'rh-nginx118-nginx', 'rh-postgresql10-postgresql']
+
+    def __init__(self,host,YBA_API):
+        #log('Checking if host ' + host + ' is YBA Instance')
+        self.hostname = host
+        self.YBA_API = YBA_API
+        try:
+            r = subprocess.check_output("systemctl list-units --all '{}.service'".format(YBA_Node._YBA_PROCESS_STOP_LIST[0]), shell=True, stderr=subprocess.STDOUT)
+            if '{}.service'.format(YBA_Node._YBA_PROCESS_STOP_LIST[0]) in str(r):
+                self.setVersion()
+                return None # Successful
             else:
-                log('  No x-cluster replications were found to pause', logTime=True)
+                raise NotMyTypeException(host + " is not a YBA node")
+        except subprocess.CalledProcessError as e:
+            log('Error checking for YBA process: ', isError=True,logTime=True)
+            log(e.output,isError=True)
+            exit(5)
 
-        ## Step down if master
-        log('\n - Checking if node {} is master leader before shutting down'.format(node['cloudInfo']['private_ip']))
-        ldr_ip = get_master_leader_ip(api_host, customer_uuid, api_token, universe)
-        if ldr_ip == get_node_ip(node['cloudInfo']['private_ip']):
-            log('   Node is currently master leader - stepping down before shutdown')
-            if retry_successful(stepdown_master, params=[api_host, customer_uuid, api_token, universe, node, ldr_ip], verbose=True):
-                log('Master stepdown succeeded', logTime=True)
-            else:
-                log('Failed to stepdown master', logTime=True)
+    def setVersion(self):
+        activePath = subprocess.check_output(['readlink','-f','/opt/yugabyte/software/active'],text=True)
+        self.ybaVersion = activePath.rstrip('\n').split("/")[-1] # Last dir is a version like '2.18.5.2-b1'
 
-        ## Shutdown server
-        log(' Shutting down DB server' + str(node['nodeName']), logTime=True)
-        response = requests.put(
-            api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe[
-                'universeUUID'] + '/nodes/' + node['nodeName'],
-            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
-            json=json.loads('{"nodeAction": "STOP"}'))
-        task = response.json()
-        if 'error' in task:
-            log('Could not shut down node : ' + task['error'], True)
-            log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
-            exit(NODE_DB_ERROR)
-        if wait_for_task(api_host, customer_uuid, task['taskUUID'], api_token):
-            log(' Server shut down and ready for maintenance', logTime=True)
-        else:
-            log(' Error stopping node', True, logTime=True)
-            raise Exception("Failed to stop Node")
-    except Exception as e:
-        log(e, True)
-        log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
-        exit(NODE_DB_ERROR)
+    def health(self):
+        if self.ybaVersion < '2.18.0':
+            raise("'health' is not Implemented for YBA version " + self.ybaVersion + " (< 2.18)")
+        try:
+            status=subprocess.check_output(['yba-ctl','status'],stderr=subprocess.STDOUT,text=True) 
+        except subprocess.CalledProcessError as e:
+            log('Error checking for YBA status: ', isError=True,logTime=True)
+            log(e.output,isError=True)
+            raise # re-raise for caller's benefit 
+        log(status,logTime=True)
 
+    def resume(self):
+        log(' Host is YBA Server - Starting up services...', logTime=True)
+        if self.ybaVersion >= '2.18.0':
+            try:
+                status=subprocess.check_output(['yba-ctl','start'],  stderr=subprocess.STDOUT) # No output
+                time.sleep(2)
+                self.health()
+                return(True)
+            except subprocess.CalledProcessError as e:
+                log('  yba-ctl start failed. Err:{}'.format(str(e)),logTime=True,isError=True)
+                exit(NODE_YBA_ERROR)
+        # Older YBA - shut down individual services 
+        for svc in reversed(YBA_Node.YBA_PROCESS_STOP_LIST):
+            try:
+                # This call triggers an error if the process is not active.
+                log('  Stopping service ' + svc)
+                status = subprocess.check_output('systemctl is-active {}.service'.format(svc), shell=True, stderr=subprocess.STDOUT)
+                log('  Service {} is already running - skipping'.format(svc))
+            except subprocess.CalledProcessError as e: # This is the code path if the service is not running
+                try:
+                    o = subprocess.check_output('systemctl start {}.service'.format(svc), shell=True, stderr=subprocess.STDOUT)
+                    log('  Service ' + svc + ' started', logTime=True)
+                except subprocess.CalledProcessError as err:
+                    log('Error starting service' + svc + '- see output below', isError=True)
+                    log(err)
+                    log(' Process failed - exiting with code ' + str(NODE_YBA_ERROR), logTime=True)
+                    exit(NODE_YBA_ERROR)
 
-def health_check(api_host, customer_uuid, universe, api_token, node=None):
-    try:
-        errcount = 0;
-        log('Performing health checks for universe {}, UUID {}...'.format(universe['name'], universe['universeUUID']))
+    def stop(self):
+        log(' Host is YBA Server {} - Shutting down services...'.format(self.ybaVersion), logTime=True)
+        if self.ybaVersion >= '2.18.0':
+            try:
+                status=subprocess.check_output(['yba-ctl','stop'],  stderr=subprocess.STDOUT) # No output
+                time.sleep(2)
+                self.health()
+                return(True)
+            except subprocess.CalledProcessError as e:
+                log('  yba-ctl stop failed - skipping. Err:{}'.format(str(e)),logTime=True)
+                exit(NODE_YBA_ERROR)
 
+        for svc in YBA_Node.YBA_PROCESS_STOP_LIST:
+            try:
+                # This call triggers an error if the process is not active.
+                log('  Stopping service ' + svc)
+                status = subprocess.check_output('systemctl is-active {}.service'.format(svc), shell=True, stderr=subprocess.STDOUT)
+                try:
+                    o = subprocess.check_output('systemctl stop {}.service'.format(svc), shell=True, stderr=subprocess.STDOUT)
+                    log('  Service ' + svc + ' stopped', logTime=True)
+                except subprocess.CalledProcessError as err:
+                    log('Error stopping service' + svc + '- see output below', isError=True)
+                    log(err)
+                    log('\nProcess failed - exiting with code ' + str(NODE_YBA_ERROR))
+                    exit(NODE_YBA_ERROR)
+            except subprocess.CalledProcessError as e:
+                log('  Service {} is not running - skipping'.format(svc))
+
+class YBA_API_CLASS:
+    def __init__(self,api_host, customer_uuid, api_token):
+        self.api_host      = api_host
+        self.customer_uuid = customer_uuid
+        self.api_token     = api_token
+        self.universe      = None
+        self.initialized   = False
+
+    def Initialize(self):
+        if self.initialized:
+            return
+        retry_successful(self.get_customers, params=[], retry=5,verbose=True,sleep=5,fatal=True)
+        log('Retrieving Universes from YBA server at ' +self.api_host)
+        self.get_universes()
         # put together Prometheus URL by stripping off existing port of API server if specified and appending proper port
         # Then try https, if fails, step down to http
-        tmp_url = api_host.split(':')
+        tmp_url = self.api_host.split(':')
         promhost = tmp_url[0] + ':' + tmp_url[1] + ':' + str(PROMETHEUS_PORT) + '/api/v1/query'
         try:
             log('\nChecking for prometheus host at {}'.format(promhost))
@@ -649,221 +324,621 @@ def health_check(api_host, customer_uuid, universe, api_token, node=None):
                 log('Could not contact prometheus host at {}'.format(promhost), True)
                 errcount += 1;
         log('Using prometheus host at {}\n'.format(promhost))
+        self.promhost=promhost
+        self.initialized = True
 
-        if node is not None:
-            log('Found node ' + node['nodeName'] + ' in Universe ' + universe['name'] + ' - UUID ' + universe['universeUUID'])
+# Get all universes on YBA deployment.  Note that a list of nodes is included here, so we return the entire universes array
+    def get_universes(self):
+        response = requests.get(self.api_host + '/api/customers/' + self.customer_uuid + '/universes',
+                                headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False)
+        self.all_universes = response.json()
+        return (response.json())
 
-        log('- Checking for task placement UUID')
-        if (PLACEMENT_TASK_FIELD in universe and len(universe[PLACEMENT_TASK_FIELD]) > 0) or \
-                (PLACEMENT_TASK_FIELD in universe['universeDetails'] and len(universe['universeDetails'][PLACEMENT_TASK_FIELD]) > 0):
-            log('Non-empty ' + PLACEMENT_TASK_FIELD + ' found in universe', True)
-            errcount +=1
-        else:
-            log('  Passed placement task test')
+    def find_universe_for_node(self,hostname=None,ip=None):
+        for universe in self.all_universes:
+            for node in universe['universeDetails']['nodeDetailsSet']:
+                if str(node['nodeName']).upper() in hostname.upper() or hostname.upper() in \
+                    str(node['nodeName']).upper() or \
+                        node['cloudInfo']['private_ip'] == ip or \
+                        node['cloudInfo']['public_ip'] == ip or \
+                        node['cloudInfo']['private_ip'].upper() in hostname.upper():
+                    return universe,node 
+        return None,None
 
-        log('- Checking for dead nodes, tservers and masters')
+  
+    def get_universe_info(self,univ_uuid,endpoint):
         resp = requests.get(
-            api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe['universeUUID'] + '/status',
-            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
-        nlist = resp.json()
-        # this one comes back as a dict instead of proper JSON, also last key is uuid, which we need to ignore
-        for n in nlist:
-            if n != 'universe_uuid':
-                if nlist[n]['node_status'] != 'Live':
-                    log('  Node ' + n + ' is not alive', True)
-                    errcount += 1
+                self.api_host + '/api/v1/customers/' + self.customer_uuid + '/universes/' + univ_uuid + endpoint,
+                headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False)
+        return resp.json()
+    
+    def maintenance_window(self, host, action):
+        w_id = self.find_window_by_name(host)
+        if action == 'create':
+            mins_to_add = timedelta(minutes=MAINTENANCE_WINDOW_DURATION_MINUTES)
+            j = {"customerUUID" : self.customer_uuid,
+                "name" : MAINTENANCE_WINDOW_NAME + host,
+                "description" : MAINTENANCE_WINDOW_NAME + host,
+                "startTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "endTime": (datetime.now() + mins_to_add).strftime("%Y-%m-%d %H:%M:%S"),
+                "alertConfigurationFilter": {
+                    "targetType": "UNIVERSE",
+                    "target": {
+                        "all": False,
+                        "uuids": [self.universe['universeUUID']]
+                    }
+                }
+            }
+            if w_id is not None:
+                log('\n- Updating existing Maintenance window "{}" for {} minutes' \
+                    .format(MAINTENANCE_WINDOW_NAME + host, str(MAINTENANCE_WINDOW_DURATION_MINUTES)) \
+                    , logTime=True)
+                j['uuid'] = w_id
+                response = requests.put(
+                    self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + w_id,
+                    headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
+                    json = j)
+            else:
+                log('\n- Creating Maintenance window "{}" for {} minutes' \
+                    .format(MAINTENANCE_WINDOW_NAME + host, str(MAINTENANCE_WINDOW_DURATION_MINUTES)) \
+                    , logTime=True)
+                response = requests.post(
+                    self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows',
+                    headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
+                    json = j)
+        else:
+            if w_id is not None:
+                log('\n- Removing Maintenance window "{}"'.format(MAINTENANCE_WINDOW_NAME + host), logTime=True)
+                response = requests.delete(
+                    self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + w_id,
+                    headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False)
+            else:
+                log('\n- No existing Maintenance window "{}" found to remove' \
+                    .format(MAINTENANCE_WINDOW_NAME + host), logTime=True)
 
-                for nodes in universe['universeDetails']['nodeDetailsSet']:
-                    if nodes['nodeName'] == n:
-                        if nodes['isMaster'] and not nlist[n]['master_alive']:
-                            log('  Node ' + n + ' master is not alive', True)
-                            errcount += 1
 
-                        if nodes['isTserver'] and not nlist[n]['tserver_alive']:
-                            log('  Node ' + n + ' tserver is not alive', True)
-                            errcount += 1
-        if errcount == 0:
-            log('  All nodes, masters and t-servers are alive.')
 
-        log('- Checking for master and tablet health')
-        if node is not None:
-            if not node['isMaster']:
-                log('  ### Warning: node is not a Master ###')
-            if not node['isTserver']:
-                log('  ### Warning: node is not a TServer ###')
+    def find_window_by_name(self, host):
+        name = MAINTENANCE_WINDOW_NAME + host
+        response = requests.post(
+            self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/list',
+            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
+            json={})
+        for w in response.json():
+            if w['name'] == name:
+                return(w['uuid'])
+        return None
 
-        master_node = None
-        for masternode in universe['universeDetails']['nodeDetailsSet']:
-            if masternode['isMaster'] and masternode['state'] == 'Live':
-                master_node = masternode['cloudInfo']['private_ip'] + ':' + str(masternode['masterHttpPort'])
-                break
+    def get_customers(self):
+            response = requests.get(self.api_host + '/api/customers/' + self.customer_uuid,
+                                headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token},
+                                timeout=5, verify=False)
+            response.raise_for_status()
+            self.customers = response.json()
 
-        try:  # try both http and https endpoints
-            resp = requests.get('https://' + master_node + '/api/v1/health-check')
-            hc = resp.json()
+class YB_Data_Node:
+
+    def __init__(self,hostname,YBA_API):
+        #log('Checking if host ' + hostname + ' is a YB Data node...')
+        self.hostname = hostname
+        self.ip       = get_node_ip(hostname)
+        self.YBA_API  = YBA_API
+        try:
+           services = subprocess.check_output(["sudo","crontab","-u","yugabyte","-l"])
+           if " master " in str(services)  or  " tserver " in str(services):
+               return None # Successfuly instantiated
+        except subprocess.CalledProcessError:
+           pass # If the crontab is empty, it will have exit code 1, which we want to ignore
+
+        try:           
+           services = subprocess.check_output(['sudo','runuser','-l','yugabyte','-c','systemctl --user list-units'])
+           if 'yb-tserver.service' in str(services)  or  'yb-master.service' in str(services):
+               return None
+           # "master" / "tserver" were NOT FOUND 
+           raise NotMyTypeException(hostname + " is not a YB Data node")
+        except subprocess.CalledProcessError as e:
+            log('Error checking for YB DB process: ', isError=True,logTime=True)
+            log(e.output,isError=True)
+            exit(5)
+
+    # Start node, then x-cluster - only print xluster status if dry run
+    def start_node(api_host, customer_uuid, universe, api_token, node, dry_run=True, skip_xcluster=False, skip_maint_window=False):
+        try:
+            log('  Found node ' + node['nodeName'] + ' in Universe ' + universe['name'] + ' - UUID ' + universe[
+                'universeUUID'])
+            if dry_run:
+                log('--- Dry run only - all checks will be done, but replication will not be resumed and nothing will be started ')
+                log('Node ' + node['nodeName'] + ' state: ' + node['state'])
+            else:
+                ## Startup server
+                log(' Starting up DB server', logTime=True)
+                if node['state'] != 'Stopped':
+                    if node['state'] != 'Live':
+                        log('  Node ' + node['nodeName'] + ' is in "' + node['state'] +
+                            '" state - needs to be in "Stopped" or "Live" state to continue')
+                        log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
+                        exit(NODE_DB_ERROR)
+                    log('  Node ' + node['nodeName'] + ' is already in "Live" state - skipping startup')
+                else:
+                    response = requests.put(
+                        api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe[
+                            'universeUUID'] + '/nodes/' + node['nodeName'],
+                        headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
+                        json=json.loads('{"nodeAction": "START"}'))
+                    task = response.json()
+                    if 'error' in task:
+                        log('Could not start node : ' + task['error'], logTime=True,isError=True)
+                        log('Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
+                        exit(NODE_DB_ERROR)
+                    if wait_for_task(api_host, customer_uuid, task['taskUUID'], api_token):
+                        log(' Server startup complete', logTime=True)
+                        restarted = True
+                    else:
+                        raise Exception("Failed to resume DB Node")
+
+            ## Resume x-cluster replication
+            if skip_xcluster:
+                log('\n- Skipping resume of x-cluster replication')
+            else:
+                ## resume source replication
+                log('\n- Resuming x-cluster replication')
+                resume_count = 0
+                if 'sourceXClusterConfigs' in universe['universeDetails']:
+                    for rpl in universe['universeDetails']['sourceXClusterConfigs']:
+                        if dry_run:
+                            response = requests.get(
+                                api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl,
+                                headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
+                            xcl_cfg = response.json()
+                            xcCurrState = ''
+                            if 'paused' in xcl_cfg:
+                                if xcl_cfg['paused']:
+                                    xcCurrState = 'Paused'
+                                else:
+                                    xcCurrState = 'Running'
+                            else:
+                                xcCurrState = xcl_cfg['status']
+                            log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcCurrState)
+                        else:
+                            # Pause/resume as directed and if not in the correct state
+                            if alter_replication(api_host, api_token, customer_uuid, 'resume', rpl):
+                                resume_count += 1
+                            else:
+                                raise Exception("Failed to resume x-cluster replication")
+
+                ## resume target replication
+                if 'targetXClusterConfigs' in universe['universeDetails']:
+                    for rpl in universe['universeDetails']['targetXClusterConfigs']:
+                        if dry_run:
+                            response = requests.get(
+                                api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl,
+                                headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
+                            xcl_cfg = response.json()
+                            xcCurrState = ''
+                            if 'paused' in xcl_cfg:
+                                if xcl_cfg['paused']:
+                                    xcCurrState = 'Paused'
+                                else:
+                                    xcCurrState = 'Running'
+                            else:
+                                xcCurrState = xcl_cfg['status']
+                            log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcCurrState)
+                        else:
+                            # Pause/resume as directed and if not in the correct state
+                            if alter_replication(api_host, api_token, customer_uuid, 'resume', rpl):
+                                resume_count += 1
+                            else:
+                                raise Exception("Failed to resume x-cluster replication")
+                if resume_count > 0:
+                    if dry_run:
+                        log('  ' + str(resume_count) + ' x-cluster streams were found, but not resumed due to dry run')
+                    else:
+                        log('  ' + str(resume_count) + ' x-cluster streams are now running')
+                else:
+                    log('  No x-cluster replications were found to resume')
+
+
+            # Remove existing maintenence window
+            if not skip_maint_window:
+                maintenance_window(api_host, customer_uuid, universe, api_token, node['nodeName'], 'remove')
+
+        except Exception as e:
+            log(e, True)
+            log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
+            exit(NODE_DB_ERROR)
+
+    def get_node_health (node_type, node, yba_state):
+        uri = None
+        can_reach = True
+        if node_type.lower() == 'master':
+            uri = node['cloudInfo']['private_ip'] + ':' + str(node['masterHttpPort']) + '/api/v1/health-check'
+        elif node_type.lower() == 'tserver':
+            uri = node['cloudInfo']['private_ip'] + ':' + str(node['tserverHttpPort']) + '/api/v1/health-check'
+        else:
+            raise Exception('Invalid node type "{}" for node health'.format(node_type))
+
+        try:
+            resp = requests.get('http://' + uri)
         except:
-            resp = requests.get('http://' + master_node + '/api/v1/health-check')
-            hc = resp.json()
-        hc_errs = 0
-        for n in hc:
-            if n == 'most_recent_uptime':
-                log('  Most recent uptime: ' + str(hc[n]) + ' seconds')
-                if hc[n] < MIN_MOST_RECENT_UPTIME_SECONDS:
-                    log('All nodes in the cluster have not been up for the minumim of ' + str(
-                        MIN_MOST_RECENT_UPTIME_SECONDS) + ' seconds', True)
+            try:
+                resp = requests.get('https://' + uri)
+            except:
+                can_reach = False
+                pass
+
+        if yba_state == 'Live':
+            if can_reach:
+                return True, None
+            else:
+                return False, '{} is running according to YBA, but stopped or uncommunicative'.format(node_type)
+        else:
+            if can_reach:
+                return False, '{} is stopped according to YBA, but running on node'.format(node_type)
+            else:
+                return True, None
+
+
+    # Verify tServer/Master processes are in same state as YBA thinks they are
+    def verify(api_host, customer_uuid, universe, api_token, node):
+        log('Verifying Master and tServer on node {} are in correct state per YBA'.format(node['cloudInfo']['private_ip']))
+        log(' - YBA shows node as being {}'.format(node['state']))
+        errs = 0
+
+        if node['state'] == 'Live':
+            if node['isMaster']:
+                log('   YBA shows node as having a Master - checking for process')
+                passed, message = get_node_health('Master', node, node['state'])
+                if passed:
+                    log('     Check passed: master process found on node')
+                else:
+                    log(message, True)
+                    errs += 1
+            else:
+                log('   YBA shows node as NOT having a Master - skipping check')
+
+            if node['isTserver']:
+                log('   YBA shows node as having a tServer - checking for process')
+                passed, message = get_node_health('tServer', node, node['state'])
+                if passed:
+                    log('     Check passed: tServer process found on node')
+                else:
+                    log(message, True)
+                    errs += 1
+            else:
+                log('   YBA shows node as NOT having a  tServer - skipping check')
+        elif node['state'] == 'Stopped':
+            passed, message = get_node_health('Master', node, node['state'])
+            if passed:
+                log('     Check passed: No master process found on node')
+            else:
+                log(message, True)
+                errs += 1
+
+            passed, message = get_node_health('Tserver', node, node['state'])
+            if passed:
+                log('     Check passed: No tServer process found on node')
+            else:
+                log(message, True)
+                errs += 1
+        else:
+            log('Node is in state "' + node['state'] + '" and cannot be verified.  Node must be LIVE or STOPPED to run verification', True)
+            errs += 1
+
+        if errs > 0:
+            raise Exception("Node process verification failed")
+        return True
+
+    # get Master leader
+    def get_master_leader_ip(api_host, customer_uuid, api_token, universe):
+        resp = requests.get(
+            api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe['universeUUID'] + '/leader',
+            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
+        j = resp.json()
+        print('----------------------')
+        print(j)
+        if not isinstance(j, dict):
+            raise Exception("Call to get leader IP returned {} instead of dict".format(type(j)))
+        if not 'privateIP' in j:
+            raise Exception("Could not determine master leader - privateIP was not found in {}".format(j))
+        return(get_node_ip(j['privateIP']))
+
+
+
+
+    def stepdown_master(api_host, customer_uuid, api_token, universe, node, ldr_ip):
+        status = subprocess.check_output(LEADER_STEP_DOWN_COMMAND.format(ldr_ip + ' master_leader_stepdown'),
+                                                 shell=True, stderr=subprocess.STDOUT)
+        time.sleep(random.randint(10, MAX_TIME_TO_SLEEP_SECONDS))
+        new_ldr = get_master_leader_ip(api_host, customer_uuid, api_token, universe)
+        if new_ldr == ldr_ip:
+            raise Exception('   An error occurred while trying to step down master node  - proceeding with shutdown' )
+
+
+    # Stop x-cluster and then the node processes
+    def stop_node(api_host, customer_uuid, universe, api_token, node, skip_xcluster=False, skip_maint_window=False):
+        try:
+            # Add maintenence window
+            if not skip_maint_window:
+                maintenance_window(api_host, customer_uuid, universe, api_token, node['nodeName'], 'create')
+
+            ## Pause x-cluster replication if specified
+            if skip_xcluster:
+                log('\n- Skipping pause of x-cluster replication')
+            else:
+                ## pause source replication
+                log('\n- Pausing x-cluster replication', logTime=True)
+                paused_count = 0
+                ## pause source replication
+                if 'sourceXClusterConfigs' in universe['universeDetails']:
+                    for rpl in universe['universeDetails']['sourceXClusterConfigs']:
+                        ## First, sleep a bit to prevent race condition when patching multiple servers concurrently
+                        time.sleep(random.randint(1, MAX_TIME_TO_SLEEP_SECONDS))
+                        if alter_replication(api_host, api_token, customer_uuid, 'pause', rpl):
+                            paused_count += 1
+                        else:
+                            raise Exception("Failed to pause x-cluster replication")
+                ## pause target replication
+                if 'targetXClusterConfigs' in universe['universeDetails']:
+                    for rpl in universe['universeDetails']['targetXClusterConfigs']:
+                        ## First, sleep a bit to prevent race condition when patching multiple servers concurrently
+                        time.sleep(random.randint(1, MAX_TIME_TO_SLEEP_SECONDS))
+                        if alter_replication(api_host, api_token, customer_uuid, 'pause', rpl):
+                            paused_count += 1
+                        else:
+                            raise Exception("Failed to pause x-cluster replication")
+                if paused_count > 0:
+                    log('  ' + str(paused_count) + ' x-cluster streams are currently paused', logTime=True)
+                else:
+                    log('  No x-cluster replications were found to pause', logTime=True)
+
+            ## Step down if master
+            log('\n - Checking if node {} is master leader before shutting down'.format(node['cloudInfo']['private_ip']))
+            ldr_ip = get_master_leader_ip(api_host, customer_uuid, api_token, universe)
+            if ldr_ip == get_node_ip(node['cloudInfo']['private_ip']):
+                log('   Node is currently master leader - stepping down before shutdown')
+                if retry_successful(stepdown_master, params=[api_host, customer_uuid, api_token, universe, node, ldr_ip], verbose=True):
+                    log('Master stepdown succeeded', logTime=True)
+                else:
+                    log('Failed to stepdown master', logTime=True)
+
+            ## Shutdown server
+            log(' Shutting down DB server' + str(node['nodeName']), logTime=True)
+            response = requests.put(
+                api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe[
+                    'universeUUID'] + '/nodes/' + node['nodeName'],
+                headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
+                json=json.loads('{"nodeAction": "STOP"}'))
+            task = response.json()
+            if 'error' in task:
+                log('Could not shut down node : ' + task['error'], True)
+                log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
+                exit(NODE_DB_ERROR)
+            if wait_for_task(api_host, customer_uuid, task['taskUUID'], api_token):
+                log(' Server shut down and ready for maintenance', logTime=True)
+            else:
+                log(' Error stopping node', True, logTime=True)
+                raise Exception("Failed to stop Node")
+        except Exception as e:
+            log(e, True)
+            log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
+            exit(NODE_DB_ERROR)
+
+
+    def health(self):
+        try:
+            self.YBA_API.Initialize()
+            errcount = 0;
+            self.universe_json, self.node_json = self.YBA_API.find_universe_for_node(self.hostname)
+            log('Performing health checks for universe {}, UUID {}...'.format(self.universe_json['name'], self.universe_json['universeUUID']))
+
+            if self.node_json is not None:
+                log('Found node ' + self.node_json['nodeName'] + ' in Universe ' + self.universe_json['name'] + ' - UUID ' + self.universe_json['universeUUID'])
+
+            log('- Checking for task placement UUID')
+            if (PLACEMENT_TASK_FIELD in self.universe_json and len(self.universe_json[PLACEMENT_TASK_FIELD]) > 0) or \
+                    (PLACEMENT_TASK_FIELD in self.universe_json['universeDetails'] and len(self.universe_json['universeDetails'][PLACEMENT_TASK_FIELD]) > 0):
+                log('Non-empty ' + PLACEMENT_TASK_FIELD + ' found in universe', True)
+                errcount +=1
+            else:
+                log('  Passed placement task test')
+
+            log('- Checking for dead nodes, tservers and masters')
+            nlist = self.YBA_API.get_universe_info(self.universe_json['universeUUID'],'/status')
+            # this one comes back as a dict instead of proper JSON, also last key is uuid, which we need to ignore
+            for n in nlist:
+                if n != 'universe_uuid':
+                    if nlist[n]['node_status'] != 'Live':
+                        log('  Node ' + n + ' is not alive', True)
+                        errcount += 1
+
+                    for nodes in self.universe_json['universeDetails']['nodeDetailsSet']:
+                        if nodes['nodeName'] == n:
+                            if nodes['isMaster'] and not nlist[n]['master_alive']:
+                                log('  Node ' + n + ' master is not alive', True)
+                                errcount += 1
+
+                            if nodes['isTserver'] and not nlist[n]['tserver_alive']:
+                                log('  Node ' + n + ' tserver is not alive', True)
+                                errcount += 1
+            if errcount == 0:
+                log('  All nodes, masters and t-servers are alive.')
+
+            log('- Checking for master and tablet health')
+            if self.node_json is not None:
+                if not self.node_json['isMaster']:
+                    log('  ### Warning: node is not a Master ###')
+                if not self.node_json['isTserver']:
+                    log('  ### Warning: node is not a TServer ###')
+
+            master_node = None
+            for masternode in self.universe_json['universeDetails']['nodeDetailsSet']:
+                if masternode['isMaster'] and masternode['state'] == 'Live':
+                    master_node = masternode['cloudInfo']['private_ip'] + ':' + str(masternode['masterHttpPort'])
+                    break
+
+            try:  # try both http and https endpoints
+                resp = requests.get('https://' + master_node + '/api/v1/health-check',verify=False)
+                hc = resp.json()
+            except:
+                resp = requests.get('http://' + master_node + '/api/v1/health-check')
+                hc = resp.json()
+            hc_errs = 0
+            for n in hc:
+                if n == 'most_recent_uptime':
+                    log('  Most recent uptime: ' + str(hc[n]) + ' seconds')
+                    if hc[n] < MIN_MOST_RECENT_UPTIME_SECONDS:
+                        log('All nodes in the cluster have not been up for the minumim of ' + str(
+                            MIN_MOST_RECENT_UPTIME_SECONDS) + ' seconds', True)
+                        errcount += 1
+                        hc_errs += 1
+                elif n == 'dead_nodes':
+                    if len(hc[n]) > 0:
+                        isInUniverse = False
+                        numDeadNodes = 0
+                        for uid in hc[n]:
+                            for tnode in self.universe_json['universeDetails']['nodeDetailsSet']:
+                                if 'nodeUuid' in tnode and uid == tnode['nodeUuid'].replace('-', ''):
+                                    log('Health check found the following dead node in the universe: ' + uid, True)
+                                    isInUniverse = True
+                                    numDeadNodes += 1
+                                    errcount += 1
+                                    hc_errs += 1
+                                    break
+                        if not isInUniverse and numDeadNodes == 0:
+                            log('  Found the following dead nodes that are not currently in the universe - continuing:')
+                            log('   ' + json.dumps(hc[n]))
+                elif len(hc[n]) > 0:
+                    log('Health check found an issue with ' + n + ' - see below', True)
+                    log(json.dumps(hc[n], indent=2))
                     errcount += 1
                     hc_errs += 1
-            elif n == 'dead_nodes':
-                if len(hc[n]) > 0:
-                    isInUniverse = False
-                    numDeadNodes = 0
-                    for uid in hc[n]:
-                        for tnode in universe['universeDetails']['nodeDetailsSet']:
-                            if 'nodeUuid' in tnode and uid == tnode['nodeUuid'].replace('-', ''):
-                                log('Health check found the following dead node in the universe: ' + uid, True)
-                                isInUniverse = True
-                                numDeadNodes += 1
-                                errcount += 1
-                                hc_errs += 1
-                                break
-                    if not isInUniverse and numDeadNodes == 0:
-                        log('  Found the following dead nodes that are not currently in the universe - continuing:')
-                        log('   ' + json.dumps(hc[n]))
-            elif len(hc[n]) > 0:
-                log('Health check found an issue with ' + n + ' - see below', True)
-                log(json.dumps(hc[n], indent=2))
+            if hc_errs == 0:
+                log('  No under replicated or leaderless tablets found')
+
+            ## Check tablet balance
+            log('- Checking tablet health')
+            log('  --- Tablet Report --')
+            tabs = None
+            totalTablets = 0
+            try:  # try both http and https endpoints
+                resp = requests.get('https://' + master_node + '/api/v1/tablet-servers',verify=False)
+                tabs = resp.json()
+            except:
+                resp = requests.get('http://' + master_node + '/api/v1/tablet-servers')
+                tabs = resp.json()
+
+            for uid in tabs:
+                for svr in tabs[uid]:
+                    if tabs[uid][svr]['status'] != 'ALIVE':
+                        log('  TServer ' + svr + ' is not alive and likely a deprecated node - skipping')
+                    else:
+                        log('  TServer {} Active tablets: {}, User tablets: {}, User tablet leaders: {}, System Tablets: {}, System tablet leaders: {}'.format(
+                            svr,
+                            tabs[uid][svr]['active_tablets'],
+                            tabs[uid][svr]['user_tablets_total'],
+                            tabs[uid][svr]['user_tablets_leaders'],
+                            tabs[uid][svr]['system_tablets_total'],
+                            tabs[uid][svr]['system_tablets_leaders']
+                            ))
+                        totalTablets = totalTablets + tabs[uid][svr]['active_tablets'] + tabs[uid][svr]['user_tablets_total'] + tabs[uid][svr]['user_tablets_leaders']
+
+            htmlresp = None
+            try:  # try both http and https endpoints
+                htmlresp = requests.get('https://' + master_node + '/tablet-servers',verify=False)
+            except:
+                htmlresp = requests.get('http://' + master_node + '/tablet-servers')
+
+            if(TABLET_BALANCE_TEXT) in htmlresp.text:
+                log('  Passed tablet balance check - YBA is reporting the following: ' + TABLET_BALANCE_TEXT)
+            else:
                 errcount += 1
-                hc_errs += 1
-        if hc_errs == 0:
-            log('  No under replicated or leaderless tablets found')
+                log('Tablet Balance check failed', True)
 
-        ## Check tablet balance
-        log('- Checking tablet health')
-        log('  --- Tablet Report --')
-        tabs = None
-        totalTablets = 0
-        try:  # try both http and https endpoints
-            resp = requests.get('https://' + master_node + '/api/v1/tablet-servers')
-            tabs = resp.json()
-        except:
-            resp = requests.get('http://' + master_node + '/api/v1/tablet-servers')
-            tabs = resp.json()
-
-        for uid in tabs:
-            for svr in tabs[uid]:
-                if tabs[uid][svr]['status'] != 'ALIVE':
-                    log('  TServer ' + svr + ' is not alive and likely a deprecated node - skipping')
+            # Check tablet lag
+            if totalTablets > 0:
+                log('  Checking replication lag for t-servers')
+                promnodes =''
+                for tnode in self.universe_json['universeDetails']['nodeDetailsSet']:
+                    if tnode['isTserver']:
+                        promnodes += tnode['nodeName'] + '|'
+                promql = 'max(max_over_time(follower_lag_ms{exported_instance=~"' + promnodes +\
+                         '",export_type="tserver_export"}[' + str(LAG_LOOKBACK_MINUTES) + 'm]))'
+                log('  Executing the following Prometheus query:')
+                log('   ' + promql)
+                resp = requests.get(self.YBA_API.promhost, params={'query':promql}, verify=False)
+                metrics = resp.json()
+                lag = float(0.00)
+                if 'data' in metrics and \
+                    'result' in metrics['data'] and \
+                    len(metrics['data']['result']) > 0 and \
+                    'value' in metrics['data']['result'][0] and \
+                    len(metrics['data']['result'][0]['value']) > 1:
+                    lag = float(metrics['data']['result'][0]['value'][1]) / 1000
+                if lag > TSERVER_LAG_THRESHOLD_SECONDS:
+                    log('Check failed - t-server lag of {} seconds is above threshhold of {}'.format(lag, TSERVER_LAG_THRESHOLD_SECONDS), True)
+                    errcount+=1
                 else:
-                    log('  TServer {} Active tablets: {}, User tablets: {}, User tablet leaders: {}, System Tablets: {}, System tablet leaders: {}'.format(
-                        svr,
-                        tabs[uid][svr]['active_tablets'],
-                        tabs[uid][svr]['user_tablets_total'],
-                        tabs[uid][svr]['user_tablets_leaders'],
-                        tabs[uid][svr]['system_tablets_total'],
-                        tabs[uid][svr]['system_tablets_leaders']
-                        ))
-                    totalTablets = totalTablets + tabs[uid][svr]['active_tablets'] + tabs[uid][svr]['user_tablets_total'] + tabs[uid][svr]['user_tablets_leaders']
-
-        htmlresp = None
-        try:  # try both http and https endpoints
-            htmlresp = requests.get('https://' + master_node + '/tablet-servers')
-        except:
-            htmlresp = requests.get('http://' + master_node + '/tablet-servers')
-
-        if(TABLET_BALANCE_TEXT) in htmlresp.text:
-            log('  Passed tablet balance check - YBA is reporting the following: ' + TABLET_BALANCE_TEXT)
-        else:
-            errcount += 1
-            log('Tablet Balance check failed', True)
-
-        # Check tablet lag
-        if totalTablets > 0:
-            log('  Checking replication lag for t-servers')
-            promnodes =''
-            for tnode in universe['universeDetails']['nodeDetailsSet']:
-                if tnode['isTserver']:
-                    promnodes += tnode['nodeName'] + '|'
-            promql = 'max(max_over_time(follower_lag_ms{exported_instance=~"' + promnodes +\
-                     '",export_type="tserver_export"}[' + str(LAG_LOOKBACK_MINUTES) + 'm]))'
-            log('  Executing the following Prometheus query:')
-            log('   ' + promql)
-            resp = requests.get(promhost, params={'query':promql}, verify=False)
-            metrics = resp.json()
-            lag = float(0.00)
-            if 'data' in metrics and \
-                'result' in metrics['data'] and \
-                len(metrics['data']['result']) > 0 and \
-                'value' in metrics['data']['result'][0] and \
-                len(metrics['data']['result'][0]['value']) > 1:
-                lag = float(metrics['data']['result'][0]['value'][1]) / 1000
-            if lag > TSERVER_LAG_THRESHOLD_SECONDS:
-                log('Check failed - t-server lag of {} seconds is above threshhold of {}'.format(lag, TSERVER_LAG_THRESHOLD_SECONDS), True)
-                errcount+=1
+                    log('  Check passed - t-server lag of {} seconds is below threshhold of {}'.format(lag, TSERVER_LAG_THRESHOLD_SECONDS))
             else:
-                log('  Check passed - t-server lag of {} seconds is below threshhold of {}'.format(lag, TSERVER_LAG_THRESHOLD_SECONDS))
-        else:
-            log('  Tablet count in universe is zero - bypassing t-server replication lag check')
+                log('  Tablet count in universe is zero - bypassing t-server replication lag check')
 
-        log('- Checking  master health')
-        # Check underreplicated masters (master list should equal RF for universe and lag should be below threshold
-        log('  Checking for underreplicated masters')
-        resp = requests.get(
-            api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe['universeUUID'] + '/masters',
-            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
-        master_list = resp.json()
-        num_masters = len(str(master_list).split(','))
-        if universe['universeDetails']['clusters'][0]['userIntent']['replicationFactor'] == num_masters:
-            log('  Check passed - cluster has RF of {} and {} masters'.format(
-                universe['universeDetails']['clusters'][0]['userIntent']['replicationFactor'],
-                num_masters))
-        else:
-            log('Check failed - cluster has RF of {} and {} masters'.format(
-                universe['universeDetails']['clusters'][0]['userIntent']['replicationFactor'],
-                num_masters), True)
-            errcount+=1
-
-        # Check master lag
-        if totalTablets > 0:
-            log('  Checking replication lag for masters')
-            promnodes =''
-            for mnode in universe['universeDetails']['nodeDetailsSet']:
-                if mnode['isMaster']:
-                    promnodes += mnode['nodeName'] + '|'
-            promql = 'max(max_over_time(follower_lag_ms{exported_instance=~"' + promnodes +\
-                     '",export_type="master_export"}[' + str(LAG_LOOKBACK_MINUTES) + 'm]))'
-            log('  Executing the following Prometheus query:')
-            log('   ' + promql)
-            resp = requests.get(promhost, params={'query':promql}, verify=False)
-            metrics = resp.json()
-            lag = float(0.00)
-            if 'data' in metrics and \
-                'result' in metrics['data'] and \
-                len(metrics['data']['result']) > 0 and \
-                'value' in metrics['data']['result'][0] and \
-                len(metrics['data']['result'][0]['value']) > 1:
-                lag = float(metrics['data']['result'][0]['value'][1]) / 1000
-            if lag > MASTER_LAG_THRESHOLD_SECONDS:
-                log('Check failed - master lag of {} seconds is above threshhold of {}'.format(lag, MASTER_LAG_THRESHOLD_SECONDS), True)
-                errcount+=1
+            log('- Checking  master health')
+            # Check underreplicated masters (master list should equal RF for universe and lag should be below threshold
+            log('  Checking for underreplicated masters')
+            master_list = self.YBA_API.get_universe_info(self.universe_json['universeUUID'],'/masters')
+            num_masters = len(str(master_list).split(','))
+            if self.universe_json['universeDetails']['clusters'][0]['userIntent']['replicationFactor'] == num_masters:
+                log('  Check passed - cluster has RF of {} and {} masters'.format(
+                    self.universe_json['universeDetails']['clusters'][0]['userIntent']['replicationFactor'],
+                    num_masters))
             else:
-                log('  Check passed - master lag of {} seconds is below threshhold of {}'.format(lag, MASTER_LAG_THRESHOLD_SECONDS))
-        else:
-            log('  Tablet count in universe is zero - bypassing master replication lag check')
+                log('Check failed - cluster has RF of {} and {} masters'.format(
+                    self.universe_json['universeDetails']['clusters'][0]['userIntent']['replicationFactor'],
+                    num_masters), True)
+                errcount+=1
 
-        ## End health checks,
-        if errcount > 0:
-            log('--- Health check has failed - ' + str(
-                errcount) + ' errors were detected terminating shutdown.')
-            log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
+            # Check master lag
+            if totalTablets > 0:
+                log('  Checking replication lag for masters')
+                promnodes =''
+                for mnode in self.universe_json['universeDetails']['nodeDetailsSet']:
+                    if mnode['isMaster']:
+                        promnodes += mnode['nodeName'] + '|'
+                promql = 'max(max_over_time(follower_lag_ms{exported_instance=~"' + promnodes +\
+                         '",export_type="master_export"}[' + str(LAG_LOOKBACK_MINUTES) + 'm]))'
+                log('  Executing the following Prometheus query:')
+                log('   ' + promql)
+                resp = requests.get(self.YBA_API.promhost, params={'query':promql}, verify=False)
+                metrics = resp.json()
+                lag = float(0.00)
+                if 'data' in metrics and \
+                    'result' in metrics['data'] and \
+                    len(metrics['data']['result']) > 0 and \
+                    'value' in metrics['data']['result'][0] and \
+                    len(metrics['data']['result'][0]['value']) > 1:
+                    lag = float(metrics['data']['result'][0]['value'][1]) / 1000
+                if lag > MASTER_LAG_THRESHOLD_SECONDS:
+                    log('Check failed - master lag of {} seconds is above threshhold of {}'.format(lag, MASTER_LAG_THRESHOLD_SECONDS), True)
+                    errcount+=1
+                else:
+                    log('  Check passed - master lag of {} seconds is below threshhold of {}'.format(lag, MASTER_LAG_THRESHOLD_SECONDS))
+            else:
+                log('  Tablet count in universe is zero - bypassing master replication lag check')
+
+            ## End health checks,
+            if errcount > 0:
+                log('--- Health check has failed - ' + str(
+                    errcount) + ' errors were detected terminating shutdown.')
+                log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
+                exit(NODE_DB_ERROR)
+            else:
+                log('--- Health check for universe "{}" completed with no issues'.format(self.universe_json['name']))
+                return
+
+        except Exception as e:
+            log(e, True)
+            log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
             exit(NODE_DB_ERROR)
-        else:
-            log('--- Health check for universe "{}" completed with no issues'.format(universe['name']))
-            return
-
-    except Exception as e:
-        log(e, True)
-        log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
-        exit(NODE_DB_ERROR)
 
 def fix(api_host, customer_uuid, universe, api_token, fix_list):
     log('Fixing the following items in the universe: ' + str(fix_list))
@@ -1005,7 +1080,7 @@ def alter_replication(api_host, api_token, customer_uuid, xcluster_action, rpl_i
         log('  Replication ' + xcl_cfg['name'] + ' already ' + xcNewState + ' - skipping')
     return True
 
-### Main Code
+### Main Code ##############################################################################################
 def main():
     ## parse the arguments
     parser = argparse.ArgumentParser(
@@ -1091,7 +1166,7 @@ def main():
                         + '_' + action + '.log', "a")
 
     log('\n--------------------------------------')
-    log(' script version {} started'.format(Version), logTime=True)
+    log(' script version {} started on {} with action={}'.format(Version,hostname,action), logTime=True)
     if args.availability_zone is not None and args.region is None:
         log('--region parameter must be specified when --availability_zone is specified', True)
         if (not LOG_TO_TERMINAL):
@@ -1144,36 +1219,65 @@ def main():
             LOG_FILE.close()
         exit(OTHER_ERROR)
 
-    if action == 'resume' and yba_server(hostname,'test',True):
-        # YBA host is down, so NO API is available -- just restart it...
-        yba_server(hostname,action,dry_run)
-        log(' Resume completed successfully - exiting with code ' + str(NODE_DB_SUCCESS), logTime=True)
-        exit(0) # No furthur processing .. YBA processes are not fully up yet.
-
-    num_retries = 1
-    while num_retries <= 5:
+    # ---- Mainline code -------
+    YBA_API   = YBA_API_CLASS(api_host,customer_uuid,api_token) # Instantiated , but not Initialized yet
+    this_node = None # The node object I will perform "action" upon
+    for node_class in (YBA_Node, YB_Data_Node):
         try:
-            log('Attempt {} to communicate with YBA host at {}'.format(num_retries, api_host))
-            response = requests.get(api_host + '/api/customers/' + customer_uuid,
-                                headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
-                                timeout=5, verify=False)
-            response.raise_for_status()
-            num_retries = 999
-        except requests.exceptions.HTTPError as err:
-            if num_retries >= 5:
-                log(' Could not establish communication with YBA server at {} after {} attempts Err {}- exiting'.format(api_host, num_retries,err),isError=True, logTime=True)
-                log(' Process failed - exiting with code {}'.format(NODE_YBA_ERROR), logTime=True)
-                if (not LOG_TO_TERMINAL):
-                    LOG_FILE.close()
-                exit(NODE_YBA_ERROR)
-            else:
-                num_retries += 1
-                sleeptime = random.randint(5, MAX_TIME_TO_SLEEP_SECONDS)
-                log('Could not establish communication with YBA server at {} trying again in {} seconds. Err: {}'.format(api_host, sleeptime,err), logTime=True)
-                pass
+            log ("Checking if node is of type '" + node_class.__name__ + "' ...",logTime=True)
+            this_node = node_class(hostname,YBA_API)
+            break # Found a matching class .. exit FOR loop
+        except NotMyTypeException:
+            continue # Try the next type
+
+    if this_node is None:
+        log ("Could not identify node type for "+hostname,isError=True,logTime=True)
+        exit (3)
+        
+    try:
+       action_method = getattr(this_node,action) 
+       action_method()  # instance "this_node" is already bound into action_method
+       
+    except AttributeError:
+        log ("Could not perform '"+ action + "' because it is not valid for '" + str(this_node.__class__) + "'" , isError=True,logTime=True)
+        exit(4)
+    except Exception:
+        log ("Could not perform "+ action , isError=True,logTime=True)
+        exit (4)
+    else: 
+        # We get here is there were NO exceptions
+       log(' Process completed successfully - exiting with code ' + str(NODE_DB_SUCCESS), logTime=True)
+       if(not LOG_TO_TERMINAL):
+          LOG_FILE.close()
+       exit (NODE_DB_SUCCESS)
+    
+ 
+
+    
+    # num_retries = 1
+    # while num_retries <= 5:
+    #     try:
+    #         log('Attempt {} to communicate with YBA host at {}'.format(num_retries, api_host))
+    #         response = requests.get(api_host + '/api/customers/' + customer_uuid,
+    #                             headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
+    #                             timeout=5, verify=False)
+    #         response.raise_for_status()
+    #         num_retries = 999
+    #     except requests.exceptions.HTTPError as err:
+    #         if num_retries >= 5:
+    #             log(' Could not establish communication with YBA server at {} after {} attempts Err {}- exiting'.format(api_host, num_retries,err),isError=True, logTime=True)
+    #             log(' Process failed - exiting with code {}'.format(NODE_YBA_ERROR), logTime=True)
+    #             if (not LOG_TO_TERMINAL):
+    #                 LOG_FILE.close()
+    #             exit(NODE_YBA_ERROR)
+    #         else:
+    #             num_retries += 1
+    #             sleeptime = random.randint(5, MAX_TIME_TO_SLEEP_SECONDS)
+    #             log('Could not establish communication with YBA server at {} trying again in {} seconds. Err: {}'.format(api_host, sleeptime,err), logTime=True)
+    #             pass
 
     log('Retrieving Universes from YBA server at ' + api_host)
-    universes = get_universes(api_host, customer_uuid, api_token)
+    yba_api.get_universes()
     rg = None
     az = None
     univ_name = LOCALHOST
