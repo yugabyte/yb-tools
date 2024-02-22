@@ -104,11 +104,11 @@ v 1.30
     BugFix - for universe==None case for functionality for "New" nodes
 v 1.31, 1.32 , 1.33, 1.34
     BugFix - check if YBA before giving up on "New node"
-v 1.35c
+v 1.35d
     Re-factor to O-O.(a)YBA-OK, YBDB--health OK. more to do...
 '''
 
-Version = "1.35c"
+Version = "1.35d"
 
 import argparse
 import requests
@@ -137,8 +137,8 @@ NODE_YBA_ERROR = 1
 
 ## Globals
 MIN_MOST_RECENT_UPTIME_SECONDS = 60
-TASK_WAIT_TIME_SECONDS = 2
-TASK_COMPLETE_WAIT_TIME_SECONDS = 10
+TASK_WAIT_TIME_SECONDS = 2.0
+TASK_COMPLETE_WAIT_TIME_SECONDS = 10.0
 
 TABLET_BALANCE_TEXT = 'Cluster Load is Balanced'
 PROMETHEUS_PORT = 9090
@@ -176,18 +176,23 @@ def log(msg, isError=False, logTime=False):
     else:
         LOG_FILE.write(output_msg + '\n')
 
-def retry_successful(retriable_function_call, params=None, retry=10, verbose=False, sleep=.5, fatal=False):
+def retry_successful(retriable_function_call, params=None, retry:int=10, verbose=False, sleep:float=.5, fatal=False):
     for i in range(retry):
         try:
-            verbose and log("Attempt {} running {}".format(i, retriable_function_call.__name__),logTime=True)
+            verbose and log("Attempt {} running {}".format(i+1, retriable_function_call.__name__),logTime=True)
             time.sleep(sleep * i)
             retval = retriable_function_call(*params)
             verbose and retval != None and log(
-                "  Returned {} from called function {} on attempt {}".format(retval, retriable_function_call.__name__, i))
+                "  Returned {} from called function {} on attempt {}".format(retval, retriable_function_call.__name__, i+1))
             return True
         except Exception as errorMsg:
             preserve_errmsg = errorMsg
-            verbose and log("Hit exception {} in attempt {}".format(errorMsg, i))
+            #tb_info = traceback.extract_tb(errorMsg.__traceback__)
+            ## iterate over the traceback entries
+            #for tb in tb_info:
+            #    file_name, line_no, func_name, code = tb
+            #    print(f"Trace:Error occurred in {file_name} at line {line_no}")
+            verbose and log("Hit exception {} in attempt {}".format(errorMsg, i+1))
             if fatal and i == (retry - 1):
                 raise  # Re-raise current exception
             continue
@@ -237,7 +242,7 @@ class YBA_Node:
 
     def health(self):
         if self.ybaVersion < '2.18.0':
-            raise("'health' is not Implemented for YBA version " + self.ybaVersion + " (< 2.18)")
+            raise ValueError("'health' is not Implemented for YBA version " + self.ybaVersion + " (< 2.18)")
         try:
             status=subprocess.check_output(['yba-ctl','status'],stderr=subprocess.STDOUT,text=True) 
         except subprocess.CalledProcessError as e:
@@ -426,30 +431,22 @@ class YBA_API_CLASS:
             self.customers = response.json()
 
     def wait_for_task(self, task_uuid):
-        done = False
         jsonResponse = None
-        while not done:
-            time.sleep(TASK_WAIT_TIME_SECONDS)
-            response = requests.get(self.api_host + '/api/v1/customers/' + self.customer_uuid + '/tasks/' + task_uuid,
-                                    headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token})
-            jsonResponse = response.json()
-            if jsonResponse['status'] == 'Failure' or jsonResponse['percent'] == 100.0:
-                done = True
-            if jsonResponse['status'] == 'Running':
-                done = False
-
-        if jsonResponse['status'] != 'Success':
+        response = requests.get(self.api_host + '/api/v1/customers/' + self.customer_uuid + '/tasks/' + task_uuid,
+                                    headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token},verify=False)
+        jsonResponse = response.json()
+        if jsonResponse['status'] == 'Success':
+            return True
+        if jsonResponse['status'] == 'Failure':
             log('Task failed - see below for details', isError=True,logTime=True)
             log(json.dumps(jsonResponse, indent=2))
             return False
-        else:
-            time.sleep(TASK_COMPLETE_WAIT_TIME_SECONDS)
-            return True
+        raise ValueError("Still waiting for success/completion. Current state="+ jsonResponse['status'] + " at "+  str(jsonResponse['percent'])+"%")
 
     def alter_replication(self, xcluster_action, rpl_id):
         ## Get xcluster config
         response = requests.get(self.api_host + '/api/customers/' + self.customer_uuid + '/xcluster_configs/' + rpl_id,
-                                headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token})
+                                headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token},verify=False)
         xcl_cfg = response.json()
         # Now have 'paused = true/false' and status stays as running in yba 2.18
         xcNewState = 'Running'
@@ -520,110 +517,105 @@ class YB_Data_Node:
             os._exit(5)
 
     # Start node, then x-cluster - only print xluster status if dry run
-    def start_node(api_host, customer_uuid, universe, api_token, node, dry_run=True, skip_xcluster=False, skip_maint_window=False):
-        try:
-            log('  Found node ' + node['nodeName'] + ' in Universe ' + universe['name'] + ' - UUID ' + universe[
-                'universeUUID'])
-            if dry_run:
-                log('--- Dry run only - all checks will be done, but replication will not be resumed and nothing will be started ')
-                log('Node ' + node['nodeName'] + ' state: ' + node['state'])
+    def resume(self): # aka start_node 
+        self.YBA_API.Initialize()
+        self.universe_json, self.node_json = self.YBA_API.find_universe_for_node(self.hostname)        
+        log('  Found node ' + self.node_json['nodeName'] + ' in Universe ' + self.universe_json['name'] 
+            + ' - UUID ' + self.universe_json['universeUUID'])
+        if self.args.dryrun:
+            log('--- Dry run only - all checks will be done, but replication will not be resumed and nothing will be started ')
+            log('Node ' + self.node_json['nodeName'] + ' state: ' + self.node_json['state'])
+        else:
+            ## Startup server
+            log(' Starting up DB server', logTime=True)
+            if self.node_json['state'] != 'Stopped':
+                if self.node_json['state'] != 'Live':
+                    log('  Node ' + self.node_json['nodeName'] + ' is in "' + self.node_json['state'] +
+                        '" state - needs to be in "Stopped" or "Live" state to continue')
+                    log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
+                    exit(NODE_DB_ERROR)
+                log('  Node ' + self.node_json['nodeName'] + ' is already in "Live" state - skipping startup')
             else:
-                ## Startup server
-                log(' Starting up DB server', logTime=True)
-                if node['state'] != 'Stopped':
-                    if node['state'] != 'Live':
-                        log('  Node ' + node['nodeName'] + ' is in "' + node['state'] +
-                            '" state - needs to be in "Stopped" or "Live" state to continue')
-                        log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
-                        exit(NODE_DB_ERROR)
-                    log('  Node ' + node['nodeName'] + ' is already in "Live" state - skipping startup')
+                response = requests.put(
+                    self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' + 
+                        self.universe_json['universeUUID'] + '/nodes/' + self.node_json['nodeName'],
+                    headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token},
+                    json=json.loads('{"nodeAction": "START"}'),verify=False)
+                task = response.json()
+                if 'error' in task:
+                    log('Could not start node : ' + task['error'], logTime=True,isError=True)
+                    log('Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
+                    exit(NODE_DB_ERROR)
+                if retry_successful(self.YBA_API.wait_for_task, params=[ task['taskUUID'] ],sleep=TASK_COMPLETE_WAIT_TIME_SECONDS,verbose=True,retry=15):
+                    log(' Server startup complete', logTime=True)
+                    restarted = True
                 else:
-                    response = requests.put(
-                        api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe[
-                            'universeUUID'] + '/nodes/' + node['nodeName'],
-                        headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
-                        json=json.loads('{"nodeAction": "START"}'))
-                    task = response.json()
-                    if 'error' in task:
-                        log('Could not start node : ' + task['error'], logTime=True,isError=True)
-                        log('Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
-                        exit(NODE_DB_ERROR)
-                    if wait_for_task(api_host, customer_uuid, task['taskUUID'], api_token):
-                        log(' Server startup complete', logTime=True)
-                        restarted = True
-                    else:
-                        raise Exception("Failed to resume DB Node")
+                    raise Exception("Failed to resume DB Node")
 
-            ## Resume x-cluster replication
-            if skip_xcluster:
-                log('\n- Skipping resume of x-cluster replication')
+        ## Resume x-cluster replication
+        if self.args.skip_xcluster:
+            log('\n- Skipping resume of x-cluster replication')
+        else:
+            ## resume source replication
+            log('\n- Resuming x-cluster replication')
+            resume_count = 0
+            if 'sourceXClusterConfigs' in self.universe_json['universeDetails']:
+                for rpl in self.universe_json['universeDetails']['sourceXClusterConfigs']:
+                    if self.args.dryrun:
+                        response = requests.get(
+                            self.YBA_API.api_host + '/api/customers/' + self.YBA_API.customer_uuid + '/xcluster_configs/' + rpl,
+                            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token},verify=False)
+                        xcl_cfg = response.json()
+                        xcCurrState = ''
+                        if 'paused' in xcl_cfg:
+                            if xcl_cfg['paused']:
+                                xcCurrState = 'Paused'
+                            else:
+                                xcCurrState = 'Running'
+                        else:
+                            xcCurrState = xcl_cfg['status']
+                        log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcCurrState)
+                    else:
+                        # Pause/resume as directed and if not in the correct state
+                        if self.YBA_API.alter_replication('resume', rpl):
+                            resume_count += 1
+                        else:
+                            raise Exception("Failed to resume x-cluster replication")
+
+            ## resume target replication
+            if 'targetXClusterConfigs' in self.universe_json['universeDetails']:
+                for rpl in self.universe_json['universeDetails']['targetXClusterConfigs']:
+                    if self.args.dryrun:
+                        response = requests.get(
+                            self.YBA_API.api_host + '/api/customers/' + self.YBA_API.customer_uuid + '/xcluster_configs/' + rpl,
+                            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token},verify=False)
+                        xcl_cfg = response.json()
+                        xcCurrState = ''
+                        if 'paused' in xcl_cfg:
+                            if xcl_cfg['paused']:
+                                xcCurrState = 'Paused'
+                            else:
+                                xcCurrState = 'Running'
+                        else:
+                            xcCurrState = xcl_cfg['status']
+                        log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcCurrState)
+                    else:
+                        # Pause/resume as directed and if not in the correct state
+                        if self.YBA_API.alter_replication('resume', rpl):
+                            resume_count += 1
+                        else:
+                            raise Exception("Failed to resume x-cluster replication")
+            if resume_count > 0:
+                if self.args.dryrun:
+                    log('  ' + str(resume_count) + ' x-cluster streams were found, but not resumed due to dry run')
+                else:
+                    log('  ' + str(resume_count) + ' x-cluster streams are now running')
             else:
-                ## resume source replication
-                log('\n- Resuming x-cluster replication')
-                resume_count = 0
-                if 'sourceXClusterConfigs' in universe['universeDetails']:
-                    for rpl in universe['universeDetails']['sourceXClusterConfigs']:
-                        if dry_run:
-                            response = requests.get(
-                                api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl,
-                                headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
-                            xcl_cfg = response.json()
-                            xcCurrState = ''
-                            if 'paused' in xcl_cfg:
-                                if xcl_cfg['paused']:
-                                    xcCurrState = 'Paused'
-                                else:
-                                    xcCurrState = 'Running'
-                            else:
-                                xcCurrState = xcl_cfg['status']
-                            log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcCurrState)
-                        else:
-                            # Pause/resume as directed and if not in the correct state
-                            if alter_replication(api_host, api_token, customer_uuid, 'resume', rpl):
-                                resume_count += 1
-                            else:
-                                raise Exception("Failed to resume x-cluster replication")
+                log('  No x-cluster replications were found to resume')
 
-                ## resume target replication
-                if 'targetXClusterConfigs' in universe['universeDetails']:
-                    for rpl in universe['universeDetails']['targetXClusterConfigs']:
-                        if dry_run:
-                            response = requests.get(
-                                api_host + '/api/customers/' + customer_uuid + '/xcluster_configs/' + rpl,
-                                headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
-                            xcl_cfg = response.json()
-                            xcCurrState = ''
-                            if 'paused' in xcl_cfg:
-                                if xcl_cfg['paused']:
-                                    xcCurrState = 'Paused'
-                                else:
-                                    xcCurrState = 'Running'
-                            else:
-                                xcCurrState = xcl_cfg['status']
-                            log('  Replication ' + xcl_cfg['name'] + ' is in state ' + xcCurrState)
-                        else:
-                            # Pause/resume as directed and if not in the correct state
-                            if alter_replication(api_host, api_token, customer_uuid, 'resume', rpl):
-                                resume_count += 1
-                            else:
-                                raise Exception("Failed to resume x-cluster replication")
-                if resume_count > 0:
-                    if dry_run:
-                        log('  ' + str(resume_count) + ' x-cluster streams were found, but not resumed due to dry run')
-                    else:
-                        log('  ' + str(resume_count) + ' x-cluster streams are now running')
-                else:
-                    log('  No x-cluster replications were found to resume')
-
-
-            # Remove existing maintenence window
-            if not skip_maint_window:
-                maintenance_window(api_host, customer_uuid, universe, api_token, node['nodeName'], 'remove')
-
-        except Exception as e:
-            log(e, True)
-            log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
-            exit(NODE_DB_ERROR)
+        # Remove existing maintenence window
+        if not self.args.skip_maint_window:
+            self.YBA_API.maintenance_window( self, 'remove')
 
     def get_node_health (node_type, node, yba_state):
         uri = None
@@ -713,8 +705,8 @@ class YB_Data_Node:
         #    api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe['universeUUID'] + '/leader',
         #    headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
         #j = resp.json()
-        print('---------- Master Leader debug ------------')
-        print(j)
+        #print('---------- Master Leader debug ------------')
+        #print(j)
         if not isinstance(j, dict):
             raise Exception("Call to get leader IP returned {} instead of dict".format(type(j)))
         if not 'privateIP' in j:
@@ -794,7 +786,7 @@ class YB_Data_Node:
             log('Could not shut down node : ' + task['error'], isError=True,logTime=True)
             log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
             exit(NODE_DB_ERROR)
-        if self.YBA_API.wait_for_task( task['taskUUID']):
+        if retry_successful(self.YBA_API.wait_for_task, params=[ task['taskUUID'] ],sleep=TASK_COMPLETE_WAIT_TIME_SECONDS,verbose=True,retry=15):
             log(' Server shut down and ready for maintenance', logTime=True)
         else:
             log(' Error stopping node', True, logTime=True)
@@ -1260,29 +1252,7 @@ def main():
        exit (NODE_DB_SUCCESS)
     
  
-
-    
-    # num_retries = 1
-    # while num_retries <= 5:
-    #     try:
-    #         log('Attempt {} to communicate with YBA host at {}'.format(num_retries, api_host))
-    #         response = requests.get(api_host + '/api/customers/' + customer_uuid,
-    #                             headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
-    #                             timeout=5, verify=False)
-    #         response.raise_for_status()
-    #         num_retries = 999
-    #     except requests.exceptions.HTTPError as err:
-    #         if num_retries >= 5:
-    #             log(' Could not establish communication with YBA server at {} after {} attempts Err {}- exiting'.format(api_host, num_retries,err),isError=True, logTime=True)
-    #             log(' Process failed - exiting with code {}'.format(NODE_YBA_ERROR), logTime=True)
-    #             if (not LOG_TO_TERMINAL):
-    #                 LOG_FILE.close()
-    #             exit(NODE_YBA_ERROR)
-    #         else:
-    #             num_retries += 1
-    #             sleeptime = random.randint(5, MAX_TIME_TO_SLEEP_SECONDS)
-    #             log('Could not establish communication with YBA server at {} trying again in {} seconds. Err: {}'.format(api_host, sleeptime,err), logTime=True)
-    #             pass
+# -- Legacy, unused code below -------
 
     log('Retrieving Universes from YBA server at ' + api_host)
     yba_api.get_universes()
