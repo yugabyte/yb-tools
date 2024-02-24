@@ -104,11 +104,11 @@ v 1.30
     BugFix - for universe==None case for functionality for "New" nodes
 v 1.31, 1.32 , 1.33, 1.34
     BugFix - check if YBA before giving up on "New node"
-v 1.35d
-    Re-factor to O-O.(a)YBA-OK, YBDB--health OK. more to do...
+v 1.35e
+    Major Re-factor to O-O.(a)YBA-OK, YBDB--health OK. more to do...
 '''
 
-Version = "1.35d"
+Version = "1.35e"
 
 import argparse
 import requests
@@ -192,7 +192,7 @@ def retry_successful(retriable_function_call, params=None, retry:int=10, verbose
             #for tb in tb_info:
             #    file_name, line_no, func_name, code = tb
             #    print(f"Trace:Error occurred in {file_name} at line {line_no}")
-            verbose and log("Hit exception {} in attempt {}".format(errorMsg, i+1))
+            verbose and log("  Hit exception {} in attempt {}".format(errorMsg, i+1))
             if fatal and i == (retry - 1):
                 raise  # Re-raise current exception
             continue
@@ -209,6 +209,228 @@ def get_node_ip(addr): # Returns dotted-decimal addr
 class NotMyTypeException(Exception):
     pass
 
+class Universe_class:
+    def __init__(self,YBA_API,json):
+        self.YBA_API        = YBA_API
+        self.json           = json
+        self.nodeDetailsSet = json['universeDetails']['nodeDetailsSet']
+        self.UUID           = json["universeUUID"]
+        self.name           = json["name"]
+        self.universeDetails         = json['universeDetails']
+        self.sourceXClusterConfigs   = json['universeDetails'].get('sourceXClusterConfigs')
+        self.targetXClusterConfigs   = json['universeDetails'].get('targetXClusterConfigs')
+        self.PLACEMENT_TASK_FIELD    = json['universeDetails'].get(PLACEMENT_TASK_FIELD)
+
+
+    def get_node_json(self,hostname,ip):
+        for candidate_node in self.nodeDetailsSet:
+            if str(candidate_node['nodeName']).upper() in hostname.upper() or hostname.upper() in \
+                str(candidate_node['nodeName']).upper() or \
+                    candidate_node['cloudInfo']['private_ip'] == ip or \
+                    candidate_node['cloudInfo']['public_ip'] == ip or \
+                    candidate_node['cloudInfo']['private_ip'].upper() in hostname.upper():
+                return candidate_node
+        return None
+    
+    def health_check(self):
+        log('Performing health checks for universe {}, UUID {}...'.format(self.name, self.UUID))
+        log('- Checking for task placement UUID',logTime=True)
+        errcount = 0;
+        if (PLACEMENT_TASK_FIELD in self.json and len(self.PLACEMENT_TASK_FIELD) > 0) or \
+                (PLACEMENT_TASK_FIELD in self.universeDetails and len(self.PLACEMENT_TASK_FIELD) > 0):
+            log('Non-empty ' + PLACEMENT_TASK_FIELD + "=" + self.PLACEMENT_TASK_FIELD + ' found in universe', True)
+            errcount +=1
+        else:
+            log('  Passed placement task test')
+
+        log('- Checking for dead nodes, tservers and masters')
+        nlist = self.YBA_API.get_universe_info(self.UUID,'/status')
+        # this one comes back as a dict instead of proper JSON, also last key is uuid, which we need to ignore
+        for n in nlist:
+            if n != 'universe_uuid':
+                if nlist[n]['node_status'] != 'Live':
+                    log('  Node ' + n + ' is not alive', True)
+                    errcount += 1
+
+                for nodes in self.nodeDetailsSet:
+                    if nodes['nodeName'] == n:
+                        if nodes['isMaster'] and not nlist[n]['master_alive']:
+                            log('  Node ' + n + ' master is not alive', True)
+                            errcount += 1
+
+                        if nodes['isTserver'] and not nlist[n]['tserver_alive']:
+                            log('  Node ' + n + ' tserver is not alive', True)
+                            errcount += 1
+        if errcount == 0:
+            log('  All nodes, masters and t-servers are alive.')
+
+        log('- Checking for master and tablet health')
+
+        master_node = None
+        for masternode in self.nodeDetailsSet:
+            if masternode['isMaster'] and masternode['state'] == 'Live':
+                master_node = masternode['cloudInfo']['private_ip'] + ':' + str(masternode['masterHttpPort'])
+                break
+
+        try:  # try both http and https endpoints
+            resp = requests.get('https://' + master_node + '/api/v1/health-check',verify=False)
+            hc = resp.json()
+        except:
+            resp = requests.get('http://' + master_node + '/api/v1/health-check')
+            hc = resp.json()
+        hc_errs = 0
+        for n in hc:
+            if n == 'most_recent_uptime':
+                log('  Most recent uptime: ' + str(hc[n]) + ' seconds')
+                if hc[n] < MIN_MOST_RECENT_UPTIME_SECONDS:
+                    log('All nodes in the cluster have not been up for the minumim of ' + str(
+                        MIN_MOST_RECENT_UPTIME_SECONDS) + ' seconds', True)
+                    errcount += 1
+                    hc_errs += 1
+            elif n == 'dead_nodes':
+                if len(hc[n]) > 0:
+                    isInUniverse = False
+                    numDeadNodes = 0
+                    for uid in hc[n]:
+                        for tnode in self.nodeDetailsSet:
+                            if 'nodeUuid' in tnode and uid == tnode['nodeUuid'].replace('-', ''):
+                                log('Health check found the following dead node in the universe: ' + uid, True)
+                                isInUniverse = True
+                                numDeadNodes += 1
+                                errcount += 1
+                                hc_errs += 1
+                                break
+                    if not isInUniverse and numDeadNodes == 0:
+                        log('  Found the following dead nodes that are not currently in the universe - continuing:')
+                        log('   ' + json.dumps(hc[n]))
+            elif len(hc[n]) > 0:
+                log('Health check found an issue with ' + n + ' - see below', True)
+                log(json.dumps(hc[n], indent=2))
+                errcount += 1
+                hc_errs += 1
+        if hc_errs == 0:
+            log('  No under replicated or leaderless tablets found')
+
+        ## Check tablet balance
+        log('- Checking tablet health')
+        log('  --- Tablet Report --')
+        tabs = None
+        totalTablets = 0
+        try:  # try both http and https endpoints
+            resp = requests.get('https://' + master_node + '/api/v1/tablet-servers',verify=False)
+            tabs = resp.json()
+        except:
+            resp = requests.get('http://' + master_node + '/api/v1/tablet-servers')
+            tabs = resp.json()
+
+        for uid in tabs:
+            for svr in tabs[uid]:
+                if tabs[uid][svr]['status'] != 'ALIVE':
+                    log('  TServer ' + svr + ' is not alive and likely a deprecated node - skipping')
+                else:
+                    log('  TServer {} Active tablets: {}, User tablets: {}, User tablet leaders: {}, System Tablets: {}, System tablet leaders: {}'.format(
+                        svr,
+                        tabs[uid][svr]['active_tablets'],
+                        tabs[uid][svr]['user_tablets_total'],
+                        tabs[uid][svr]['user_tablets_leaders'],
+                        tabs[uid][svr]['system_tablets_total'],
+                        tabs[uid][svr]['system_tablets_leaders']
+                        ))
+                    totalTablets = totalTablets + tabs[uid][svr]['active_tablets'] + tabs[uid][svr]['user_tablets_total'] + tabs[uid][svr]['user_tablets_leaders']
+
+        htmlresp = None
+        try:  # try both http and https endpoints
+            htmlresp = requests.get('https://' + master_node + '/tablet-servers',verify=False)
+        except:
+            htmlresp = requests.get('http://' + master_node + '/tablet-servers')
+
+        if(TABLET_BALANCE_TEXT) in htmlresp.text:
+            log('  Passed tablet balance check - YBA is reporting the following: ' + TABLET_BALANCE_TEXT)
+        else:
+            errcount += 1
+            log('Tablet Balance check failed', True)
+
+        # Check tablet lag
+        if totalTablets > 0:
+            log('  Checking replication lag for t-servers')
+            promnodes =''
+            for tnode in self.nodeDetailsSet:
+                if tnode['isTserver']:
+                    promnodes += tnode['nodeName'] + '|'
+            promql = 'max(max_over_time(follower_lag_ms{exported_instance=~"' + promnodes +\
+                        '",export_type="tserver_export"}[' + str(LAG_LOOKBACK_MINUTES) + 'm]))'
+            log('  Executing the following Prometheus query:')
+            log('   ' + promql)
+            resp = requests.get(self.YBA_API.promhost, params={'query':promql}, verify=False)
+            metrics = resp.json()
+            lag = float(0.00)
+            if 'data' in metrics and \
+                'result' in metrics['data'] and \
+                len(metrics['data']['result']) > 0 and \
+                'value' in metrics['data']['result'][0] and \
+                len(metrics['data']['result'][0]['value']) > 1:
+                lag = float(metrics['data']['result'][0]['value'][1]) / 1000
+            if lag > TSERVER_LAG_THRESHOLD_SECONDS:
+                log('Check failed - t-server lag of {} seconds is above threshhold of {}'.format(lag, TSERVER_LAG_THRESHOLD_SECONDS), True)
+                errcount+=1
+            else:
+                log('  Check passed - t-server lag of {} seconds is below threshhold of {}'.format(lag, TSERVER_LAG_THRESHOLD_SECONDS))
+        else:
+            log('  Tablet count in universe is zero - bypassing t-server replication lag check')
+
+        log('- Checking  master health')
+        # Check underreplicated masters (master list should equal RF for universe and lag should be below threshold
+        log('  Checking for underreplicated masters')
+        master_list = self.YBA_API.get_universe_info(self.UUID,'/masters')
+        num_masters = len(str(master_list).split(','))
+        if self.universeDetails['clusters'][0]['userIntent']['replicationFactor'] == num_masters:
+            log('  Check passed - cluster has RF of {} and {} masters'.format(
+                self.universeDetails['clusters'][0]['userIntent']['replicationFactor'],
+                num_masters))
+        else:
+            log('Check failed - cluster has RF of {} and {} masters'.format(
+                self.universeDetails['clusters'][0]['userIntent']['replicationFactor'],
+                num_masters), True)
+            errcount+=1
+
+        # Check master lag
+        if totalTablets > 0:
+            log('  Checking replication lag for masters')
+            promnodes =''
+            for mnode in self.nodeDetailsSet:
+                if mnode['isMaster']:
+                    promnodes += mnode['nodeName'] + '|'
+            promql = 'max(max_over_time(follower_lag_ms{exported_instance=~"' + promnodes +\
+                        '",export_type="master_export"}[' + str(LAG_LOOKBACK_MINUTES) + 'm]))'
+            log('  Executing the following Prometheus query:')
+            log('   ' + promql)
+            resp = requests.get(self.YBA_API.promhost, params={'query':promql}, verify=False)
+            metrics = resp.json()
+            lag = float(0.00)
+            if 'data' in metrics and \
+                'result' in metrics['data'] and \
+                len(metrics['data']['result']) > 0 and \
+                'value' in metrics['data']['result'][0] and \
+                len(metrics['data']['result'][0]['value']) > 1:
+                lag = float(metrics['data']['result'][0]['value'][1]) / 1000
+            if lag > MASTER_LAG_THRESHOLD_SECONDS:
+                log('Check failed - master lag of {} seconds is above threshhold of {}'.format(lag, MASTER_LAG_THRESHOLD_SECONDS), True)
+                errcount+=1
+            else:
+                log('  Check passed - master lag of {} seconds is below threshhold of {}'.format(lag, MASTER_LAG_THRESHOLD_SECONDS))
+        else:
+            log('  Tablet count in universe is zero - bypassing master replication lag check')
+
+        ## End health checks,
+        if errcount > 0:
+            log('--- Health check has failed - ' + str(
+                errcount) + ' errors were detected terminating shutdown.')
+            log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
+            exit(NODE_DB_ERROR)
+        else:
+            log('--- Health check for universe "{}" completed with no issues'.format(self.name))
+            return
+#-------------------------------------------------------------------------------------------
 class YBA_Node:
     _YBA_PROCESS_STOP_LIST = ['yb-platform', 'prometheus', 'rh-nginx118-nginx', 'rh-postgresql10-postgresql']
 
@@ -306,13 +528,14 @@ class YBA_Node:
                     exit(NODE_YBA_ERROR)
             except subprocess.CalledProcessError as e:
                 log('  Service {} is not running - skipping'.format(svc))
-
+#-------------------------------------------------------------------------------------------
 class YBA_API_CLASS:
     def __init__(self,api_host, customer_uuid, api_token):
         self.api_host      = api_host
         self.customer_uuid = customer_uuid
         self.api_token     = api_token
-        self.universe      = None
+        self.universe_list = []
+        self.promhost      = None
         self.initialized   = False
 
     def Initialize(self):
@@ -320,7 +543,12 @@ class YBA_API_CLASS:
             return
         retry_successful(self.get_customers, params=[], retry=5,verbose=True,sleep=5,fatal=True)
         log('Retrieving Universes from YBA server at ' +self.api_host)
-        self.get_universes()
+        # Get all universes on YBA deployment.  Note that a list of nodes is included here, so we return the entire universes array
+        response = requests.get(self.api_host + '/api/customers/' + self.customer_uuid + '/universes',
+                                headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False)
+        for univ in response.json():
+            self.universe_list.append(Universe_class(self,univ)) # List of "Universe_class" objects 
+
         # put together Prometheus URL by stripping off existing port of API server if specified and appending proper port
         # Then try https, if fails, step down to http
         tmp_url = self.api_host.split(':')
@@ -334,28 +562,20 @@ class YBA_API_CLASS:
                 log('Could not contact prometheus host using HTTPS.  Trying insecure connection at {}'.format(promhost))
                 resp = requests.get(promhost, params={'query': 'min(node_boot_time_seconds)'}, verify=False)
             else:
-                log('Could not contact prometheus host at {}'.format(promhost), True)
+                log('Could not contact prometheus host at {}'.format(promhost), isError=True)
                 errcount += 1;
         log('Using prometheus host at {}\n'.format(promhost))
         self.promhost=promhost
         self.initialized = True
 
-# Get all universes on YBA deployment.  Note that a list of nodes is included here, so we return the entire universes array
-    def get_universes(self):
-        response = requests.get(self.api_host + '/api/customers/' + self.customer_uuid + '/universes',
-                                headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False)
-        self.all_universes = response.json()
-        return (response.json())
+
 
     def find_universe_for_node(self,hostname=None,ip=None):
-        for universe in self.all_universes:
-            for node in universe['universeDetails']['nodeDetailsSet']:
-                if str(node['nodeName']).upper() in hostname.upper() or hostname.upper() in \
-                    str(node['nodeName']).upper() or \
-                        node['cloudInfo']['private_ip'] == ip or \
-                        node['cloudInfo']['public_ip'] == ip or \
-                        node['cloudInfo']['private_ip'].upper() in hostname.upper():
-                    return universe,node 
+        for universe in self.universe_list:
+            node_json = universe.get_node_json(hostname,ip)
+            if node_json is None:
+                return None, None
+            return universe,node_json
         return None,None
 
   
@@ -379,7 +599,7 @@ class YBA_API_CLASS:
                     "targetType": "UNIVERSE",
                     "target": {
                         "all": False,
-                        "uuids": [node.universe_json['universeUUID']]
+                        "uuids": [node.universe.UUID]
                     }
                 }
             }
@@ -490,6 +710,7 @@ class YBA_API_CLASS:
             log('  Replication ' + xcl_cfg['name'] + ' already ' + xcNewState + ' - skipping')
         return True
 
+#-------------------------------------------------------------------------------------------
 class YB_Data_Node:
 
     def __init__(self,hostname,YBA_API,args):
@@ -499,14 +720,14 @@ class YB_Data_Node:
         self.YBA_API  = YBA_API
         self.args     = args
         try:
-           services = subprocess.check_output(["sudo","crontab","-u","yugabyte","-l"])
+           services = subprocess.check_output(["crontab","-u","yugabyte","-l"])
            if " master " in str(services)  or  " tserver " in str(services):
                return None # Successfuly instantiated
         except subprocess.CalledProcessError:
            pass # If the crontab is empty, it will have exit code 1, which we want to ignore
 
         try:           
-           services = subprocess.check_output(['sudo','runuser','-l','yugabyte','-c','systemctl --user list-units'])
+           services = subprocess.check_output(['runuser','-l','yugabyte','-c','systemctl --user list-units --type=service --all'])
            if 'yb-tserver.service' in str(services)  or  'yb-master.service' in str(services):
                return None
            # "master" / "tserver" were NOT FOUND 
@@ -519,9 +740,9 @@ class YB_Data_Node:
     # Start node, then x-cluster - only print xluster status if dry run
     def resume(self): # aka start_node 
         self.YBA_API.Initialize()
-        self.universe_json, self.node_json = self.YBA_API.find_universe_for_node(self.hostname)        
-        log('  Found node ' + self.node_json['nodeName'] + ' in Universe ' + self.universe_json['name'] 
-            + ' - UUID ' + self.universe_json['universeUUID'])
+        self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname)        
+        log('  Found node ' + self.node_json['nodeName'] + ' in Universe ' + self.universe.name
+            + ' - UUID ' + self.universe.UUID)
         if self.args.dryrun:
             log('--- Dry run only - all checks will be done, but replication will not be resumed and nothing will be started ')
             log('Node ' + self.node_json['nodeName'] + ' state: ' + self.node_json['state'])
@@ -538,7 +759,7 @@ class YB_Data_Node:
             else:
                 response = requests.put(
                     self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' + 
-                        self.universe_json['universeUUID'] + '/nodes/' + self.node_json['nodeName'],
+                        self.universe.UUID + '/nodes/' + self.node_json['nodeName'],
                     headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token},
                     json=json.loads('{"nodeAction": "START"}'),verify=False)
                 task = response.json()
@@ -559,8 +780,8 @@ class YB_Data_Node:
             ## resume source replication
             log('\n- Resuming x-cluster replication')
             resume_count = 0
-            if 'sourceXClusterConfigs' in self.universe_json['universeDetails']:
-                for rpl in self.universe_json['universeDetails']['sourceXClusterConfigs']:
+            if 'sourceXClusterConfigs' in self.universe.universeDetails:
+                for rpl in self.universe.sourceXClusterConfigs:
                     if self.args.dryrun:
                         response = requests.get(
                             self.YBA_API.api_host + '/api/customers/' + self.YBA_API.customer_uuid + '/xcluster_configs/' + rpl,
@@ -583,8 +804,8 @@ class YB_Data_Node:
                             raise Exception("Failed to resume x-cluster replication")
 
             ## resume target replication
-            if 'targetXClusterConfigs' in self.universe_json['universeDetails']:
-                for rpl in self.universe_json['universeDetails']['targetXClusterConfigs']:
+            if 'targetXClusterConfigs' in self.universe.universeDetails:
+                for rpl in self.universe.targetXClusterConfigs:
                     if self.args.dryrun:
                         response = requests.get(
                             self.YBA_API.api_host + '/api/customers/' + self.YBA_API.customer_uuid + '/xcluster_configs/' + rpl,
@@ -700,7 +921,7 @@ class YB_Data_Node:
 
     # get Master leader
     def get_master_leader_ip(self):
-        j = self.YBA_API.get_universe_info(self.universe_json['universeUUID'],'/leader')
+        j = self.YBA_API.get_universe_info(self.universe.UUID,'/leader')
         #resp = requests.get(
         #    api_host + '/api/v1/customers/' + customer_uuid + '/universes/' + universe['universeUUID'] + '/leader',
         #    headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token})
@@ -728,7 +949,7 @@ class YB_Data_Node:
     # Stop x-cluster and then the node processes
     def stop(self): #api_host, customer_uuid, universe, api_token, node, skip_xcluster=False, skip_maint_window=False):
         self.YBA_API.Initialize()
-        self.universe_json, self.node_json = self.YBA_API.find_universe_for_node(self.hostname)
+        self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname)
         # Add maintenence window
         if not self.args.skip_maint_window:
             self.YBA_API.maintenance_window(self, 'create')
@@ -741,8 +962,8 @@ class YB_Data_Node:
             log('\n- Pausing x-cluster replication', logTime=True)
             paused_count = 0
             ## pause source replication
-            if 'sourceXClusterConfigs' in self.universe_json['universeDetails']:
-                for rpl in self.universe_json['universeDetails']['sourceXClusterConfigs']:
+            if 'sourceXClusterConfigs' in self.universe.universeDetails:
+                for rpl in self.universe.sourceXClusterConfigs:
                     ## First, sleep a bit to prevent race condition when patching multiple servers concurrently
                     time.sleep(random.randint(1, MAX_TIME_TO_SLEEP_SECONDS))
                     if self.YBA_API.alter_replication('pause', rpl):
@@ -750,8 +971,8 @@ class YB_Data_Node:
                     else:
                         raise Exception("Failed to pause source x-cluster replication")
             ## pause target replication
-            if 'targetXClusterConfigs' in self.universe_json['universeDetails']:
-                for rpl in self.universe_json['universeDetails']['targetXClusterConfigs']:
+            if 'targetXClusterConfigs' in self.universe.universeDetails:
+                for rpl in self.universe.targetXClusterConfigs:
                     ## First, sleep a bit to prevent race condition when patching multiple servers concurrently
                     time.sleep(random.randint(1, MAX_TIME_TO_SLEEP_SECONDS))
                     if self.YBA_API.alter_replication('pause', rpl):
@@ -776,8 +997,8 @@ class YB_Data_Node:
         ## Shutdown server
         log(' Shutting down DB server ' + str(self.node_json['nodeName']), logTime=True)
         response = requests.put(
-            self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' + self.universe_json[
-                'universeUUID'] + '/nodes/' + self.node_json['nodeName'],
+            self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' 
+                          + self.universe.UUID + '/nodes/' + self.node_json['nodeName'],
             headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token}, verify=False,
             json=json.loads('{"nodeAction": "STOP"}'),)
         task = response.json()
@@ -796,219 +1017,25 @@ class YB_Data_Node:
 
     def health(self):
         self.YBA_API.Initialize()
-        errcount = 0;
-        self.universe_json, self.node_json = self.YBA_API.find_universe_for_node(self.hostname)
-        log('Performing health checks for universe {}, UUID {}...'.format(self.universe_json['name'], self.universe_json['universeUUID']))
+        self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname)
+        if self.node_json is None:
+            log("Node " + self.hostname + " is not in any known universe" ,isError=True,logTime=True)
+            raise Exception("Node " + self.hostname + " is not in any known universe" )
+        
+        log('Found node ' + self.node_json['nodeName'] + ' in Universe ' + self.universe.name + ' - UUID ' + self.universe.UUID)
+        self.universe.health_check()
 
-        if self.node_json is not None:
-            log('Found node ' + self.node_json['nodeName'] + ' in Universe ' + self.universe_json['name'] + ' - UUID ' + self.universe_json['universeUUID'])
-
-        log('- Checking for task placement UUID')
-        if (PLACEMENT_TASK_FIELD in self.universe_json and len(self.universe_json[PLACEMENT_TASK_FIELD]) > 0) or \
-                (PLACEMENT_TASK_FIELD in self.universe_json['universeDetails'] and len(self.universe_json['universeDetails'][PLACEMENT_TASK_FIELD]) > 0):
-            log('Non-empty ' + PLACEMENT_TASK_FIELD + ' found in universe', True)
-            errcount +=1
-        else:
-            log('  Passed placement task test')
-
-        log('- Checking for dead nodes, tservers and masters')
-        nlist = self.YBA_API.get_universe_info(self.universe_json['universeUUID'],'/status')
-        # this one comes back as a dict instead of proper JSON, also last key is uuid, which we need to ignore
-        for n in nlist:
-            if n != 'universe_uuid':
-                if nlist[n]['node_status'] != 'Live':
-                    log('  Node ' + n + ' is not alive', True)
-                    errcount += 1
-
-                for nodes in self.universe_json['universeDetails']['nodeDetailsSet']:
-                    if nodes['nodeName'] == n:
-                        if nodes['isMaster'] and not nlist[n]['master_alive']:
-                            log('  Node ' + n + ' master is not alive', True)
-                            errcount += 1
-
-                        if nodes['isTserver'] and not nlist[n]['tserver_alive']:
-                            log('  Node ' + n + ' tserver is not alive', True)
-                            errcount += 1
-        if errcount == 0:
-            log('  All nodes, masters and t-servers are alive.')
-
-        log('- Checking for master and tablet health')
-        if self.node_json is not None:
-            if not self.node_json['isMaster']:
-                log('  ### Warning: node is not a Master ###')
-            if not self.node_json['isTserver']:
-                log('  ### Warning: node is not a TServer ###')
-
-        master_node = None
-        for masternode in self.universe_json['universeDetails']['nodeDetailsSet']:
-            if masternode['isMaster'] and masternode['state'] == 'Live':
-                master_node = masternode['cloudInfo']['private_ip'] + ':' + str(masternode['masterHttpPort'])
-                break
-
-        try:  # try both http and https endpoints
-            resp = requests.get('https://' + master_node + '/api/v1/health-check',verify=False)
-            hc = resp.json()
-        except:
-            resp = requests.get('http://' + master_node + '/api/v1/health-check')
-            hc = resp.json()
-        hc_errs = 0
-        for n in hc:
-            if n == 'most_recent_uptime':
-                log('  Most recent uptime: ' + str(hc[n]) + ' seconds')
-                if hc[n] < MIN_MOST_RECENT_UPTIME_SECONDS:
-                    log('All nodes in the cluster have not been up for the minumim of ' + str(
-                        MIN_MOST_RECENT_UPTIME_SECONDS) + ' seconds', True)
-                    errcount += 1
-                    hc_errs += 1
-            elif n == 'dead_nodes':
-                if len(hc[n]) > 0:
-                    isInUniverse = False
-                    numDeadNodes = 0
-                    for uid in hc[n]:
-                        for tnode in self.universe_json['universeDetails']['nodeDetailsSet']:
-                            if 'nodeUuid' in tnode and uid == tnode['nodeUuid'].replace('-', ''):
-                                log('Health check found the following dead node in the universe: ' + uid, True)
-                                isInUniverse = True
-                                numDeadNodes += 1
-                                errcount += 1
-                                hc_errs += 1
-                                break
-                    if not isInUniverse and numDeadNodes == 0:
-                        log('  Found the following dead nodes that are not currently in the universe - continuing:')
-                        log('   ' + json.dumps(hc[n]))
-            elif len(hc[n]) > 0:
-                log('Health check found an issue with ' + n + ' - see below', True)
-                log(json.dumps(hc[n], indent=2))
-                errcount += 1
-                hc_errs += 1
-        if hc_errs == 0:
-            log('  No under replicated or leaderless tablets found')
-
-        ## Check tablet balance
-        log('- Checking tablet health')
-        log('  --- Tablet Report --')
-        tabs = None
-        totalTablets = 0
-        try:  # try both http and https endpoints
-            resp = requests.get('https://' + master_node + '/api/v1/tablet-servers',verify=False)
-            tabs = resp.json()
-        except:
-            resp = requests.get('http://' + master_node + '/api/v1/tablet-servers')
-            tabs = resp.json()
-
-        for uid in tabs:
-            for svr in tabs[uid]:
-                if tabs[uid][svr]['status'] != 'ALIVE':
-                    log('  TServer ' + svr + ' is not alive and likely a deprecated node - skipping')
-                else:
-                    log('  TServer {} Active tablets: {}, User tablets: {}, User tablet leaders: {}, System Tablets: {}, System tablet leaders: {}'.format(
-                        svr,
-                        tabs[uid][svr]['active_tablets'],
-                        tabs[uid][svr]['user_tablets_total'],
-                        tabs[uid][svr]['user_tablets_leaders'],
-                        tabs[uid][svr]['system_tablets_total'],
-                        tabs[uid][svr]['system_tablets_leaders']
-                        ))
-                    totalTablets = totalTablets + tabs[uid][svr]['active_tablets'] + tabs[uid][svr]['user_tablets_total'] + tabs[uid][svr]['user_tablets_leaders']
-
-        htmlresp = None
-        try:  # try both http and https endpoints
-            htmlresp = requests.get('https://' + master_node + '/tablet-servers',verify=False)
-        except:
-            htmlresp = requests.get('http://' + master_node + '/tablet-servers')
-
-        if(TABLET_BALANCE_TEXT) in htmlresp.text:
-            log('  Passed tablet balance check - YBA is reporting the following: ' + TABLET_BALANCE_TEXT)
-        else:
-            errcount += 1
-            log('Tablet Balance check failed', True)
-
-        # Check tablet lag
-        if totalTablets > 0:
-            log('  Checking replication lag for t-servers')
-            promnodes =''
-            for tnode in self.universe_json['universeDetails']['nodeDetailsSet']:
-                if tnode['isTserver']:
-                    promnodes += tnode['nodeName'] + '|'
-            promql = 'max(max_over_time(follower_lag_ms{exported_instance=~"' + promnodes +\
-                        '",export_type="tserver_export"}[' + str(LAG_LOOKBACK_MINUTES) + 'm]))'
-            log('  Executing the following Prometheus query:')
-            log('   ' + promql)
-            resp = requests.get(self.YBA_API.promhost, params={'query':promql}, verify=False)
-            metrics = resp.json()
-            lag = float(0.00)
-            if 'data' in metrics and \
-                'result' in metrics['data'] and \
-                len(metrics['data']['result']) > 0 and \
-                'value' in metrics['data']['result'][0] and \
-                len(metrics['data']['result'][0]['value']) > 1:
-                lag = float(metrics['data']['result'][0]['value'][1]) / 1000
-            if lag > TSERVER_LAG_THRESHOLD_SECONDS:
-                log('Check failed - t-server lag of {} seconds is above threshhold of {}'.format(lag, TSERVER_LAG_THRESHOLD_SECONDS), True)
-                errcount+=1
-            else:
-                log('  Check passed - t-server lag of {} seconds is below threshhold of {}'.format(lag, TSERVER_LAG_THRESHOLD_SECONDS))
-        else:
-            log('  Tablet count in universe is zero - bypassing t-server replication lag check')
-
-        log('- Checking  master health')
-        # Check underreplicated masters (master list should equal RF for universe and lag should be below threshold
-        log('  Checking for underreplicated masters')
-        master_list = self.YBA_API.get_universe_info(self.universe_json['universeUUID'],'/masters')
-        num_masters = len(str(master_list).split(','))
-        if self.universe_json['universeDetails']['clusters'][0]['userIntent']['replicationFactor'] == num_masters:
-            log('  Check passed - cluster has RF of {} and {} masters'.format(
-                self.universe_json['universeDetails']['clusters'][0]['userIntent']['replicationFactor'],
-                num_masters))
-        else:
-            log('Check failed - cluster has RF of {} and {} masters'.format(
-                self.universe_json['universeDetails']['clusters'][0]['userIntent']['replicationFactor'],
-                num_masters), True)
-            errcount+=1
-
-        # Check master lag
-        if totalTablets > 0:
-            log('  Checking replication lag for masters')
-            promnodes =''
-            for mnode in self.universe_json['universeDetails']['nodeDetailsSet']:
-                if mnode['isMaster']:
-                    promnodes += mnode['nodeName'] + '|'
-            promql = 'max(max_over_time(follower_lag_ms{exported_instance=~"' + promnodes +\
-                        '",export_type="master_export"}[' + str(LAG_LOOKBACK_MINUTES) + 'm]))'
-            log('  Executing the following Prometheus query:')
-            log('   ' + promql)
-            resp = requests.get(self.YBA_API.promhost, params={'query':promql}, verify=False)
-            metrics = resp.json()
-            lag = float(0.00)
-            if 'data' in metrics and \
-                'result' in metrics['data'] and \
-                len(metrics['data']['result']) > 0 and \
-                'value' in metrics['data']['result'][0] and \
-                len(metrics['data']['result'][0]['value']) > 1:
-                lag = float(metrics['data']['result'][0]['value'][1]) / 1000
-            if lag > MASTER_LAG_THRESHOLD_SECONDS:
-                log('Check failed - master lag of {} seconds is above threshhold of {}'.format(lag, MASTER_LAG_THRESHOLD_SECONDS), True)
-                errcount+=1
-            else:
-                log('  Check passed - master lag of {} seconds is below threshhold of {}'.format(lag, MASTER_LAG_THRESHOLD_SECONDS))
-        else:
-            log('  Tablet count in universe is zero - bypassing master replication lag check')
-
-        ## End health checks,
-        if errcount > 0:
-            log('--- Health check has failed - ' + str(
-                errcount) + ' errors were detected terminating shutdown.')
-            log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
-            exit(NODE_DB_ERROR)
-        else:
-            log('--- Health check for universe "{}" completed with no issues'.format(self.universe_json['name']))
-            return
+        if not self.node_json['isMaster']:
+            log('  ### Warning: node is not a Master ###')
+        if not self.node_json['isTserver']:
+            log('  ### Warning: node is not a TServer ###')
 
 
+#-------------------------------------------------------------------------------------------
 def fix(api_host, customer_uuid, universe, api_token, fix_list):
     log('Fixing the following items in the universe: ' + str(fix_list))
     mods = []
-    f = universe['universeDetails']
+    f = universe.universeDetails
     if 'placement' in fix_list:
         if PLACEMENT_TASK_FIELD in f and len(f[PLACEMENT_TASK_FIELD]) > 0:
             f[PLACEMENT_TASK_FIELD] = ''
@@ -1129,6 +1156,15 @@ def main():
                         action='store',
                         help='AZ for nodes to be stopped/resumed - action taken on local node if not specified.  Script will abort if --region is not specified along with the AZ',
                         required=False)
+    parser.add_argument('-e','--ENV_FILE_PATH',
+                        action='store',
+                        help='By default, the script will look for the ENV_FILE_PATTERN in /home/yugabyte. You can overwrite this by providing --ENV_FILE_PATH <new path>, example is --ENV_FILE_PATH /tmp/'
+
+    )
+    parser.add_argument('-u','--universe_name',
+                        action='store',
+                        help='This is mainly allowing to specific the universe you can go after.'
+                        )
     args = parser.parse_args()
 
     hostname = str(socket.gethostname())
@@ -1150,6 +1186,14 @@ def main():
     elif args.verify:
         action = 'verify'
         dry_run = True
+    # Overwritting the EVN_FILE_PATH
+    if args.ENV_FILE_PATH is not None:
+        global ENV_FILE_PATH
+        ENV_FILE_PATH = args.ENV_FILE_PATH
+
+    universe_name = args.health
+    if args.universe_name:
+        universe_anme = args.universe_name
 
     ACTIONS_ALLOWED_ON_YBA = 'health|stop|resume'
 
@@ -1251,7 +1295,7 @@ def main():
           LOG_FILE.close()
        exit (NODE_DB_SUCCESS)
     
- 
+#-------------------------------------------------------------------------------------------
 # -- Legacy, unused code below -------
 
     log('Retrieving Universes from YBA server at ' + api_host)
