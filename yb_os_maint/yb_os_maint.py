@@ -104,11 +104,11 @@ v 1.30
     BugFix - for universe==None case for functionality for "New" nodes
 v 1.31, 1.32 , 1.33, 1.34
     BugFix - check if YBA before giving up on "New node"
-v 1.35e
-    Major Re-factor to O-O.(a)YBA-OK, YBDB--health OK. more to do...
+v 1.35f
+    Major Re-factor to O-O.(a)YBA-OK, YBDB-node, multi-node code complete..
 '''
 
-Version = "1.35e"
+Version = "1.35f"
 
 import argparse
 import requests
@@ -232,6 +232,20 @@ class Universe_class:
                 return candidate_node
         return None
     
+    def find_nodes_by_region_az(self,region:str,az:str):
+        nodes  = []
+        region = region.upper()
+        if az is not None:
+            az     = az.upper()
+        for candidate_node in self.nodeDetailsSet:
+            if candidate_node['cloudInfo']['region'].upper() == region:
+                if az is None:
+                    nodes.append(candidate_node)
+                elif candidate_node['cloudInfo']['az'].upper() == az:
+                        nodes.append(candidate_node)
+        return nodes
+
+
     def health_check(self):
         log('Performing health checks for universe {}, UUID {}...'.format(self.name, self.UUID))
         log('- Checking for task placement UUID',logTime=True)
@@ -431,6 +445,56 @@ class Universe_class:
             log('--- Health check for universe "{}" completed with no issues'.format(self.name))
             return
 #-------------------------------------------------------------------------------------------
+class Multiple_Nodes_Class:
+    # Used when --universe or (--region + --az) is specified
+    # In these cases, ignore WHAt node we are running on, and operate on the requested nodes.
+    def __init__(self,host,YBA_API,args):
+        self.YBA_API  = YBA_API
+        self.args     = args
+        self.nodeList = []
+        self.universe = None
+
+        if self.args.universe:
+           self.YBA_API.Initialize()
+           self.universe = self.YBA_API.find_universe_by_name_or_uuid(self.args.universe)
+           if self.universe is None:
+               log("Could not find a universe named "+ args.universe,isError=True)
+               raise Exception("Specified universe could not be found")
+
+        if self.args.region :
+            self.region = args.region
+            self.az     = args.availability_zone
+            self.YBA_API.Initialize()
+            if self.universe is None:
+                self.universe = self.YBA_API.find_universe_by_region_az(args.region, args.availability_zone)
+                if self.universe is None:
+                    log("Could not determine universe based on Region+AZ. Please specify --universe also",isError=True)
+                    raise Exception("Arguments incorrect/insufficient")
+            for n in  self.universe.find_nodes_by_region_az(args.region, args.availability_zone):
+                self.nodeList.append(YB_Data_Node.construct_from_json(n,self.universe,YBA_API,args))
+            if len(self.nodeList) == 0:
+               raise Exception("Did not find any nodes to operate on in the specified region/az")
+        if self.universe is None:
+            raise NotMyTypeException("Neither --universe nor (--region + --az) were properly specified")
+    
+    def health(self):
+        self.universe.health_check()
+
+    def stop(self):
+        if len(self.nodeList) == 0:
+            raise Exception("Did not find any nodes to operate on")
+        log("performing STOP on "+str(len(self.nodeList)) + ' nodes.')
+        for n in self.nodeList:
+            n.stop()
+
+    def resume(self):
+        if len(self.nodeList) == 0:
+            raise Exception("Did not find any nodes to operate on")
+        log("performing RESUME on "+str(len(self.nodeList)) + ' nodes.')
+        for n in self.nodeList:
+            n.resume()
+
+#-------------------------------------------------------------------------------------------
 class YBA_Node:
     _YBA_PROCESS_STOP_LIST = ['yb-platform', 'prometheus', 'rh-nginx118-nginx', 'rh-postgresql10-postgresql']
 
@@ -568,6 +632,42 @@ class YBA_API_CLASS:
         self.promhost=promhost
         self.initialized = True
 
+    def find_universe_by_name_or_uuid(self,lookfor_name:str=None):
+        if lookfor_name is None:
+            return None
+        lookfor_name = lookfor_name.upper()
+        for candidate_universe in self.universe_list:
+            if lookfor_name in candidate_universe.name.upper() \
+                  or lookfor_name in candidate_universe.UUID.upper():
+                return candidate_universe
+        return None
+
+    def find_universe_by_region_az(self,region,az):
+        univ_dict   = {} # Contains tuples {univ-UUID: Number-found}
+        region      = region.upper()
+        if az is not None:
+            az          = az.upper()
+        for candidate_universe in self.universe_list:
+            #  u[1]['universeDetails']['clusters'][0]['placementInfo']['cloudList'][0]['regionList'][0]['name']
+            for cluster in candidate_universe.universeDetails['clusters']:
+                for cloud in cluster['placementInfo']['cloudList']:
+                    for reg in cloud['regionList']:
+                        #print (candidate_universe['name']," : ",reg['name'])
+                        if region in reg['name'].upper()  or  region in reg['code'].upper():
+                            if az is None:
+                                univ_dict[candidate_universe.UUID] = univ_dict.get(candidate_universe.UUID , 0) + 1
+                                break
+                            else:
+                                for candidate_az in reg['azList']:
+                                    #print ("       az ",candidate_az['name'])
+                                    if az in candidate_az['name'].upper():
+                                        univ_dict[candidate_universe.UUID] = univ_dict.get(candidate_universe.UUID , 0) + 1
+                                        break
+
+        if len(univ_dict) == 1:
+            return self.find_universe_by_name_or_uuid(next(iter(univ_dict))) # univ object corresponding to First key in dict
+        log("Found "+ str(len(univ_dict)) + " Universes for region/az:"+region + "/"+ az, isError=True)
+        return None
 
 
     def find_universe_for_node(self,hostname=None,ip=None):
@@ -719,6 +819,7 @@ class YB_Data_Node:
         self.ip       = get_node_ip(hostname)
         self.YBA_API  = YBA_API
         self.args     = args
+        self.universe = None
         try:
            services = subprocess.check_output(["crontab","-u","yugabyte","-l"])
            if " master " in str(services)  or  " tserver " in str(services):
@@ -737,10 +838,24 @@ class YB_Data_Node:
             log(e.output,isError=True)
             os._exit(5)
 
+    @classmethod # Special constructor 
+    def construct_from_json(cls,json,universe,YBA_API,args):
+        self = cls.__new__(cls)  # Does not call __init__
+        super(YB_Data_Node, self).__init__()  # call polymorphic base class initializers
+        self.node_json = json
+        self.universe  = universe 
+        self.YBA_API   = YBA_API
+        self.hostname = json['nodeName']
+        self.ip       = json['cloudInfo']['private_ip']
+        self.args     = args
+        return self
+    
+
     # Start node, then x-cluster - only print xluster status if dry run
     def resume(self): # aka start_node 
         self.YBA_API.Initialize()
-        self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname)        
+        if self.universe is None:
+            self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname)        
         log('  Found node ' + self.node_json['nodeName'] + ' in Universe ' + self.universe.name
             + ' - UUID ' + self.universe.UUID)
         if self.args.dryrun:
@@ -949,7 +1064,8 @@ class YB_Data_Node:
     # Stop x-cluster and then the node processes
     def stop(self): #api_host, customer_uuid, universe, api_token, node, skip_xcluster=False, skip_maint_window=False):
         self.YBA_API.Initialize()
-        self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname)
+        if self.universe is None:
+            self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname)
         # Add maintenence window
         if not self.args.skip_maint_window:
             self.YBA_API.maintenance_window(self, 'create')
@@ -988,11 +1104,14 @@ class YB_Data_Node:
         log('\n - Checking if node {} is master leader before shutting down'.format(self.node_json['cloudInfo']['private_ip']))
         ldr_ip = self.get_master_leader_ip()
         if ldr_ip == get_node_ip(self.node_json['cloudInfo']['private_ip']):
-            log('   Node is currently master leader - stepping down before shutdown')
-            if retry_successful(self.stepdown_master, params=[ldr_ip], verbose=True):
-                log('Master stepdown succeeded', logTime=True)
+            if self.args.skip_stepdown:
+                log("Skipping master-leader stepdown, as requested")
             else:
-                log('Failed to stepdown master', logTime=True)
+                log('   Node is currently master leader - stepping down before shutdown')
+                if retry_successful(self.stepdown_master, params=[ldr_ip], verbose=True):
+                    log('Master stepdown succeeded', logTime=True)
+                else:
+                    log('Failed to stepdown master', logTime=True)
 
         ## Shutdown server
         log(' Shutting down DB server ' + str(self.node_json['nodeName']), logTime=True)
@@ -1017,7 +1136,8 @@ class YB_Data_Node:
 
     def health(self):
         self.YBA_API.Initialize()
-        self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname)
+        if self.universe is None:
+            self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname)
         if self.node_json is None:
             log("Node " + self.hostname + " is not in any known universe" ,isError=True,logTime=True)
             raise Exception("Node " + self.hostname + " is not in any known universe" )
@@ -1161,10 +1281,15 @@ def main():
                         help='By default, the script will look for the ENV_FILE_PATTERN in /home/yugabyte. You can overwrite this by providing --ENV_FILE_PATH <new path>, example is --ENV_FILE_PATH /tmp/'
 
     )
-    parser.add_argument('-u','--universe_name',
+    parser.add_argument('-u','--universe',
                         action='store',
-                        help='This is mainly allowing to specific the universe you can go after.'
+                        help='Universe to operate on (health, or regional ops)'
                         )
+    parser.add_argument('-k', '--skip_stepdown',
+                        action='store_true',
+                        help='Skip master-stepdown if this is a STOP on a master-leader. If not set, we will attempt stepdown.',
+                        required=False,
+                        default=False)    
     args = parser.parse_args()
 
     hostname = str(socket.gethostname())
@@ -1192,8 +1317,8 @@ def main():
         ENV_FILE_PATH = args.ENV_FILE_PATH
 
     universe_name = args.health
-    if args.universe_name:
-        universe_anme = args.universe_name
+    if args.universe:
+        universe_name = args.universe
 
     ACTIONS_ALLOWED_ON_YBA = 'health|stop|resume'
 
@@ -1265,7 +1390,7 @@ def main():
     # ---- Mainline code -------
     YBA_API   = YBA_API_CLASS(api_host,customer_uuid,api_token) # Instantiated , but not Initialized yet
     this_node = None # The node object I will perform "action" upon
-    for node_class in (YBA_Node, YB_Data_Node):
+    for node_class in (Multiple_Nodes_Class, YBA_Node, YB_Data_Node):
         try:
             log ("Checking if node is of type '" + node_class.__name__ + "' ...",logTime=True)
             this_node = node_class(hostname,YBA_API,args)
@@ -1274,8 +1399,8 @@ def main():
             continue # Try the next type
 
     if this_node is None:
-        log ("Could not identify node type for "+hostname,isError=True,logTime=True)
-        exit (3)
+        log ("WARNING: Could not identify node type for "+hostname + ". Ignoring and terminating normally",logTime=True)
+        exit (0)
         
     try:
        action_method = getattr(this_node,action) 
