@@ -104,11 +104,11 @@ v 1.30
     BugFix - for universe==None case for functionality for "New" nodes
 v 1.31, 1.32 , 1.33, 1.34
     BugFix - check if YBA before giving up on "New node"
-v 1.35f
+v 1.35g
     Major Re-factor to O-O.(a)YBA-OK, YBDB-node, multi-node code complete..
 '''
 
-Version = "1.35f"
+Version = "1.35g"
 
 import argparse
 import requests
@@ -245,6 +245,52 @@ class Universe_class:
                         nodes.append(candidate_node)
         return nodes
 
+    def get_master_leader_ip(self):
+        j = self.YBA_API.get_universe_info(self.UUID,'/leader')
+        if not isinstance(j, dict):
+            raise Exception("Call to get leader IP returned {} instead of dict".format(type(j)))
+        if not 'privateIP' in j:
+            raise Exception("Could not determine master leader - privateIP was not found in {}".format(j))
+        return(get_node_ip(j['privateIP']))
+    
+    def check_under_replicated_tablets(self):
+        """
+        http://172.31.23.16:7000/api/v1/tablet-under-replication
+        Sample output
+        {"underreplicated_tablets":[{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"c0acc61a6f874a489d113494ab266c39","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"4bcb4184a80c4c0dbdd5bd07063fe66b","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"98c7852212ad4919b726ad5ad8f27025","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"70d12ac57b9449b2b04f30d4a0a5dbc7","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"dc97c6805d234c88a39dab8443eb2cda","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"b6bb01582efe47008a583fcaa4698258","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"7dcdeefeaa48457ea7155f572cc9aaee","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"c9eaf49983784050b41aa981706b9648","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"fea04949daee498fbddb6ae5f5a54d2e","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"86996c4c524e48c397a5733bfd599cad","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"6cb2f58212ae4495b96f30979839ec31","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"b9cae88995fc4898910c838c0a5c302c","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"000033e9000030008000000000004000","tablet_uuid":"adb412ac66f346db9176abbd4ec3583b","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"000033e9000030008000000000004000","tablet_uuid":"ffc63a74eb94448fb76edb2cd3d1f154","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"000033e9000030008000000000004000","tablet_uuid":"d8e632f4748343e4be6534ffdddfef9e","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"000033e9000030008000000000004000","tablet_uuid":"c6069b51565e4aab9f3f049d4d876684","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]}]}
+
+        Check if the system is under replicated. It will go after master(leader) and curl /api/v1/tablet-under-replication.
+        It will print out a list of under replicated tablet - table.
+
+        :return 0 if it has no under replicated
+                >0 return number of tablet is under_replicated
+                -1 if it can't get the number of under replicated tablet
+        """
+
+        master_node = self.get_master_leader_ip(include_port=True)
+        try:  # try both http and https endpoints
+            resp = requests.get('https://' + master_node + '/api/v1/tablet-under-replication',
+                                verify=False)
+            under_replicated_tablets = resp.json()
+        except:
+            resp = requests.get('http://' + master_node + '/api/v1/tablet-under-replication')
+            under_replicated_tablets = resp.json()
+
+        under_replicated_tablets_list = under_replicated_tablets['underreplicated_tablets']
+
+        # Doing it if there is more than 0's under replicated tablets
+        if len(under_replicated_tablets_list) > 0:
+            log(f"\t\t tablet_uuid \t\t - \t\t table_uuid")
+            for under in under_replicated_tablets_list[0:5]:
+                log(f"\t{under['tablet_uuid']} \t - \t {under['table_uuid']}")
+            if len(under_replicated_tablets_list)  > 5:
+                log("\t......truncated to 5 tablets .......")
+
+            log("\n")
+            log(f"Total # of under replicated tablets: {len(under_replicated_tablets_list)}")
+            raise Exception(len(under_replicated_tablets_list) + " Under-replicated tablets")
+
+        return len(under_replicated_tablets_list)
 
     def health_check(self):
         log('Performing health checks for universe {}, UUID {}...'.format(self.name, self.UUID))
@@ -444,6 +490,43 @@ class Universe_class:
         else:
             log('--- Health check for universe "{}" completed with no issues'.format(self.name))
             return
+
+    def fix(self):
+        log('Fixing the following items in the universe: ' + str(self.args.fix))
+        mods = []
+        f = self.universeDetails
+        if 'placement' in self.args.fix:
+            if PLACEMENT_TASK_FIELD in f and len(f[PLACEMENT_TASK_FIELD]) > 0:
+                f[PLACEMENT_TASK_FIELD] = ''
+                mods.append('placement')
+
+        if len(mods) == 0:
+            log('No items exist to fix')
+            return
+        
+        log('Updating universe config with the following fixed items: ' + str(mods))
+        if 'tserverGFlags' not in f:
+            f['tserverGFlags'] = {"vmodule": "secure1*"}
+        if 'masterGFlags' not in f:
+            f['masterGFlags'] = {"vmodule": "secure1*"}
+        f['upgradeOption'] = "Non-Restart"
+        f['sleepAfterMasterRestartMillis'] = 0
+        f['sleepAfterTServerRestartMillis'] = 0
+        #f['kubernetesUpgradeSupported'] = False
+        response = requests.post(self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' +
+                                self.UUID + '/upgrade/gflags',
+            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token},
+            json=f)
+        task = response.json()
+        if retry_successful(self.YBA_API.wait_for_task, params=[ task['taskUUID'] ],sleep=TASK_COMPLETE_WAIT_TIME_SECONDS,verbose=True,retry=15):
+            log(' Server items fixed', logTime=True)
+            restarted = True
+        else:
+            log("Fix task failed",isError=True,logTime=True)
+            raise Exception("Fix task failed")
+
+            
+
 #-------------------------------------------------------------------------------------------
 class Multiple_Nodes_Class:
     # Used when --universe or (--region + --az) is specified
@@ -453,17 +536,24 @@ class Multiple_Nodes_Class:
         self.args     = args
         self.nodeList = []
         self.universe = None
-
+        
+        if args.health and args.health.upper() == "ALL" and not args.universe:
+            self.args.universe = "ALL"
         if self.args.universe:
-           self.YBA_API.Initialize()
-           self.universe = self.YBA_API.find_universe_by_name_or_uuid(self.args.universe)
-           if self.universe is None:
-               log("Could not find a universe named "+ args.universe,isError=True)
-               raise Exception("Specified universe could not be found")
+            self.YBA_API.Initialize()
+            if args.universe.upper() == "ALL"  and args.health:
+                pass
+            else:
+                self.universe = self.YBA_API.find_universe_by_name_or_uuid(self.args.universe)
+                if self.universe is None:
+                    log("Could not find a universe named "+ args.universe,isError=True)
+                    raise Exception("Specified universe could not be found")
 
         if self.args.region :
             self.region = args.region
             self.az     = args.availability_zone
+            if "=" in self.az:
+                log("WARNING: specified AZ '" + self.az + "' contains an '=' sign .. does not look right. check your '-a' or '--availability_zone' param")
             self.YBA_API.Initialize()
             if self.universe is None:
                 self.universe = self.YBA_API.find_universe_by_region_az(args.region, args.availability_zone)
@@ -478,19 +568,39 @@ class Multiple_Nodes_Class:
             raise NotMyTypeException("Neither --universe nor (--region + --az) were properly specified")
     
     def health(self):
+        if isinstance(self.universe,str) and self.universe.upper() == "ALL":
+            for u in self.YBA_API.universe_list:
+                u.health_check()
+            return
         self.universe.health_check()
+
+    def fix(self):
+        self.universe.fix()
 
     def stop(self):
         if len(self.nodeList) == 0:
             raise Exception("Did not find any nodes to operate on")
         log("performing STOP on "+str(len(self.nodeList)) + ' nodes.')
-        for n in self.nodeList:
+        if self.args.dryrun:
+            log("Dry Run : Not performing STOP")
+            return
+        for n in self.nodeList: # Stop tservers first 
+            if n.isMaster:
+                continue # do it in the next loop
             n.stop()
+            retry_successful(self.check_under_replicated_tablets,fatal=True,sleep=30)
+        for n in self.nodeList: # Stop masters 
+            if n.isMaster:
+                n.stop()
+                retry_successful(self.check_under_replicated_tablets,fatal=True,sleep=30)
 
     def resume(self):
         if len(self.nodeList) == 0:
             raise Exception("Did not find any nodes to operate on")
         log("performing RESUME on "+str(len(self.nodeList)) + ' nodes.')
+        if self.args.dryrun:
+            log("Dry Run : Not performing RESUME")
+            return
         for n in self.nodeList:
             n.resume()
 
@@ -674,7 +784,7 @@ class YBA_API_CLASS:
         for universe in self.universe_list:
             node_json = universe.get_node_json(hostname,ip)
             if node_json is None:
-                return None, None
+                continue # to the next universe 
             return universe,node_json
         return None,None
 
@@ -848,6 +958,8 @@ class YB_Data_Node:
         self.hostname = json['nodeName']
         self.ip       = json['cloudInfo']['private_ip']
         self.args     = args
+        self.isMaster = json['isMaster']
+        self.isTserver= json['isTserver']
         return self
     
 
@@ -855,7 +967,7 @@ class YB_Data_Node:
     def resume(self): # aka start_node 
         self.YBA_API.Initialize()
         if self.universe is None:
-            self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname)        
+            self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname, self.ip)        
         log('  Found node ' + self.node_json['nodeName'] + ' in Universe ' + self.universe.name
             + ' - UUID ' + self.universe.UUID)
         if self.args.dryrun:
@@ -953,13 +1065,13 @@ class YB_Data_Node:
         if not self.args.skip_maint_window:
             self.YBA_API.maintenance_window( self, 'remove')
 
-    def get_node_health (node_type, node, yba_state):
+    def get_node_health (self,node_type):
         uri = None
         can_reach = True
         if node_type.lower() == 'master':
-            uri = node['cloudInfo']['private_ip'] + ':' + str(node['masterHttpPort']) + '/api/v1/health-check'
+            uri = self.node_json['cloudInfo']['private_ip'] + ':' + str(self.node_json['masterHttpPort']) + '/api/v1/health-check'
         elif node_type.lower() == 'tserver':
-            uri = node['cloudInfo']['private_ip'] + ':' + str(node['tserverHttpPort']) + '/api/v1/health-check'
+            uri = self.node_json['cloudInfo']['private_ip'] + ':' + str(self.node_json['tserverHttpPort']) + '/api/v1/health-check'
         else:
             raise Exception('Invalid node type "{}" for node health'.format(node_type))
 
@@ -972,7 +1084,7 @@ class YB_Data_Node:
                 can_reach = False
                 pass
 
-        if yba_state == 'Live':
+        if self.node_json['state'] == 'Live':
             if can_reach:
                 return True, None
             else:
@@ -985,15 +1097,18 @@ class YB_Data_Node:
 
 
     # Verify tServer/Master processes are in same state as YBA thinks they are
-    def verify(api_host, customer_uuid, universe, api_token, node):
-        log('Verifying Master and tServer on node {} are in correct state per YBA'.format(node['cloudInfo']['private_ip']))
-        log(' - YBA shows node as being {}'.format(node['state']))
+    def verify(self):
+        self.YBA_API.Initialize()
+        if self.universe is None:
+            self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname, self.ip)    
+        log('Verifying Master and tServer on node {} are in correct state per YBA'.format(self.node_json['cloudInfo']['private_ip']))
+        log(' - YBA shows node as being {}'.format(self.node_json['state']))
         errs = 0
 
-        if node['state'] == 'Live':
-            if node['isMaster']:
+        if self.node_json['state'] == 'Live':
+            if self.node_json['isMaster']:
                 log('   YBA shows node as having a Master - checking for process')
-                passed, message = get_node_health('Master', node, node['state'])
+                passed, message = self.get_node_health('Master')
                 if passed:
                     log('     Check passed: master process found on node')
                 else:
@@ -1002,9 +1117,9 @@ class YB_Data_Node:
             else:
                 log('   YBA shows node as NOT having a Master - skipping check')
 
-            if node['isTserver']:
+            if self.node_json['isTserver']:
                 log('   YBA shows node as having a tServer - checking for process')
-                passed, message = get_node_health('tServer', node, node['state'])
+                passed, message = self.get_node_health('tServer')
                 if passed:
                     log('     Check passed: tServer process found on node')
                 else:
@@ -1012,22 +1127,22 @@ class YB_Data_Node:
                     errs += 1
             else:
                 log('   YBA shows node as NOT having a  tServer - skipping check')
-        elif node['state'] == 'Stopped':
-            passed, message = get_node_health('Master', node, node['state'])
+        elif self.node_json['state'] == 'Stopped':
+            passed, message = self.get_node_health('Master')
             if passed:
                 log('     Check passed: No master process found on node')
             else:
                 log(message, True)
                 errs += 1
 
-            passed, message = get_node_health('Tserver', node, node['state'])
+            passed, message = self.get_node_health('Tserver')
             if passed:
                 log('     Check passed: No tServer process found on node')
             else:
                 log(message, True)
                 errs += 1
         else:
-            log('Node is in state "' + node['state'] + '" and cannot be verified.  Node must be LIVE or STOPPED to run verification', True)
+            log('Node is in state "' + self.node_json['state'] + '" and cannot be verified.  Node must be LIVE or STOPPED to run verification', True)
             errs += 1
 
         if errs > 0:
@@ -1065,7 +1180,7 @@ class YB_Data_Node:
     def stop(self): #api_host, customer_uuid, universe, api_token, node, skip_xcluster=False, skip_maint_window=False):
         self.YBA_API.Initialize()
         if self.universe is None:
-            self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname)
+            self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname,self.ip)
         # Add maintenence window
         if not self.args.skip_maint_window:
             self.YBA_API.maintenance_window(self, 'create')
@@ -1137,7 +1252,7 @@ class YB_Data_Node:
     def health(self):
         self.YBA_API.Initialize()
         if self.universe is None:
-            self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname)
+            self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname,self.ip)
         if self.node_json is None:
             log("Node " + self.hostname + " is not in any known universe" ,isError=True,logTime=True)
             raise Exception("Node " + self.hostname + " is not in any known universe" )
@@ -1152,36 +1267,6 @@ class YB_Data_Node:
 
 
 #-------------------------------------------------------------------------------------------
-def fix(api_host, customer_uuid, universe, api_token, fix_list):
-    log('Fixing the following items in the universe: ' + str(fix_list))
-    mods = []
-    f = universe.universeDetails
-    if 'placement' in fix_list:
-        if PLACEMENT_TASK_FIELD in f and len(f[PLACEMENT_TASK_FIELD]) > 0:
-            f[PLACEMENT_TASK_FIELD] = ''
-            mods.append('placement')
-
-    if mods:
-        log('Updating universe config with the following fixed items: ' + str(mods))
-        if 'tserverGFlags' not in f:
-            f['tserverGFlags'] = {"vmodule": "secure1*"}
-        if 'masterGFlags' not in f:
-            f['masterGFlags'] = {"vmodule": "secure1*"}
-        f['upgradeOption'] = "Non-Restart"
-        f['sleepAfterMasterRestartMillis'] = 0
-        f['sleepAfterTServerRestartMillis'] = 0
-        #f['kubernetesUpgradeSupported'] = False
-        response = requests.post(api_host + '/api/v1/customers/' + customer_uuid + '/universes/' +
-                                 universe['universeUUID'] + '/upgrade/gflags',
-            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': api_token},
-            json=f)
-        task = response.json()
-        if wait_for_task(api_host, customer_uuid, task['taskUUID'], api_token):
-            log('Server items fixed')
-        else:
-            log('Fix task failed', True)
-    else:
-        log('No items exist to fix')
 
 def get_db_nodes_and_universe(universes, hostname, ip, universe_name, region=None, az=None):
     if universes is None or len(universes) < 1:
@@ -1421,121 +1506,6 @@ def main():
        exit (NODE_DB_SUCCESS)
     
 #-------------------------------------------------------------------------------------------
-# -- Legacy, unused code below -------
-
-    log('Retrieving Universes from YBA server at ' + api_host)
-    yba_api.get_universes()
-    rg = None
-    az = None
-    univ_name = LOCALHOST
-    if action == 'health':
-        univ_name = args.health
-    if action == 'stop' or action == 'resume':
-        rg = args.region
-        az = args.availability_zone
-    dbhost_list, universe = get_db_nodes_and_universe(universes, hostname, ip, univ_name, rg, az)
-    if universe == None:
-        if yba_server(hostname,'test',dry_run):
-            dbhost_list=[] # Zap the incorrect [None] value 
-            pass #no op
-        else:
-            log("Did not find any universe for host {} IP {}. Ignoring unknown host and *EXITING NORMALLY*".format(hostname,ip),
-                 isError=True,logTime=True)
-            exit(0)
-    try:
-        ## first, do healthcheck if specified
-        if action == 'health':
-            log('--- Health Check only - all checks will be done, but nothing will be stopped or resumed ')
-
-            if args.health == LOCALHOST and len(dbhost_list) < 1:
-                log('Healthcheck is not being run from a DB node - Specify a universe name or "ALL" to check all Universes from a non-DB node.', True)
-                log(' Process failed - exiting with code ' + str(OTHER_ERROR), logTime=True)
-                if (not LOG_TO_TERMINAL):
-                    LOG_FILE.close()
-                exit(OTHER_ERROR)
-            if args.health != LOCALHOST:
-                if len(dbhost_list) < 1:
-                    log('Healthcheck universe name specified from a DB node - checking health for universe "{}" instead of universe associated with the node'.format(args.health))
-                if str(args.health).upper() == 'ALL':
-                    for hc_universe in universes:
-                        log('\n')
-                        health_check(api_host, customer_uuid, hc_universe, api_token, None)
-                else:
-                    if universe is not None:
-                        health_check(api_host, customer_uuid, universe, api_token, None)
-                    else:
-                        log('Could not find universe with name "{}" exiting'.format(args.health), isError=True)
-                        log(' Process failed - exiting with code ' + str(OTHER_ERROR), logTime=True)
-                        if (not LOG_TO_TERMINAL):
-                            LOG_FILE.close()
-                        exit(OTHER_ERROR)
-            else:
-                dbhost = None
-                if len(dbhost_list) > 0:
-                    dbhost = dbhost_list[0]
-                health_check(api_host, customer_uuid, universe, api_token, dbhost)
-
-        else: # not a healthckeck only, so proceed
-            if len(dbhost_list) < 1: # running from YBA instance
-                if yba_server(ip, action, dry_run):
-                    exit_code = NODE_YBA_SUCCESS
-                    if not action in ACTIONS_ALLOWED_ON_YBA :
-                        log('Cannot run {} command from a YBA server - run from the node instead'.format(action), isError=True)
-                        log(' Process failed - exiting with code ' + str(NODE_YBA_ERROR), logTime=True)
-                        exit_code = NODE_YBA_ERROR
-                    else:
-                        log(' Process completed successfully - exiting with code ' + str(NODE_YBA_SUCCESS), logTime=True)
-                    if (not LOG_TO_TERMINAL):
-                        LOG_FILE.close()
-                    exit(exit_code)
-                else: # not YBA or DB node, and not running a healthcheck
-                    log(' Node is neither a DB host nor a YBA host - exiting with code ' + str(OTHER_ERROR), logTime=True)
-                    if (not LOG_TO_TERMINAL):
-                        LOG_FILE.close()
-                    exit(OTHER_ERROR)
-            else: # running from a DBnode or region specified
-                skip_xc = args.skip_xcluster
-                skip_maint = args.skip_maint_window
-                node_list_text = ''
-                for dbhost in dbhost_list:
-                    node_list_text = node_list_text + str(dbhost['nodeName']) + ', '
-                node_list_text = node_list_text.rstrip(', ')
-                if len(dbhost_list) > 1:
-                    skip_xc = True
-                    skip_maint = True
-                if action == 'stop':
-                    log(' The following nodes were found to stop: {}\n'.format(node_list_text))
-                    if dry_run:
-                        log('--- Dry run only - all checks will be done, but replication will not be paused and nothing will be stopped ')
-                    health_check(api_host, customer_uuid, universe, api_token, dbhost_list[0])
-                    if dry_run:
-                        log('--- Dry run only - Exiting')
-                    else:
-                        for dbhost in dbhost_list:
-                            stop_node(api_host, customer_uuid, universe, api_token, dbhost, skip_xc, skip_maint)
-                elif action == 'resume':
-                    log(' The following nodes were found to resume: {}\n'.format(node_list_text))
-                    if dry_run:
-                        log('--- Dry run only - Exiting')
-                    else:
-                        for dbhost in dbhost_list:
-                            start_node(api_host, customer_uuid, universe, api_token, dbhost, dry_run, skip_xc, skip_maint)
-                elif action == 'fix':
-                    fix(api_host, customer_uuid, universe, api_token, args.fix)
-                elif action == 'verify':
-                    for dbhost in dbhost_list:
-                        verify(api_host, customer_uuid, universe, api_token, dbhost)
-    except Exception as e:
-        log(e, True)
-        log(' Process failed - exiting with code ' + str(OTHER_ERROR), logTime=True)
-        if(not LOG_TO_TERMINAL):
-            LOG_FILE.close()
-        #traceback.print_exc()
-        exit(OTHER_ERROR)
-
-    log(' Process completed successfully - exiting with code ' + str(NODE_DB_SUCCESS), logTime=True)
-    if(not LOG_TO_TERMINAL):
-        LOG_FILE.close()
 
 if __name__ == '__main__':
     main()
