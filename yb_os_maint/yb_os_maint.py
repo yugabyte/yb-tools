@@ -104,11 +104,11 @@ v 1.30
     BugFix - for universe==None case for functionality for "New" nodes
 v 1.31, 1.32 , 1.33, 1.34
     BugFix - check if YBA before giving up on "New node"
-v 1.35g
+v 1.35h
     Major Re-factor to O-O.(a)YBA-OK, YBDB-node, multi-node code complete..
 '''
 
-Version = "1.35g"
+Version = "1.35h"
 
 import argparse
 import requests
@@ -179,7 +179,7 @@ def log(msg, isError=False, logTime=False):
 def retry_successful(retriable_function_call, params=None, retry:int=10, verbose=False, sleep:float=.5, fatal=False):
     for i in range(retry):
         try:
-            verbose and log("Attempt {} running {}".format(i+1, retriable_function_call.__name__),logTime=True)
+            verbose and log("Attempt {} running {}. Will wait {} sec.".format(i+1, retriable_function_call.__name__,sleep * i),logTime=True)
             time.sleep(sleep * i)
             retval = retriable_function_call(*params)
             verbose and retval != None and log(
@@ -213,6 +213,7 @@ class Universe_class:
     def __init__(self,YBA_API,json):
         self.YBA_API        = YBA_API
         self.json           = json
+        self.args           = YBA_API.args
         self.nodeDetailsSet = json['universeDetails']['nodeDetailsSet']
         self.UUID           = json["universeUUID"]
         self.name           = json["name"]
@@ -484,9 +485,8 @@ class Universe_class:
         ## End health checks,
         if errcount > 0:
             log('--- Health check has failed - ' + str(
-                errcount) + ' errors were detected terminating shutdown.')
-            log('\n' + datetime.now().strftime(LOG_TIME_FORMAT) + ' Process failed - exiting with code ' + str(NODE_DB_ERROR))
-            exit(NODE_DB_ERROR)
+                errcount) + ' errors were detected.',isError=True,logTime=True)
+            raise Exception("Health check failed")
         else:
             log('--- Health check for universe "{}" completed with no issues'.format(self.name))
             return
@@ -516,8 +516,11 @@ class Universe_class:
         response = requests.post(self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' +
                                 self.UUID + '/upgrade/gflags',
             headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token},
-            json=f)
+            json=f,verify=False)
         task = response.json()
+        if  task.get('taskUUID') is None:
+            log("gflag task error:{}".format(task))
+            raise Exception("Failed to create gflag update task")
         if retry_successful(self.YBA_API.wait_for_task, params=[ task['taskUUID'] ],sleep=TASK_COMPLETE_WAIT_TIME_SECONDS,verbose=True,retry=15):
             log(' Server items fixed', logTime=True)
             restarted = True
@@ -542,6 +545,7 @@ class Multiple_Nodes_Class:
         if self.args.universe:
             self.YBA_API.Initialize()
             if args.universe.upper() == "ALL"  and args.health:
+                self.universe = args.universe.upper() 
                 pass
             else:
                 self.universe = self.YBA_API.find_universe_by_name_or_uuid(self.args.universe)
@@ -569,9 +573,18 @@ class Multiple_Nodes_Class:
     
     def health(self):
         if isinstance(self.universe,str) and self.universe.upper() == "ALL":
+            fail_count = 0
             for u in self.YBA_API.universe_list:
-                u.health_check()
-            return
+                try:
+                    u.health_check()
+                except:
+                    log("Universe "+ u.name + "(" + u.UUID +") failed health check")
+                    fail_count += 1
+                log("----------------------------") # Separator between health checks...
+            if fail_count == 0:
+                return
+            raise Exception(str(fail_count) + " universes failed health check")
+        
         self.universe.health_check()
 
     def fix(self):
@@ -704,10 +717,11 @@ class YBA_Node:
                 log('  Service {} is not running - skipping'.format(svc))
 #-------------------------------------------------------------------------------------------
 class YBA_API_CLASS:
-    def __init__(self,api_host, customer_uuid, api_token):
+    def __init__(self,api_host, customer_uuid, api_token,args):
         self.api_host      = api_host
         self.customer_uuid = customer_uuid
         self.api_token     = api_token
+        self.args          = args
         self.universe_list = []
         self.promhost      = None
         self.initialized   = False
@@ -1079,7 +1093,7 @@ class YB_Data_Node:
             resp = requests.get('http://' + uri)
         except:
             try:
-                resp = requests.get('https://' + uri)
+                resp = requests.get('https://' + uri, verify=False)
             except:
                 can_reach = False
                 pass
@@ -1473,7 +1487,7 @@ def main():
         exit(OTHER_ERROR)
 
     # ---- Mainline code -------
-    YBA_API   = YBA_API_CLASS(api_host,customer_uuid,api_token) # Instantiated , but not Initialized yet
+    YBA_API   = YBA_API_CLASS(api_host,customer_uuid,api_token,args) # Instantiated , but not Initialized yet
     this_node = None # The node object I will perform "action" upon
     for node_class in (Multiple_Nodes_Class, YBA_Node, YB_Data_Node):
         try:
@@ -1495,7 +1509,7 @@ def main():
         log ("Could not perform '"+ action + "' because it is not valid for '" + str(this_node.__class__) + "'" , isError=True,logTime=True)
         exit(4)
     except Exception as e:
-        log ("Could not perform "+ action , isError=True,logTime=True)
+        log ("Failed "+ action , isError=True,logTime=True)
         log(e,isError=True)
         exit (5)
     else: 
