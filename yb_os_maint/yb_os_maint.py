@@ -4,11 +4,10 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-##  08/09/2022
-##  Original Author: Mike LaSpina - Yugabyte
+Version = "2.01"
 
 ''' ---------------------- Change log ----------------------
-V1.0 - Initial version
+V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
 V1.1 - Re-worked checking for YBA server based on the 1st services in the list
 V1.2 - Added the following:
     file logging - pass '-t' to log output to terminal instead - usefule for dry runs
@@ -104,11 +103,9 @@ v 1.30
     BugFix - for universe==None case for functionality for "New" nodes
 v 1.31, 1.32 , 1.33, 1.34
     BugFix - check if YBA before giving up on "New node"
-v 1.35h
-    Major Re-factor to O-O.(a)YBA-OK, YBDB-node, multi-node code complete..
+v 1.35 -> 2.01 
+    Major Re-factor to O-O. YBA, YBDB-node, multi-node; Add check under-replicated tablets.
 '''
-
-Version = "1.35h"
 
 import argparse
 import requests
@@ -944,6 +941,13 @@ class YB_Data_Node:
         self.YBA_API  = YBA_API
         self.args     = args
         self.universe = None
+        try: # See if the 'yugabyte' user exists
+           services = subprocess.check_output(['id','-u','yugabyte'])
+           self.yugabyte_id = int(services.decode())
+        except:
+            # Looks like the "yugabyte" user does not exist .. exit with exception
+            raise NotMyTypeException("No user yugabyte")
+        
         try:
            services = subprocess.check_output(["crontab","-u","yugabyte","-l"])
            if " master " in str(services)  or  " tserver " in str(services):
@@ -1079,7 +1083,7 @@ class YB_Data_Node:
         if not self.args.skip_maint_window:
             self.YBA_API.maintenance_window( self, 'remove')
 
-    def get_node_health (self,node_type):
+    def _compare_node_service_status_to_YBA (self,node_type):
         uri = None
         can_reach = True
         if node_type.lower() == 'master':
@@ -1122,7 +1126,7 @@ class YB_Data_Node:
         if self.node_json['state'] == 'Live':
             if self.node_json['isMaster']:
                 log('   YBA shows node as having a Master - checking for process')
-                passed, message = self.get_node_health('Master')
+                passed, message = self._compare_node_service_status_to_YBA('Master')
                 if passed:
                     log('     Check passed: master process found on node')
                 else:
@@ -1133,7 +1137,7 @@ class YB_Data_Node:
 
             if self.node_json['isTserver']:
                 log('   YBA shows node as having a tServer - checking for process')
-                passed, message = self.get_node_health('tServer')
+                passed, message = self._compare_node_service_status_to_YBA('tServer')
                 if passed:
                     log('     Check passed: tServer process found on node')
                 else:
@@ -1142,14 +1146,14 @@ class YB_Data_Node:
             else:
                 log('   YBA shows node as NOT having a  tServer - skipping check')
         elif self.node_json['state'] == 'Stopped':
-            passed, message = self.get_node_health('Master')
+            passed, message = self._compare_node_service_status_to_YBA('Master')
             if passed:
                 log('     Check passed: No master process found on node')
             else:
                 log(message, True)
                 errs += 1
 
-            passed, message = self.get_node_health('Tserver')
+            passed, message = self._compare_node_service_status_to_YBA('Tserver')
             if passed:
                 log('     Check passed: No tServer process found on node')
             else:
@@ -1274,11 +1278,12 @@ class YB_Data_Node:
         log('Found node ' + self.node_json['nodeName'] + ' in Universe ' + self.universe.name + ' - UUID ' + self.universe.UUID)
         self.universe.health_check()
 
-        if not self.node_json['isMaster']:
-            log('  ### Warning: node is not a Master ###')
-        if not self.node_json['isTserver']:
-            log('  ### Warning: node is not a TServer ###')
+        # if not self.node_json['isMaster']:
+        #     log('  ### Warning: node is not a Master ###')
+        # if not self.node_json['isTserver']:
+        #     log('  ### Warning: node is not a TServer ###')
 
+        self.verify()
 
 #-------------------------------------------------------------------------------------------
 
@@ -1341,7 +1346,7 @@ def main():
                          const=LOCALHOST,
                          type=str,
                          action='store',
-                         help='Healthcheck only - specify Universe Name or "ALL" if not running on a DB Node')
+                         help='Healthcheck - specify Universe Name or "ALL" if not running on a DB Node')
     mxgroup.add_argument('-f', '--fix',
                          nargs='+',
                          action='store',
@@ -1382,7 +1387,7 @@ def main():
     )
     parser.add_argument('-u','--universe',
                         action='store',
-                        help='Universe to operate on (health, or regional ops)'
+                        help='Universe to operate on, or "ALL" (health, or regional ops)'
                         )
     parser.add_argument('-k', '--skip_stepdown',
                         action='store_true',
@@ -1414,12 +1419,6 @@ def main():
     if args.ENV_FILE_PATH is not None:
         global ENV_FILE_PATH
         ENV_FILE_PATH = args.ENV_FILE_PATH
-
-    universe_name = args.health
-    if args.universe:
-        universe_name = args.universe
-
-    ACTIONS_ALLOWED_ON_YBA = 'health|stop|resume'
 
     # Set up logging - if directory not specified, log to stdout
     if args.log_file_directory is not None:
@@ -1509,7 +1508,7 @@ def main():
         log ("Could not perform '"+ action + "' because it is not valid for '" + str(this_node.__class__) + "'" , isError=True,logTime=True)
         exit(4)
     except Exception as e:
-        log ("Failed "+ action , isError=True,logTime=True)
+        log ("Failed "+ action + " Exiting with code 5", isError=True,logTime=True)
         log(e,isError=True)
         exit (5)
     else: 
