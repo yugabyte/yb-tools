@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.01"
+Version = "2.02"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -1243,6 +1243,7 @@ class YB_Data_Node:
                 log('   Node is currently master leader - stepping down before shutdown')
                 if retry_successful(self.stepdown_master, params=[ldr_ip], verbose=True):
                     log('Master stepdown succeeded', logTime=True)
+                    time.sleep(10) # Allow new master to read catalog etc
                 else:
                     log('Failed to stepdown master', logTime=True)
 
@@ -1254,7 +1255,9 @@ class YB_Data_Node:
             headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token}, verify=False,
             json=json.loads('{"nodeAction": "STOP"}'),)
         task = response.json()
-
+        if  task.get('taskUUID') is None:
+            log("NODE STOP  task error:{}".format(task))
+            raise Exception("Failed to create STOP NODE task")
         if 'error' in task:
             log('Could not shut down node : ' + task['error'], isError=True,logTime=True)
             log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
