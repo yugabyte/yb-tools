@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.03"
+Version = "2.04"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -105,8 +105,8 @@ v 1.31, 1.32 , 1.33, 1.34
     BugFix - check if YBA before giving up on "New node"
 v 1.35 -> 2.01 
     Major Re-factor to O-O. YBA, YBDB-node, multi-node; Add check under-replicated tablets.
-v 2.03
-
+v 2.03, 2.04
+    Enable --region, if DB node errors out, assume "unconfigured" node
 '''
 
 import argparse
@@ -774,7 +774,7 @@ class YBA_Node:
         except subprocess.CalledProcessError as e:
             log('Error checking for YBA process: ', isError=True,logTime=True)
             log(e.output,isError=True)
-            os._exit(8)
+            raise NotMyTypeException(host + " is not a YBA node(Error getting services)")
 
     def setVersion(self):
         activePath = subprocess.check_output(['readlink','-f','/opt/yugabyte/software/active'],text=True)
@@ -1090,15 +1090,19 @@ class YB_Data_Node:
            pass # If the crontab is empty, it will have exit code 1, which we want to ignore
 
         try:           
-           services = subprocess.check_output(['runuser','-l','yugabyte','-c','systemctl --user list-units --type=service --all'])
+           services = subprocess.check_output(['runuser','-l','yugabyte','-c','systemctl --user list-units --type=service --all'],stderr=subprocess.STDOUT)
            if 'yb-tserver.service' in str(services)  or  'yb-master.service' in str(services):
                return None
            # "master" / "tserver" were NOT FOUND 
            raise NotMyTypeException(hostname + " is not a YB Data node")
         except subprocess.CalledProcessError as e:
+            log('supprocess Error checking for YB DB process: ', isError=True,logTime=True)
+            log(e.output,isError=True)
+            raise NotMyTypeException(hostname + " is not a YB Data node(No cron and Error getting services)")
+        except Exception as e:
             log('Error checking for YB DB process: ', isError=True,logTime=True)
             log(e.output,isError=True)
-            os._exit(5)
+            raise NotMyTypeException(hostname + " is not a YB Data node(No cron and Error getting services)")        
 
     @classmethod # Special constructor 
     def construct_from_json(cls,json,universe,YBA_API,args):
@@ -1349,7 +1353,10 @@ def Get_Environment_info():
 
     if api_host is not None  and  api_token is not None  and customer_uuid is not None:
         return (api_host,api_token,customer_uuid)
-
+    if not os.path.exists(ENV_FILE_PATH):
+        log(ENV_FILE_PATH + " does not exist.",isError=True)
+        return (api_host,api_token,customer_uuid) # "None" values
+    
     # find env variable file - should be only 1
     flist = fnmatch.filter(os.listdir(ENV_FILE_PATH), ENV_FILE_PATTERN)
     if len(flist) < 1:
