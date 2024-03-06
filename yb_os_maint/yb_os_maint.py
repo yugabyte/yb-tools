@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.04"
+Version = "2.05"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -105,8 +105,9 @@ v 1.31, 1.32 , 1.33, 1.34
     BugFix - check if YBA before giving up on "New node"
 v 1.35 -> 2.01 
     Major Re-factor to O-O. YBA, YBDB-node, multi-node; Add check under-replicated tablets.
-v 2.03, 2.04
+v 2.03, 2.04, 2.05
     Enable --region, if DB node errors out, assume "unconfigured" node
+    Retry getting health info from master-leader.
 '''
 
 import argparse
@@ -175,7 +176,7 @@ def log(msg, isError=False, logTime=False):
     else:
         LOG_FILE.write(output_msg + '\n')
 
-def retry_successful(retriable_function_call, params=None, retry:int=10, verbose=False, sleep:float=.5, fatal=False):
+def retry_successful(retriable_function_call, params=None, retry:int=10, verbose=False, sleep:float=.5, fatal=False,ReturnFuncVal=False):
     for i in range(retry):
         try:
             verbose and log("Attempt {} running {}. Will wait {} sec.".format(i+1, retriable_function_call.__name__,sleep * i),logTime=True)
@@ -183,6 +184,8 @@ def retry_successful(retriable_function_call, params=None, retry:int=10, verbose
             retval = retriable_function_call(*params)
             verbose and retval != None and log(
                 "  Returned {} from called function {} on attempt {}".format(retval, retriable_function_call.__name__, i+1))
+            if ReturnFuncVal:
+                return retval
             return True
         except Exception as errorMsg:
             preserve_errmsg = errorMsg
@@ -321,6 +324,19 @@ class Universe_class:
                             dead_tservers += 1
         return max(dead_nodes, dead_masters, dead_tservers)
 
+    def get_health_info_from_master(self,master_ip_and_port):
+        try:  # try both http and https endpoints
+            resp = requests.get('https://' + master_ip_and_port + '/api/v1/health-check',verify=False)
+            return resp.json()
+        except ValueError: # no JSON returned
+            raise Exception("Did not get JSON for master health. Got:"+ resp.text)
+        except:
+            try:
+                resp = requests.get('http://' + master_ip_and_port + '/api/v1/health-check')
+                return resp.json()
+            except ValueError: # no JSON returned
+                raise Exception("Did not get JSON for master health. Got:"+ resp.text)
+
     def health_check(self):
         log('Performing health checks for universe {}, UUID {}...'.format(self.name, self.UUID))
         log('- Checking for task placement UUID',logTime=True)
@@ -340,22 +356,14 @@ class Universe_class:
 
         log('- Checking for master and tablet health')
 
-        master_node = None
-        for masternode in self.nodeDetailsSet:
-            if masternode['isMaster'] and masternode['state'] == 'Live':
-                master_node = masternode['cloudInfo']['private_ip'] + ':' + str(masternode['masterHttpPort'])
-                break
+        master_node = self.get_master_leader_ip(include_port=True)
         
         if master_node is None:
             log("No master nodes found - FAILED health check.",isError=True)
             raise Exception("Health check failed")
 
-        try:  # try both http and https endpoints
-            resp = requests.get('https://' + master_node + '/api/v1/health-check',verify=False)
-            hc = resp.json()
-        except:
-            resp = requests.get('http://' + master_node + '/api/v1/health-check')
-            hc = resp.json()
+        hc = retry_successful(self.get_health_info_from_master, params=[master_node],fatal=True,ReturnFuncVal=True,verbose=True)
+
         hc_errs = 0
         for n in hc:
             if n == 'most_recent_uptime':
