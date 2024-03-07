@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.05"
+Version = "2.06"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -105,9 +105,10 @@ v 1.31, 1.32 , 1.33, 1.34
     BugFix - check if YBA before giving up on "New node"
 v 1.35 -> 2.01 
     Major Re-factor to O-O. YBA, YBDB-node, multi-node; Add check under-replicated tablets.
-v 2.03, 2.04, 2.05
+v 2.03, 2.04, 2.05, 2.06
     Enable --region, if DB node errors out, assume "unconfigured" node
     Retry getting health info from master-leader.
+    Multi-node stop should not wait much for underreplicated - make non-fatal
 '''
 
 import argparse
@@ -294,7 +295,7 @@ class Universe_class:
 
             log("\n")
             log(f"Total # of under replicated tablets: {len(under_replicated_tablets_list)}")
-            raise Exception(len(under_replicated_tablets_list) + " Under-replicated tablets")
+            raise Exception(str(len(under_replicated_tablets_list)) + " Under-replicated tablets")
 
         return len(under_replicated_tablets_list)
 
@@ -725,14 +726,14 @@ class Multiple_Nodes_Class:
                     log(n.hostname + " is in " +  n.node_json['state'] + " state. Skipping", logTime=True)
                     continue
                 n.stop()
-                retry_successful(self.universe.check_under_replicated_tablets,params=[],fatal=True,sleep=30,verbose=True)
+                retry_successful(self.universe.check_under_replicated_tablets,params=[],fatal=False,sleep=30,retry=5,verbose=True)
             for n in self.nodeList: # Stop masters 
                 if n.isMaster:
                     if  n.node_json['state'] != "Live":
                         log(n.hostname + " is in " +  n.node_json['state'] + " state. Skipping", logTime=True)
                         continue
                     n.stop()
-                    retry_successful(self.universe.check_under_replicated_tablets,params=[],fatal=True,sleep=30,verbose=True)
+                    retry_successful(self.universe.check_under_replicated_tablets,params=[],fatal=False,retry=5,sleep=30,verbose=True)
 
         except Exception as e:
             log("Stop multiple node encountered " + str(e),isError=True)
