@@ -28,7 +28,7 @@ usage: yb_sync_ldap.py [-h] [--debug] [--apihost APIHOST]
                        LDAP_GROUPFIELD [--ldap_certificate LDAP_CERTIFICATE]
                        [--ldap_tls]
 
-YB LDAP sync script, Version 0.04
+YB LDAP sync script, Version 0.44
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -44,6 +44,8 @@ optional arguments:
   --apiuser APIUSER     YW API Username
   --apipassword APIPASSWORD
                         YW API Password
+  --allow_drop_superuser
+                      Allow this code to DROP a superuser role if absent in LDAP
   --ipv6                Is system ipv6 based
   --target_api {YCQL,YSQL}
                         Target API: YCQL or YSQL
@@ -76,6 +78,45 @@ optional arguments:
                         File location that points to LDAP certificate
   --ldap_tls            LDAP Use TLS
   --member_map REGEX ROLE
-                        Add users who meet the REGEX in the specified ROLE (NOLOGIN)      
+                        Add users who meet the REGEX in the specified ROLE (NOLOGIN)
+  --reports <csv-list>
+                        One or a comma separated list of 'tree' reports. 
+                        Eg: LDAPRAW,LDAPBYUSER,LDAPBYGROUP,DBROLE,DBUPDATES or ALL
 ```
-  
+## Bash wrapper script
+Here is a sample bash script that allows the LDAP sync to be automated if you put this in crontab:
+
+```
+#!/bin/bash
+
+# Get Environment Parameters
+export TARGETAPI=YSQL
+source /path/to/xxx.rc # Set necessary global environmental variables
+
+export UNIVERSE_NAME=UNIVERSE_NAME
+export DBNAME='database_name'
+export LDAP_SEARCH_FILTER='(&(objectclass=group)(|(samaccountname=my_1st_ldap_group_name)(samaccountname=)(samaccountname=my_2nd_ldap_group_name)(samaccountname=my_3rd_ldap_group_name)))'
+
+python3 /path/to/scripts/yb_sync_ldap.py \
+  --apihost $YBA_HOST \
+  --apitoken $API_TOKEN \
+  --apiport $APIPORT \
+  --use_https \
+  --target_api $TARGETAPI \
+  --universe_name $UNIVERSE_NAME \
+  --dbuser $DBUSER \
+  --dbpass $DBPASS \
+  --ldapserver $LDAPSERVER \
+  --ldapuser $LDAPUSER \
+  --ldap_password $LDAP_PASSWORD \
+  --ldap_search_filter $LDAP_SEARCH_FILTER \
+  --ldap_basedn $LDAP_BASEDN \
+  --ldap_userfield $LDAP_USERFIELD \
+  --ldap_groupfield $LDAP_GROUPFIELD \
+  --allow_drop_superuser \
+  --member_map 'ad\.*' ldap_people_users \
+  --member_map 'svc\.*' ldap_service_users \
+  --reports ALL
+  #--dryrun
+  #--debug
+```
