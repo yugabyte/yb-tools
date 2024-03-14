@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.06"
+Version = "2.07"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -109,6 +109,8 @@ v 2.03, 2.04, 2.05, 2.06
     Enable --region, if DB node errors out, assume "unconfigured" node
     Retry getting health info from master-leader.
     Multi-node stop should not wait much for underreplicated - make non-fatal
+v 2.07
+    Improve env file parsing; fix xcluster pause/resume task handling.
 '''
 
 import argparse
@@ -857,10 +859,10 @@ class YBA_Node:
                 log('  Service {} is not running - skipping'.format(svc))
 #-------------------------------------------------------------------------------------------
 class YBA_API_CLASS:
-    def __init__(self,api_host, customer_uuid, api_token,args):
-        self.api_host      = api_host
-        self.customer_uuid = customer_uuid
-        self.api_token     = api_token
+    def __init__(self,env_dict,args):
+        self.api_host      = env_dict['YBA_HOST']
+        self.customer_uuid = env_dict['CUST_UUID']
+        self.api_token     = env_dict['API_TOKEN']
         self.args          = args
         self.universe_list = []
         self.promhost      = None
@@ -1058,7 +1060,7 @@ class YBA_API_CLASS:
                 if response.status_code == 200:
                     retries = 0
                     task = response.json()
-                    if self.wait_for_task(task['taskUUID']):
+                    if retry_successful(self.wait_for_task, params=[ task['taskUUID'] ],sleep=TASK_COMPLETE_WAIT_TIME_SECONDS,verbose=True):
                         log( ' Xcluster replication ' + xcl_cfg['name'] + ' is now ' + xcNewState, logTime=True)
                     else:
                         retries -= 1
@@ -1356,15 +1358,15 @@ class YB_Data_Node:
 #-------------------------------------------------------------------------------------------
 
 def Get_Environment_info():
-    api_host      = os.environ.get("YBA_HOST")
-    api_token     = os.environ.get("API_TOKEN")
-    customer_uuid = os.environ.get("CUST_UUID")
-
-    if api_host is not None  and  api_token is not None  and customer_uuid is not None:
-        return (api_host,api_token,customer_uuid)
+    env_dict = dict(YBA_HOST   = os.environ.get("YBA_HOST"),
+                    API_TOKEN  = os.environ.get("API_TOKEN"),
+                    CUST_UUID  = os.environ.get("CUST_UUID"))
+    if None not in env_dict.values():
+        return env_dict # We have all values specified 
+    
     if not os.path.exists(ENV_FILE_PATH):
         log(ENV_FILE_PATH + " does not exist.",isError=True)
-        return (api_host,api_token,customer_uuid) # "None" values
+        return None
     
     # find env variable file - should be only 1
     flist = fnmatch.filter(os.listdir(ENV_FILE_PATH), ENV_FILE_PATTERN)
@@ -1383,34 +1385,28 @@ def Get_Environment_info():
         exit(OTHER_ERROR)
 
     log('Retrieving environment variables from file ' + ENV_FILE_PATH + flist[0])
-    env_file = open(ENV_FILE_PATH + flist[0], "r")
-    ln = env_file.readline()
-    while ln:
-        if 'YBA_HOST' in ln:
-            api_host = ln.split('=')[1].replace("'", "").replace('"', '').replace('\n', '').replace('\r', '')
-        if 'API_TOKEN' in ln:
-            api_token = ln.split('=')[1].replace("'", "").replace('"', '').replace('\n', '').replace('\r', '')
-        if 'CUST_UUID' in ln:
-            customer_uuid = ln.split('=')[1].replace("'", "").replace('"', '').replace('\n', '').replace('\r', '')
-        ln = env_file.readline()
-    env_file.close()
-    missingEnv = False
-    if api_host is None:
-        log('Environment variable YBA_HOST not found', True)
-        missingEnv = True
-    if api_token is None:
-        log('Environment variable API_TOKEN not found', True)
-        missingEnv = True
-    if customer_uuid is None:
-        log('Environment variable CUST_UUID not found', True)
-        missingEnv = True
-    if missingEnv:
+    with open(ENV_FILE_PATH + flist[0], "r") as env_file:
+        for line in env_file:
+            parts = line.split("=",1)
+            if len(parts) < 2:
+                continue
+            value = parts[1].replace("'", "").replace('"', '').replace('\n', '').replace('\r', '')
+            for name in env_dict.keys():
+                if name in parts[0]:
+                    env_dict[name] = value
+                    break
+
+    for name,value in env_dict.items():
+        if value is None:
+            log('Environment variable " + name + " not found', True)
+
+    if None in env_dict.values():
         log(' Process failed - exiting with code ' + str(OTHER_ERROR), logTime=True)
         if (not LOG_TO_TERMINAL):
             LOG_FILE.close()
         exit(OTHER_ERROR)
     
-    return (api_host,api_token,customer_uuid)
+    return env_dict
 
 ### Main Code ##############################################################################################
 def main():
@@ -1522,10 +1518,12 @@ def main():
             LOG_FILE.close()
         exit(OTHER_ERROR)
     
-    (api_host,api_token,customer_uuid) = Get_Environment_info()
+    env_dict = Get_Environment_info()
+    if env_dict is None:
+        raise Exception("ERROR: Did not get YBA API Info from enviornment")
 
     # ---- Mainline code -------
-    YBA_API   = YBA_API_CLASS(api_host,customer_uuid,api_token,args) # Instantiated , but not Initialized yet
+    YBA_API   = YBA_API_CLASS(env_dict,args) # Instantiated , but not Initialized yet
     this_node = None # The node object I will perform "action" upon
     for node_class in (Multiple_Nodes_Class, YBA_Node, YB_Data_Node):
         try:
