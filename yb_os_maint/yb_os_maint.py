@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.07"
+Version = "2.08"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -111,6 +111,8 @@ v 2.03, 2.04, 2.05, 2.06
     Multi-node stop should not wait much for underreplicated - make non-fatal
 v 2.07
     Improve env file parsing; fix xcluster pause/resume task handling.
+v 2.08
+    WAIT Task is now retry w FATAL, and FAIL will cause Exception.
 '''
 
 import argparse
@@ -227,6 +229,7 @@ class Universe_class:
         self.targetXClusterConfigs   = json['universeDetails'].get('targetXClusterConfigs')
         self.PLACEMENT_TASK_FIELD    = json['universeDetails'].get(PLACEMENT_TASK_FIELD)
         self.SKIP_DEAD_NODE_CHECK    = False
+        self.SKIP_HEALTH_CHECK       = False
 
 
     def get_node_json(self,hostname,ip):
@@ -341,6 +344,8 @@ class Universe_class:
                 raise Exception("Did not get JSON for master health. Got:"+ resp.text)
 
     def health_check(self):
+        if self.SKIP_HEALTH_CHECK:
+            return
         log('Performing health checks for universe {}, UUID {}...'.format(self.name, self.UUID))
         log('- Checking for task placement UUID',logTime=True)
         errcount = 0;
@@ -712,6 +717,8 @@ class Multiple_Nodes_Class:
         if self.args.dryrun:
             log("Dry Run : Not performing STOP")
             return
+        self.universe.health_check()              # Do health-check ONCE
+        self.universe.SKIP_HEALTH_CHECK    = True # and not once per node 
         self.universe.SKIP_DEAD_NODE_CHECK = True
 
         try:
@@ -1026,7 +1033,7 @@ class YBA_API_CLASS:
         if jsonResponse['status'] == 'Failure':
             log('Task failed - see below for details', isError=True,logTime=True)
             log(json.dumps(jsonResponse, indent=2))
-            return False
+            raise Exception("Task " + task_uuid + " Failed")
         raise ValueError("Still waiting for success/completion. Current state="+ jsonResponse['status'] + " at "+  str(jsonResponse['percent'])+"%")
 
     def alter_replication(self, xcluster_action, rpl_id):
@@ -1296,6 +1303,7 @@ class YB_Data_Node:
         if self.universe.get_dead_node_count() > 0:
             log("Cannot stop node because one or more other nodes/services is down", isError=True)
             raise Exception("Cannot stop node because one or more other nodes/services is down")
+        self.universe.health_check()
         # Add maintenence window
         if not self.args.skip_maint_window:
             self.YBA_API.maintenance_window(self, 'create')
@@ -1335,7 +1343,8 @@ class YB_Data_Node:
             log('Could not shut down node : ' + task['error'], isError=True,logTime=True)
             log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
             exit(NODE_DB_ERROR)
-        if retry_successful(self.YBA_API.wait_for_task, params=[ task['taskUUID'] ],sleep=TASK_COMPLETE_WAIT_TIME_SECONDS,verbose=True,retry=15):
+        if retry_successful(self.YBA_API.wait_for_task, params=[ task['taskUUID'] ],sleep=TASK_COMPLETE_WAIT_TIME_SECONDS,
+                            verbose=True,retry=15,fatal=True):
             log(' Server shut down and ready for maintenance', logTime=True)
         else:
             log(' Error stopping node', True, logTime=True)
