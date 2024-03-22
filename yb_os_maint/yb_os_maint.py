@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.09"
+Version = "2.10"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -113,8 +113,8 @@ v 2.07
     Improve env file parsing; fix xcluster pause/resume task handling.
 v 2.08
     WAIT Task is now retry w FATAL, and FAIL will cause Exception.
-v 2.09
-    Maint window increased to 60 min. Log more node info. Retry YBA init, maint and xcluster.
+v 2.09 - 2.10
+    Maint window increased to 60 min. Log more node info. Retry YBA init, maint and xcluster, Maint Win UTC.
 '''
 
 import argparse
@@ -981,8 +981,8 @@ class YBA_API_CLASS:
             j = {"customerUUID" : self.customer_uuid,
                 "name" : MAINTENANCE_WINDOW_NAME + host,
                 "description" : MAINTENANCE_WINDOW_NAME + host,
-                "startTime": datetime.now().isoformat('T','seconds') + "Z",                #yyyy-MM-dd'T'HH:mm:ss'Z'
-                "endTime": (datetime.now() + mins_to_add).isoformat('T','seconds') + "Z",
+                "startTime": datetime.now(timezone.utc).isoformat('T','seconds') + "Z",                #yyyy-MM-dd'T'HH:mm:ss'Z'
+                "endTime": (datetime.now(timezone.utc) + mins_to_add).isoformat('T','seconds') + "Z",
                 "alertConfigurationFilter": {
                     "targetType": "UNIVERSE",
                     "target": {
