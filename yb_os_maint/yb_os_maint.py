@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.10"
+Version = "2.11"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -113,7 +113,7 @@ v 2.07
     Improve env file parsing; fix xcluster pause/resume task handling.
 v 2.08
     WAIT Task is now retry w FATAL, and FAIL will cause Exception.
-v 2.09 - 2.10
+v 2.09 - 2.10 - 2.11
     Maint window increased to 60 min. Log more node info. Retry YBA init, maint and xcluster, Maint Win UTC.
 '''
 
@@ -981,8 +981,8 @@ class YBA_API_CLASS:
             j = {"customerUUID" : self.customer_uuid,
                 "name" : MAINTENANCE_WINDOW_NAME + host,
                 "description" : MAINTENANCE_WINDOW_NAME + host,
-                "startTime": datetime.now(timezone.utc).isoformat('T','seconds') + "Z",                #yyyy-MM-dd'T'HH:mm:ss'Z'
-                "endTime": (datetime.now(timezone.utc) + mins_to_add).isoformat('T','seconds') + "Z",
+                "startTime": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),                #yyyy-MM-dd'T'HH:mm:ss'Z'
+                "endTime": (datetime.now(timezone.utc) + mins_to_add).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "alertConfigurationFilter": {
                     "targetType": "UNIVERSE",
                     "target": {
@@ -1000,6 +1000,7 @@ class YBA_API_CLASS:
                     self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + w_id,
                     headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
                     json = j)
+                response.raise_for_status() # Trap error responses
             else:
                 log('- Creating Maintenance window "{}" for {} minutes' \
                     .format(MAINTENANCE_WINDOW_NAME + host, str(MAINTENANCE_WINDOW_DURATION_MINUTES)) \
@@ -1008,12 +1009,14 @@ class YBA_API_CLASS:
                     self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows',
                     headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
                     json = j)
+                response.raise_for_status() # Trap error responses
         else:
             if w_id is not None:
                 log('- Removing Maintenance window "{}"'.format(MAINTENANCE_WINDOW_NAME + host), logTime=True,newline=True)
                 response = requests.delete(
                     self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + w_id,
                     headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False)
+                response.raise_for_status() # Trap error responses
             else:
                 log('- No existing Maintenance window "{}" found to remove' \
                     .format(MAINTENANCE_WINDOW_NAME + host), logTime=True,newline=True)
@@ -1050,7 +1053,7 @@ class YBA_API_CLASS:
             log(json.dumps(jsonResponse, indent=2))
             raise TaskFailed("Task " + task_uuid + " Failed")
         raise ValueError("Still waiting for " + task_uuid + " success/completion. Current state="
-                         + jsonResponse['status'] + " at "+  str(jsonResponse['percent'])+"%")
+                         + jsonResponse['status'] + " at "+   str(round(float(jsonResponse['percent']),2))+"%")
 
     def alter_replication(self, xcluster_action, rpl_id):
         ## Get xcluster config
