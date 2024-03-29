@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.11"
+Version = "2.12"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -115,6 +115,9 @@ v 2.08
     WAIT Task is now retry w FATAL, and FAIL will cause Exception.
 v 2.09 - 2.10 - 2.11
     Maint window increased to 60 min. Log more node info. Retry YBA init, maint and xcluster, Maint Win UTC.
+v 2.12    
+    If DB-node is not in any universe, message+exit normal.
+    Implement "--fix placement" (placementModificationTaskUUID zapped in DB)
 '''
 
 import argparse
@@ -134,6 +137,7 @@ import fnmatch
 import random
 import copy
 from urllib3.exceptions import InsecureRequestWarning
+import importlib
 
 ## Return value constants
 OTHER_ERROR = 1
@@ -225,6 +229,61 @@ class NotMyTypeException(Exception):
     pass
 class TaskFailed(Exception):
     pass
+
+class ybdb: # For connecting to posgres 'yugaware' database on the YBA node
+
+    dbc = {     'host':  'localhost',
+                'dbname': 'yugaware',
+                'user':   'postgres',
+                'password':  '',
+                'port':  5432 }
+                
+    def __init__(self):
+        #Dynamic/delayed/JIT import psycopg2
+        #Dynamically import psycopg2.extras
+        try:
+            psycopg2 = importlib.import_module("psycopg2")
+            importlib.import_module("psycopg2.extras")
+        except Exception as error:
+            log ("ERROR loading postgres modules:"+error,isError=True,logTime=True)
+            raise
+            
+        self.db     = None
+        self.cursor = None
+        try:
+            self.db     = psycopg2.connect(**self.dbc)
+            self.cursor = self.db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        except Exception as error:
+            log("ERROR: COULD NOT OPEN DB:"+ error,isError=True,logTime=True)
+            raise
+
+    def fetchone(self):
+        row= self.cursor.fetchone()
+        # self.cursor.scroll(1) # does not work
+        return row
+
+    def query(self,sql,callback=None):
+        self.cursor.execute(sql)
+        #
+        if callback is None:
+            return self.fetchone()
+        row_number = 1
+        for row in self.cursor.fetchall():
+            callback(row,self, row_number) #, self.cursor.rownumber())
+            row_number+=1
+
+    def rows(self):
+        return self.cursor.rowcount
+    
+    def commit(self):
+        return self.db.commit()
+
+    def close(self):
+        if self.cursor is not None:
+             self.cursor.close()
+        if self.db is not None:
+             self.db.close()
+#---------------------------------------------------------------------------------
 
 class Universe_class:
     def __init__(self,YBA_API,json):
@@ -533,6 +592,22 @@ class Universe_class:
         else:
             log('--- Health check for universe "{}" completed with no issues'.format(self.name))
             return
+    def _Update_Universe_in_DB_inner(self,row,db , row_nbr):
+        log('**UPDATED** Universe '+ row['name']+'\t'+row['universe_uuid'])
+        db.commit()
+
+    def _Update_Universe_in_DB_outer(self,row,db , row_nbr):
+        log('Updating DB for Universe '+str(row_nbr)+':\t'+ row['name']+'\t'+row['universe_uuid'])
+        ujson = json.loads( row['universe_details_json'] )
+        placementMod = ujson.get('placementModificationTaskUuid')
+        if  placementMod is not None  and  len(placementMod) > 0:
+            log("Zapping pending task for this universe:" + placementMod)
+            db.query("update universe " 
+                 +"set universe_details_json  = jsonb_set(universe_details_json::JSONB,'{placementModificationTaskUuid}',"
+                   + "'" + '""' +"')::text " # Funny quoting to get quoted double-quotes
+                 + " where universe_uuid='" + row['universe_uuid'] + "'"
+                 + " returning *",
+                self._Update_Universe_in_DB_inner)
 
     def fix(self):
         log('Fixing the following items in the universe: ' + str(self.args.fix))
@@ -543,9 +618,13 @@ class Universe_class:
                 f[PLACEMENT_TASK_FIELD] = ''
                 mods.append('placement')
                 # This requires running PSQL with:
-                #    "update universe set universe_details_json='{}' where universe.universe_uuid='{}';"
-                log("Sorry - FIX for placement is not implemented.", isError=True)
-                raise Exception("Not Implemented")
+                db = ybdb()
+                db.query('SELECT universe_uuid,name,universe_details_json,swamper_config_written FROM universe'
+                         +" WHERE universe_uuid='" + self.UUID + "'",
+                        self._Update_Universe_in_DB_outer)
+                db.close()
+                log("Placement updated in DB.",logTime=True)
+                return
 
         if len(mods) == 0:
             log('No items exist to fix')
@@ -1160,9 +1239,9 @@ class YB_Data_Node:
         if self.node_info_printed:
             return()
         if not self.universe:
-            raise Exception("Programming ERROR: Apptmpting to print node with uninitialized Universe")
+            raise Exception("Programming ERROR: Attempting to print node with uninitialized Universe")
         if not self.node_json:
-            raise Exception("Programming ERROR: Apptmpting to print node with uninitialized node json")
+            raise Exception("Programming ERROR: Attempting to print node with uninitialized node json")
         n = self.node_json
         log(self.args.ACTION + " on " + n["nodeName"] + "(" + n['cloudInfo']['private_ip']
             + ("" if self.ip == n['cloudInfo']['private_ip'] else ("(private_ip) / "+ self.ip)  )
@@ -1178,6 +1257,10 @@ class YB_Data_Node:
             self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname, self.ip)        
         #log('  Found node ' + self.node_json['nodeName'] + ' in Universe ' + self.universe.name
          #   + ' - UUID ' + self.universe.UUID)
+        if self.node_json is None:
+            log("Node " + self.hostname + " is not in any known universe" ,isError=True,logTime=True)
+            log("Treating this like an UNKNOWN node. NO ACTION PERFORMED. " ,isError=True,logTime=True)
+            return
         self.Print_node_info_line()
         if self.args.dryrun:
             log('--- Dry run only - all checks will be done, but replication will not be resumed and nothing will be started ')
@@ -1336,6 +1419,10 @@ class YB_Data_Node:
         self.YBA_API.Initialize()
         if self.universe is None:
             self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname,self.ip)
+        if self.node_json is None:
+            log("Node " + self.hostname + " is not in any known universe" ,isError=True,logTime=True)
+            log("Treating this like an UNKNOWN node. NO ACTION PERFORMED. " ,isError=True,logTime=True)
+            return
         self.Print_node_info_line()
         if self.universe.get_dead_node_count() > 0:
             log("Cannot stop node because one or more other nodes/services is down", isError=True)
