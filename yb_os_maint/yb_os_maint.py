@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.12"
+Version = "2.14"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -115,7 +115,7 @@ v 2.08
     WAIT Task is now retry w FATAL, and FAIL will cause Exception.
 v 2.09 - 2.10 - 2.11
     Maint window increased to 60 min. Log more node info. Retry YBA init, maint and xcluster, Maint Win UTC.
-v 2.12    
+v 2.12 - 2.14
     If DB-node is not in any universe, message+exit normal.
     Implement "--fix placement" (placementModificationTaskUUID zapped in DB)
 '''
@@ -137,7 +137,6 @@ import fnmatch
 import random
 import copy
 from urllib3.exceptions import InsecureRequestWarning
-import importlib
 
 ## Return value constants
 OTHER_ERROR = 1
@@ -168,6 +167,9 @@ YB_ADMIN_COMMAND = '/home/yugabyte/tserver/bin/yb-admin'
 YB_ADMIN_TLS_DIR = '/home/yugabyte/yugabyte-tls-config'
 LEADER_STEP_DOWN_COMMAND = '{} -master_addresses {{}} -certs_dir_name {}'.format(YB_ADMIN_COMMAND, YB_ADMIN_TLS_DIR)
 LOCALHOST = '<localhost>'
+PSQL_BINARY = '/opt/yugabyte/software/active/pgsql/bin/psql'
+PSQL_PARAMS = ['-h', 'localhost', '-p', '5432', '-U', 'postgres', '-d', 'yugaware' ]
+PSQL_ZAP_PLACEMENTMODTASK = "update universe set universe_details_json  = (universe_details_json::JSONB - 'placementModificationTaskUuid')::text "
 
 # Global scope variables - do not change!
 LOG_TO_TERMINAL = True
@@ -213,6 +215,7 @@ def retry_successful(retriable_function_call, params=None, retry:int=10, verbose
             #    print(f"Trace:Error occurred in {file_name} at line {line_no}")
             verbose and log("  Hit exception {} in attempt {}".format(errorMsg, i+1))
             if fatal and i == (retry - 1):
+                verbose or log("  Hit exception {} in attempt {} of {}".format(errorMsg, i+1,retriable_function_call.__name__),isError=True)
                 raise  # Re-raise current exception
             continue
     return False
@@ -229,60 +232,6 @@ class NotMyTypeException(Exception):
     pass
 class TaskFailed(Exception):
     pass
-
-class ybdb: # For connecting to posgres 'yugaware' database on the YBA node
-
-    dbc = {     'host':  'localhost',
-                'dbname': 'yugaware',
-                'user':   'postgres',
-                'password':  '',
-                'port':  5432 }
-                
-    def __init__(self):
-        #Dynamic/delayed/JIT import psycopg2
-        #Dynamically import psycopg2.extras
-        try:
-            psycopg2 = importlib.import_module("psycopg2")
-            importlib.import_module("psycopg2.extras")
-        except Exception as error:
-            log ("ERROR loading postgres modules:"+error,isError=True,logTime=True)
-            raise
-            
-        self.db     = None
-        self.cursor = None
-        try:
-            self.db     = psycopg2.connect(**self.dbc)
-            self.cursor = self.db.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        except Exception as error:
-            log("ERROR: COULD NOT OPEN DB:"+ error,isError=True,logTime=True)
-            raise
-
-    def fetchone(self):
-        row= self.cursor.fetchone()
-        # self.cursor.scroll(1) # does not work
-        return row
-
-    def query(self,sql,callback=None):
-        self.cursor.execute(sql)
-        #
-        if callback is None:
-            return self.fetchone()
-        row_number = 1
-        for row in self.cursor.fetchall():
-            callback(row,self, row_number) #, self.cursor.rownumber())
-            row_number+=1
-
-    def rows(self):
-        return self.cursor.rowcount
-    
-    def commit(self):
-        return self.db.commit()
-
-    def close(self):
-        if self.cursor is not None:
-             self.cursor.close()
-        if self.db is not None:
-             self.db.close()
 #---------------------------------------------------------------------------------
 
 class Universe_class:
@@ -592,22 +541,6 @@ class Universe_class:
         else:
             log('--- Health check for universe "{}" completed with no issues'.format(self.name))
             return
-    def _Update_Universe_in_DB_inner(self,row,db , row_nbr):
-        log('**UPDATED** Universe '+ row['name']+'\t'+row['universe_uuid'])
-        db.commit()
-
-    def _Update_Universe_in_DB_outer(self,row,db , row_nbr):
-        log('Updating DB for Universe '+str(row_nbr)+':\t'+ row['name']+'\t'+row['universe_uuid'])
-        ujson = json.loads( row['universe_details_json'] )
-        placementMod = ujson.get('placementModificationTaskUuid')
-        if  placementMod is not None  and  len(placementMod) > 0:
-            log("Zapping pending task for this universe:" + placementMod)
-            db.query("update universe " 
-                 +"set universe_details_json  = jsonb_set(universe_details_json::JSONB,'{placementModificationTaskUuid}',"
-                   + "'" + '""' +"')::text " # Funny quoting to get quoted double-quotes
-                 + " where universe_uuid='" + row['universe_uuid'] + "'"
-                 + " returning *",
-                self._Update_Universe_in_DB_inner)
 
     def fix(self):
         log('Fixing the following items in the universe: ' + str(self.args.fix))
@@ -617,13 +550,15 @@ class Universe_class:
             if PLACEMENT_TASK_FIELD in f and len(f[PLACEMENT_TASK_FIELD]) > 0:
                 f[PLACEMENT_TASK_FIELD] = ''
                 mods.append('placement')
-                # This requires running PSQL with:
-                db = ybdb()
-                db.query('SELECT universe_uuid,name,universe_details_json,swamper_config_written FROM universe'
-                         +" WHERE universe_uuid='" + self.UUID + "'",
-                        self._Update_Universe_in_DB_outer)
-                db.close()
-                log("Placement updated in DB.",logTime=True)
+                # This requires running PSQL ---
+                if not os.path.isfile(PSQL_BINARY):
+                    raise Exception("could not find file:"+PSQL_BINARY)
+                del_mod_task = PSQL_ZAP_PLACEMENTMODTASK + "WHERE universe_uuid='" + self.UUID + "'"
+                log("  Running PSQL command:" + del_mod_task)
+                result=subprocess.check_output([PSQL_BINARY] + PSQL_PARAMS + ['-c', del_mod_task ]
+                                               ,stderr=subprocess.STDOUT,text=True,timeout=10)
+
+                log("Placement updated in DB:"+str(result),logTime=True)
                 return
 
         if len(mods) == 0:
@@ -967,7 +902,7 @@ class YBA_API_CLASS:
     def Initialize(self):
         if self.initialized:
             return
-        retry_successful(self._Initialize_w_retry, params=[], retry=5,verbose=True,sleep=5,fatal=True)
+        retry_successful(self._Initialize_w_retry, params=[], verbose=True,sleep=30,fatal=True)
 
     def _Initialize_w_retry(self):
         self.get_customers()
@@ -976,6 +911,7 @@ class YBA_API_CLASS:
         # Get all universes on YBA deployment.  Note that a list of nodes is included here, so we return the entire universes array
         response = requests.get(self.api_host + '/api/customers/' + self.customer_uuid + '/universes',
                                 headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False)
+        response.raise_for_status()
         for univ in response.json():
             self.universe_list.append(Universe_class(self,univ)) # List of "Universe_class" objects 
 
