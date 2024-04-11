@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.14"
+Version = "2.15"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -118,9 +118,12 @@ v 2.09 - 2.10 - 2.11
 v 2.12 - 2.14
     If DB-node is not in any universe, message+exit normal.
     Implement "--fix placement" (placementModificationTaskUUID zapped in DB)
+v 2.15
+    Mark MAINT window Complete, no delete. Retry Health on STOP node.
 '''
 
 import argparse
+from logging import fatal
 from re import T
 import requests
 import json
@@ -426,6 +429,8 @@ class Universe_class:
         ## Check tablet balance
         log('- Checking tablet health')
         log('  --- Tablet Report --')
+        log('  TServer             Active.tablets   User.tablets  User.leaders  Sys.Tablets  Sys.leaders')
+        #log('  10.231.0.132:9000 Active tablets: 339, User tablets: 326, User tablet leaders: 107, System Tablets: 13, System tablet leaders')
         tabs = None
         totalTablets = 0
         try:  # try both http and https endpoints
@@ -440,14 +445,9 @@ class Universe_class:
                 if tabs[uid][svr]['status'] != 'ALIVE':
                     log('  TServer ' + svr + ' is not alive and likely a deprecated node - skipping')
                 else:
-                    log('  TServer {} Active tablets: {}, User tablets: {}, User tablet leaders: {}, System Tablets: {}, System tablet leaders: {}'.format(
-                        svr,
-                        tabs[uid][svr]['active_tablets'],
-                        tabs[uid][svr]['user_tablets_total'],
-                        tabs[uid][svr]['user_tablets_leaders'],
-                        tabs[uid][svr]['system_tablets_total'],
-                        tabs[uid][svr]['system_tablets_leaders']
-                        ))
+                    log(f'  {svr:20s}{tabs[uid][svr]["active_tablets"]:14d}{tabs[uid][svr]["user_tablets_total"]:14d}'
+                        + f'{tabs[uid][svr]["user_tablets_leaders"]:15d}'
+                        + f'{tabs[uid][svr]["system_tablets_total"]:13d}{tabs[uid][svr]["system_tablets_leaders"]:13d}')
                     totalTablets = totalTablets + tabs[uid][svr]['active_tablets'] + tabs[uid][svr]['user_tablets_total'] + tabs[uid][svr]['user_tablets_leaders']
 
         htmlresp = None
@@ -990,12 +990,13 @@ class YBA_API_CLASS:
     
     def maintenance_window(self, node, action):
         host = node.hostname
-        w_id = self.find_window_by_name(host)
+        desc = "IP:" + node.ip + ", nodeName:" + node.node_json["nodeName"]
+        win = self.find_window_by_name(host)
         if action == 'create':
             mins_to_add = timedelta(minutes=MAINTENANCE_WINDOW_DURATION_MINUTES)
             j = {"customerUUID" : self.customer_uuid,
                 "name" : MAINTENANCE_WINDOW_NAME + host,
-                "description" : MAINTENANCE_WINDOW_NAME + host,
+                "description" : MAINTENANCE_WINDOW_NAME + host + ", " + desc,
                 "startTime": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),                #yyyy-MM-dd'T'HH:mm:ss'Z'
                 "endTime": (datetime.now(timezone.utc) + mins_to_add).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "alertConfigurationFilter": {
@@ -1006,11 +1007,11 @@ class YBA_API_CLASS:
                     }
                 }
             }
-            if w_id is not None:
+            if win is not None:
                 log('- Updating existing Maintenance window "{}" for {} minutes' \
                     .format(MAINTENANCE_WINDOW_NAME + host, str(MAINTENANCE_WINDOW_DURATION_MINUTES)) \
                     , logTime=True,newline=True)
-                j['uuid'] = w_id
+                j['uuid'] = win['uuid']
                 response = requests.put(
                     self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + w_id,
                     headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
@@ -1025,16 +1026,23 @@ class YBA_API_CLASS:
                     headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
                     json = j)
                 response.raise_for_status() # Trap error responses
-        else:
-            if w_id is not None:
-                log('- Removing Maintenance window "{}"'.format(MAINTENANCE_WINDOW_NAME + host), logTime=True,newline=True)
-                response = requests.delete(
-                    self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + w_id,
-                    headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False)
+        else: # "finish" the window
+            if win is not None:
+                mins_to_add = timedelta(minutes=5) # add 5 min from now, to allow load-bal.
+                win['endTime'] = (datetime.now(timezone.utc) + mins_to_add).strftime("%Y-%m-%dT%H:%M:%SZ") 
+                log('- Finishing Maintenance window "{}" at {} UTC'.format(win["name"],win['endTime']),
+                     logTime=True,newline=True)
+                #response = requests.delete(
+                #    self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + w_id,
+                #    headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False)
+                response = requests.put(
+                    self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + win['uuid'],
+                    headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
+                    json = win)
                 response.raise_for_status() # Trap error responses
             else:
-                log('- No existing Maintenance window "{}" found to remove' \
-                    .format(MAINTENANCE_WINDOW_NAME + host), logTime=True,newline=True)
+                log('- No existing Maintenance window "{}" found for "{}"' \
+                    .format(MAINTENANCE_WINDOW_NAME + host,action), logTime=True,newline=True)
 
 
 
@@ -1043,10 +1051,11 @@ class YBA_API_CLASS:
         response = requests.post(
             self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/list',
             headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
-            json={})
+            json={} # Attempting to specify "filter": here does not work
+            )
         for w in response.json():
-            if w['name'] == name:
-                return(w['uuid'])
+            if w['name'] == name  and  w['state'] == 'ACTIVE':
+                return(w)
         return None
 
     def get_customers(self):
@@ -1234,9 +1243,9 @@ class YB_Data_Node:
         else:
             retry_successful(self.universe.Resume_xCluster_replication,params=[],fatal=True,verbose=True)
 
-        # Remove existing maintenence window
+        # "FINISH"" existing maintenence window
         if not self.args.skip_maint_window:
-            retry_successful(self.YBA_API.maintenance_window,params=[self, 'remove'],verbose=True,fatal=True)
+            retry_successful(self.YBA_API.maintenance_window,params=[self, 'finish'],verbose=True,fatal=True)
 
     def _compare_node_service_status_to_YBA (self,node_type):
         uri = None
@@ -1363,7 +1372,8 @@ class YB_Data_Node:
         if self.universe.get_dead_node_count() > 0:
             log("Cannot stop node because one or more other nodes/services is down", isError=True)
             raise Exception("Cannot stop node because one or more other nodes/services is down")
-        self.universe.health_check()
+        retry_successful(self.universe.health_check,verbose=True,params=[],
+                         retry=3,sleep=120,fatal=True)
         # Add maintenence window
         if not self.args.skip_maint_window:
             retry_successful(self.YBA_API.maintenance_window, verbose=True,params=[self, 'create'],fatal=True)
