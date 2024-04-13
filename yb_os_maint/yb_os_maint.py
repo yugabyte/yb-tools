@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.15"
+Version = "2.16"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -118,8 +118,8 @@ v 2.09 - 2.10 - 2.11
 v 2.12 - 2.14
     If DB-node is not in any universe, message+exit normal.
     Implement "--fix placement" (placementModificationTaskUUID zapped in DB)
-v 2.15
-    Mark MAINT window Complete, no delete. Retry Health on STOP node.
+v 2.15 - 2.16
+    Mark MAINT window Complete, managed expired delete. Retry Health on STOP node.
 '''
 
 import argparse
@@ -166,6 +166,7 @@ MAX_TIME_TO_SLEEP_SECONDS = 30
 LOG_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 MAINTENANCE_WINDOW_NAME = 'OS Patching - '
 MAINTENANCE_WINDOW_DURATION_MINUTES = 60
+MAINTENANCE_WINDOW_RETENTION_DAYS   = 90
 YB_ADMIN_COMMAND = '/home/yugabyte/tserver/bin/yb-admin'
 YB_ADMIN_TLS_DIR = '/home/yugabyte/yugabyte-tls-config'
 LEADER_STEP_DOWN_COMMAND = '{} -master_addresses {{}} -certs_dir_name {}'.format(YB_ADMIN_COMMAND, YB_ADMIN_TLS_DIR)
@@ -337,7 +338,11 @@ class Universe_class:
         for n in nlist:
             if n != 'universe_uuid':
                 if nlist[n]['node_status'] != 'Live':
-                    log('  Node ' + n + ' is not alive', True)
+                    njson = self.get_node_json(n)
+                    ip    = ""
+                    if njson is not None:
+                        ip = njson['cloudInfo']['private_ip'] 
+                    log('  Node ' + n + " (" + ip +  ') is not alive', True)
                     dead_nodes += 1
 
                 for nodes in self.nodeDetailsSet:
@@ -533,6 +538,14 @@ class Universe_class:
         else:
             log('  Tablet count in universe is zero - bypassing master replication lag check')
 
+
+        def check_active_maintenance_windows(win):
+            if win['state'] != 'ACTIVE':
+                return
+            log("  Found active Maintenence window:"+ win["name"]+ " ... Exiting Health check with 'SUCCESS'")
+            errcount = 0
+
+        self.YBA_API.search_maintenance_windows(None, check_active_maintenance_windows)
         ## End health checks,
         if errcount > 0:
             log('--- Health check has failed - ' + str(
@@ -584,7 +597,6 @@ class Universe_class:
             raise Exception("Failed to create gflag update task")
         if retry_successful(self.YBA_API.wait_for_task, params=[ task['taskUUID'] ],sleep=TASK_COMPLETE_WAIT_TIME_SECONDS,verbose=True,retry=15):
             log(' Server items fixed', logTime=True)
-            restarted = True
         else:
             log("Fix task failed",isError=True,logTime=True)
             raise Exception("Fix task failed")
@@ -991,7 +1003,7 @@ class YBA_API_CLASS:
     def maintenance_window(self, node, action):
         host = node.hostname
         desc = "IP:" + node.ip + ", nodeName:" + node.node_json["nodeName"]
-        win = self.find_window_by_name(host)
+        win = self.search_maintenance_windows(host)
         if action == 'create':
             mins_to_add = timedelta(minutes=MAINTENANCE_WINDOW_DURATION_MINUTES)
             j = {"customerUUID" : self.customer_uuid,
@@ -1032,9 +1044,6 @@ class YBA_API_CLASS:
                 win['endTime'] = (datetime.now(timezone.utc) + mins_to_add).strftime("%Y-%m-%dT%H:%M:%SZ") 
                 log('- Finishing Maintenance window "{}" at {} UTC'.format(win["name"],win['endTime']),
                      logTime=True,newline=True)
-                #response = requests.delete(
-                #    self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + w_id,
-                #    headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False)
                 response = requests.put(
                     self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + win['uuid'],
                     headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
@@ -1044,19 +1053,43 @@ class YBA_API_CLASS:
                 log('- No existing Maintenance window "{}" found for "{}"' \
                     .format(MAINTENANCE_WINDOW_NAME + host,action), logTime=True,newline=True)
 
-
-
-    def find_window_by_name(self, host):
-        name = MAINTENANCE_WINDOW_NAME + host
+    def search_maintenance_windows(self, host:str=None, callback=None):
+        name = MAINTENANCE_WINDOW_NAME + str(host or "")
         response = requests.post(
             self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/list',
             headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
             json={} # Attempting to specify "filter": here does not work
             )
         for w in response.json():
-            if w['name'] == name  and  w['state'] == 'ACTIVE':
+            if w.get("uuid") is None:
+                continue # THis window had no UUID - probably got invalid response above 
+            if host is None:
+                callback(w)
+                continue
+            if w.get('name') == name  and  w.get('state') == 'ACTIVE':
                 return(w)
+            
         return None
+
+    def delete_expired_maintenance_windows(self):
+        expiry_date = (datetime.now(timezone.utc) - timedelta(days=MAINTENANCE_WINDOW_RETENTION_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ") 
+        def win_handler(w):
+            if w['state'] != 'FINISHED':
+                return
+            if MAINTENANCE_WINDOW_NAME not in w['name']:
+                return
+            if w['endTime'] > expiry_date:
+                return
+            log("  Deleting Expired maintenance Window '"+ w["name"]+"' which completed on "+ w['endTime'])
+            response = requests.delete(
+                    self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + w['uuid'],
+                    headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False)
+        try:
+            # Any failures here are explicitly ignored
+            self.search_maintenance_windows(
+                None,  win_handler )
+        except:
+            pass
 
     def get_customers(self):
             response = requests.get(self.api_host + '/api/customers/' + self.customer_uuid,
@@ -1208,34 +1241,34 @@ class YB_Data_Node:
             return
         self.Print_node_info_line()
         if self.args.dryrun:
-            log('--- Dry run only - all checks will be done, but replication will not be resumed and nothing will be started ')
+            log('--- Dry run only - replication will not be resumed and nothing will be started ')
             log('Node ' + self.node_json['nodeName'] + ' state: ' + self.node_json['state'])
+            return
+
+        ## Startup server
+        log(' Starting up DB server', logTime=True)
+        if self.node_json['state'] != 'Stopped':
+            if self.node_json['state'] != 'Live':
+                log('  Node ' + self.node_json['nodeName'] + ' is in "' + self.node_json['state'] +
+                    '" state - needs to be in "Stopped" or "Live" state to continue')
+                log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
+                exit(NODE_DB_ERROR)
+            log('  Node ' + self.node_json['nodeName'] + ' is already in "Live" state - skipping startup')
         else:
-            ## Startup server
-            log(' Starting up DB server', logTime=True)
-            if self.node_json['state'] != 'Stopped':
-                if self.node_json['state'] != 'Live':
-                    log('  Node ' + self.node_json['nodeName'] + ' is in "' + self.node_json['state'] +
-                        '" state - needs to be in "Stopped" or "Live" state to continue')
-                    log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
-                    exit(NODE_DB_ERROR)
-                log('  Node ' + self.node_json['nodeName'] + ' is already in "Live" state - skipping startup')
+            response = requests.put(
+                self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' + 
+                    self.universe.UUID + '/nodes/' + self.node_json['nodeName'],
+                headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token},
+                json=json.loads('{"nodeAction": "START"}'),verify=False)
+            task = response.json()
+            if 'error' in task:
+                log('Could not start node : ' + task['error'], logTime=True,isError=True)
+                log('Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
+                exit(NODE_DB_ERROR)
+            if retry_successful(self.YBA_API.wait_for_task, params=[ task['taskUUID'] ],sleep=TASK_COMPLETE_WAIT_TIME_SECONDS,verbose=True,retry=15):
+                log(' Server startup complete', logTime=True)
             else:
-                response = requests.put(
-                    self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' + 
-                        self.universe.UUID + '/nodes/' + self.node_json['nodeName'],
-                    headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token},
-                    json=json.loads('{"nodeAction": "START"}'),verify=False)
-                task = response.json()
-                if 'error' in task:
-                    log('Could not start node : ' + task['error'], logTime=True,isError=True)
-                    log('Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
-                    exit(NODE_DB_ERROR)
-                if retry_successful(self.YBA_API.wait_for_task, params=[ task['taskUUID'] ],sleep=TASK_COMPLETE_WAIT_TIME_SECONDS,verbose=True,retry=15):
-                    log(' Server startup complete', logTime=True)
-                    restarted = True
-                else:
-                    raise Exception("Failed to resume DB Node")
+                raise Exception("Failed to resume DB Node")
 
         ## Resume x-cluster replication
         if self.args.skip_xcluster:
@@ -1246,6 +1279,7 @@ class YB_Data_Node:
         # "FINISH"" existing maintenence window
         if not self.args.skip_maint_window:
             retry_successful(self.YBA_API.maintenance_window,params=[self, 'finish'],verbose=True,fatal=True)
+        self.YBA_API.delete_expired_maintenance_windows()
 
     def _compare_node_service_status_to_YBA (self,node_type):
         uri = None
