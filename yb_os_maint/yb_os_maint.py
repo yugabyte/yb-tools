@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.16"
+Version = "2.17"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -118,8 +118,8 @@ v 2.09 - 2.10 - 2.11
 v 2.12 - 2.14
     If DB-node is not in any universe, message+exit normal.
     Implement "--fix placement" (placementModificationTaskUUID zapped in DB)
-v 2.15 - 2.16
-    Mark MAINT window Complete, managed expired delete. Retry Health on STOP node.
+v 2.15 - 2.16 - 2.17
+    Mark MAINT window Complete, managed expired delete. Retry Health on STOP node. lag metric improvement.
 '''
 
 import argparse
@@ -203,7 +203,7 @@ def retry_successful(retriable_function_call, params=None, retry:int=10, verbose
             time.sleep(sleep * i)
             retval = retriable_function_call(*params)
             verbose and retval != None and log(
-                "  Returned {} from called function {} on attempt {}".format(retval, retriable_function_call.__name__, i+1))
+                "  Returned {} from called function {} on attempt {}".format(str(retval)[:250], retriable_function_call.__name__, i+1))
             if ReturnFuncVal:
                 return retval
             return True
@@ -254,7 +254,7 @@ class Universe_class:
         self.SKIP_HEALTH_CHECK       = False
 
 
-    def get_node_json(self,hostname,ip):
+    def get_node_json(self,hostname,ip=None):
         for candidate_node in self.nodeDetailsSet:
             if str(candidate_node['nodeName']).upper() in hostname.upper() or hostname.upper() in \
                 str(candidate_node['nodeName']).upper() or \
@@ -291,7 +291,11 @@ class Universe_class:
         """
         http://172.31.23.16:7000/api/v1/tablet-under-replication
         Sample output
-        {"underreplicated_tablets":[{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"c0acc61a6f874a489d113494ab266c39","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"4bcb4184a80c4c0dbdd5bd07063fe66b","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"98c7852212ad4919b726ad5ad8f27025","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"70d12ac57b9449b2b04f30d4a0a5dbc7","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"dc97c6805d234c88a39dab8443eb2cda","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"b6bb01582efe47008a583fcaa4698258","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"7dcdeefeaa48457ea7155f572cc9aaee","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"c9eaf49983784050b41aa981706b9648","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"fea04949daee498fbddb6ae5f5a54d2e","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"86996c4c524e48c397a5733bfd599cad","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"6cb2f58212ae4495b96f30979839ec31","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"b9cae88995fc4898910c838c0a5c302c","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"000033e9000030008000000000004000","tablet_uuid":"adb412ac66f346db9176abbd4ec3583b","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"000033e9000030008000000000004000","tablet_uuid":"ffc63a74eb94448fb76edb2cd3d1f154","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"000033e9000030008000000000004000","tablet_uuid":"d8e632f4748343e4be6534ffdddfef9e","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"000033e9000030008000000000004000","tablet_uuid":"c6069b51565e4aab9f3f049d4d876684","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]}]}
+        {"underreplicated_tablets":[{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"c0acc61a6f874a489d113494ab266c39",
+        "underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},
+        {"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"4bcb4184a80c4c0dbdd5bd07063fe66b",
+        "underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},
+        ...]}]}
 
         Check if the system is under replicated. It will go after master(leader) and curl /api/v1/tablet-under-replication.
         It will print out a list of under replicated tablet - table.
@@ -369,6 +373,55 @@ class Universe_class:
             except ValueError: # no JSON returned
                 raise Exception("Did not get JSON for master health. Got:"+ resp.text)
 
+    def follower_lag_exceeded(self,server_type:str,threshold_seconds:int,label_dimensions:str=""):
+        #promnodes =''
+        #for tnode in self.nodeDetailsSet:
+        #    if tnode['isTserver' if server_type=='tserver' else 'isMaster']:
+        #        promnodes += tnode['nodeName'] + '|'
+        promql = 'topk(5,max '+ label_dimensions +'(max_over_time(follower_lag_ms{' \
+                    + 'universe_uuid="' + self.UUID + '",'                   \
+                    + 'export_type="'   + server_type + '_export"}[' + str(LAG_LOOKBACK_MINUTES) + 'm])))'
+        log('  Executing the following Prometheus query for ' + server_type + ' '+label_dimensions+':')
+        log('   ' + promql)
+        resp = requests.get(self.YBA_API.promhost, params={'query':promql}, verify=False)
+        metrics = resp.json()
+        lag = float(0.00)
+        if      'data' in metrics and \
+                'result' in metrics['data'] and \
+                len(metrics['data']['result']) > 0 and \
+                isinstance(metrics['data']['result'],list) and \
+                len(metrics['data']['result']) > 0 and \
+                'value' in metrics['data']['result'][0] and \
+                len(metrics['data']['result'][0]['value']) > 1:
+            pass
+        else:
+            return
+        
+        exceed_threshold_count = 0
+        for val  in metrics['data']['result']:
+            lag_sec = float(val['value'][1]) / 1000
+            labels_and_values = val.get("metric")
+            label_text = ""
+            for key, value in labels_and_values.items():
+                label_text += "," + value 
+            if lag_sec > threshold_seconds:
+                log('Check failed - '+ server_type + label_text +' lag of {} seconds is above threshhold of {}.'.format(lag_sec, threshold_seconds), True)
+                exceed_threshold_count += 1
+                if label_dimensions == "":
+                    # Get details ...
+                    self.follower_lag_exceeded(server_type,threshold_seconds,"by (exported_instance,table_name)")
+                    #topk(5,max by (exported_instance,table_name)(follower_lag_ms{universe_uuid="38aeee98-7d1a-4c54-9490-3876458c7f48",export_type='master_export'}) > 10)
+        
+        if label_dimensions != "":
+            return False # No further summary if this is a recursive call.
+        if exceed_threshold_count > 0:
+            log('Check failed - '+ server_type +' follower lag.')
+            return True 
+        else:
+            log('  Check passed - '+ server_type + ' lag of {} seconds is below threshhold of {}'.format(lag, threshold_seconds))
+            return False
+            
+
     def health_check(self):
         if self.SKIP_HEALTH_CHECK:
             return
@@ -425,7 +478,7 @@ class Universe_class:
                         log('   ' + json.dumps(hc[n]))
             elif len(hc[n]) > 0:
                 log('Health check found an issue with ' + n + ' - see below', True)
-                log(json.dumps(hc[n], indent=2))
+                log(str(json.dumps(hc[n], indent=2))[:1024] + " ...")
                 errcount += 1
                 hc_errs += 1
         if hc_errs == 0:
@@ -469,29 +522,10 @@ class Universe_class:
 
         # Check tablet lag
         if totalTablets > 0:
-            log('  Checking replication lag for t-servers')
-            promnodes =''
-            for tnode in self.nodeDetailsSet:
-                if tnode['isTserver']:
-                    promnodes += tnode['nodeName'] + '|'
-            promql = 'max(max_over_time(follower_lag_ms{exported_instance=~"' + promnodes +\
-                        '",export_type="tserver_export"}[' + str(LAG_LOOKBACK_MINUTES) + 'm]))'
-            log('  Executing the following Prometheus query:')
-            log('   ' + promql)
-            resp = requests.get(self.YBA_API.promhost, params={'query':promql}, verify=False)
-            metrics = resp.json()
-            lag = float(0.00)
-            if 'data' in metrics and \
-                'result' in metrics['data'] and \
-                len(metrics['data']['result']) > 0 and \
-                'value' in metrics['data']['result'][0] and \
-                len(metrics['data']['result'][0]['value']) > 1:
-                lag = float(metrics['data']['result'][0]['value'][1]) / 1000
-            if lag > TSERVER_LAG_THRESHOLD_SECONDS:
-                log('Check failed - t-server lag of {} seconds is above threshhold of {}'.format(lag, TSERVER_LAG_THRESHOLD_SECONDS), True)
+            if self.follower_lag_exceeded("tserver", TSERVER_LAG_THRESHOLD_SECONDS):
                 errcount+=1
             else:
-                log('  Check passed - t-server lag of {} seconds is below threshhold of {}'.format(lag, TSERVER_LAG_THRESHOLD_SECONDS))
+                pass
         else:
             log('  Tablet count in universe is zero - bypassing t-server replication lag check')
 
@@ -512,29 +546,10 @@ class Universe_class:
 
         # Check master lag
         if totalTablets > 0:
-            log('  Checking replication lag for masters')
-            promnodes =''
-            for mnode in self.nodeDetailsSet:
-                if mnode['isMaster']:
-                    promnodes += mnode['nodeName'] + '|'
-            promql = 'max(max_over_time(follower_lag_ms{exported_instance=~"' + promnodes +\
-                        '",export_type="master_export"}[' + str(LAG_LOOKBACK_MINUTES) + 'm]))'
-            log('  Executing the following Prometheus query:')
-            log('   ' + promql)
-            resp = requests.get(self.YBA_API.promhost, params={'query':promql}, verify=False)
-            metrics = resp.json()
-            lag = float(0.00)
-            if 'data' in metrics and \
-                'result' in metrics['data'] and \
-                len(metrics['data']['result']) > 0 and \
-                'value' in metrics['data']['result'][0] and \
-                len(metrics['data']['result'][0]['value']) > 1:
-                lag = float(metrics['data']['result'][0]['value'][1]) / 1000
-            if lag > MASTER_LAG_THRESHOLD_SECONDS:
-                log('Check failed - master lag of {} seconds is above threshhold of {}'.format(lag, MASTER_LAG_THRESHOLD_SECONDS), True)
+            if self.follower_lag_exceeded('master', MASTER_LAG_THRESHOLD_SECONDS):
                 errcount+=1
             else:
-                log('  Check passed - master lag of {} seconds is below threshhold of {}'.format(lag, MASTER_LAG_THRESHOLD_SECONDS))
+                pass
         else:
             log('  Tablet count in universe is zero - bypassing master replication lag check')
 
@@ -542,8 +557,7 @@ class Universe_class:
         def check_active_maintenance_windows(win):
             if win['state'] != 'ACTIVE':
                 return
-            log("  Found active Maintenence window:"+ win["name"]+ " ... Exiting Health check with 'SUCCESS'")
-            errcount = 0
+            log("  WARNING:Found active Maintenence window:"+ win["name"]+ ", which expires on " + win["endTime"])
 
         self.YBA_API.search_maintenance_windows(None, check_active_maintenance_windows)
         ## End health checks,
