@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.06"
+Version = "2.17"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -109,16 +109,29 @@ v 2.03, 2.04, 2.05, 2.06
     Enable --region, if DB node errors out, assume "unconfigured" node
     Retry getting health info from master-leader.
     Multi-node stop should not wait much for underreplicated - make non-fatal
+v 2.07
+    Improve env file parsing; fix xcluster pause/resume task handling.
+v 2.08
+    WAIT Task is now retry w FATAL, and FAIL will cause Exception.
+v 2.09 - 2.10 - 2.11
+    Maint window increased to 60 min. Log more node info. Retry YBA init, maint and xcluster, Maint Win UTC.
+v 2.12 - 2.14
+    If DB-node is not in any universe, message+exit normal.
+    Implement "--fix placement" (placementModificationTaskUUID zapped in DB)
+v 2.15 - 2.16 - 2.17
+    Mark MAINT window Complete, managed expired delete. Retry Health on STOP node. lag metric improvement.
 '''
 
 import argparse
+from logging import fatal
+from re import T
 import requests
 import json
 import socket
 import time
 import subprocess
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import urllib3
 import requests.packages
 import sys
@@ -152,11 +165,15 @@ PLACEMENT_TASK_FIELD = 'placementModificationTaskUuid'
 MAX_TIME_TO_SLEEP_SECONDS = 30
 LOG_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 MAINTENANCE_WINDOW_NAME = 'OS Patching - '
-MAINTENANCE_WINDOW_DURATION_MINUTES = 20
+MAINTENANCE_WINDOW_DURATION_MINUTES = 60
+MAINTENANCE_WINDOW_RETENTION_DAYS   = 90
 YB_ADMIN_COMMAND = '/home/yugabyte/tserver/bin/yb-admin'
 YB_ADMIN_TLS_DIR = '/home/yugabyte/yugabyte-tls-config'
 LEADER_STEP_DOWN_COMMAND = '{} -master_addresses {{}} -certs_dir_name {}'.format(YB_ADMIN_COMMAND, YB_ADMIN_TLS_DIR)
 LOCALHOST = '<localhost>'
+PSQL_BINARY = '/opt/yugabyte/software/active/pgsql/bin/psql'
+PSQL_PARAMS = ['-h', 'localhost', '-p', '5432', '-U', 'postgres', '-d', 'yugaware' ]
+PSQL_ZAP_PLACEMENTMODTASK = "update universe set universe_details_json  = (universe_details_json::JSONB - 'placementModificationTaskUuid')::text "
 
 # Global scope variables - do not change!
 LOG_TO_TERMINAL = True
@@ -164,10 +181,12 @@ LOG_FILE = None
 ## Custom Functions
 
 # Log messages to output - all messages go thru this function
-def log(msg, isError=False, logTime=False):
+def log(msg, isError=False, logTime=False,newline=False):
     output_msg = ''
+    if newline:
+        output_msg = output_msg + '\n'
     if isError:
-        output_msg = '*** Error ***: '
+        output_msg = output_msg + '*** Error ***: '
     if logTime:
         output_msg = output_msg + ' ' + datetime.now().strftime(LOG_TIME_FORMAT) + " "
     output_msg = output_msg + str(msg) # Stringify in case msg was of type "exception"
@@ -184,10 +203,13 @@ def retry_successful(retriable_function_call, params=None, retry:int=10, verbose
             time.sleep(sleep * i)
             retval = retriable_function_call(*params)
             verbose and retval != None and log(
-                "  Returned {} from called function {} on attempt {}".format(retval, retriable_function_call.__name__, i+1))
+                "  Returned {} from called function {} on attempt {}".format(str(retval)[:250], retriable_function_call.__name__, i+1))
             if ReturnFuncVal:
                 return retval
             return True
+        except TaskFailed as e:
+            log("  Hit exception {} in attempt {}".format(e, i+1))
+            return False
         except Exception as errorMsg:
             preserve_errmsg = errorMsg
             #tb_info = traceback.extract_tb(errorMsg.__traceback__)
@@ -197,6 +219,7 @@ def retry_successful(retriable_function_call, params=None, retry:int=10, verbose
             #    print(f"Trace:Error occurred in {file_name} at line {line_no}")
             verbose and log("  Hit exception {} in attempt {}".format(errorMsg, i+1))
             if fatal and i == (retry - 1):
+                verbose or log("  Hit exception {} in attempt {} of {}".format(errorMsg, i+1,retriable_function_call.__name__),isError=True)
                 raise  # Re-raise current exception
             continue
     return False
@@ -211,6 +234,9 @@ def get_node_ip(addr): # Returns dotted-decimal addr
 #-------------- Class definitions ---------------------------------------
 class NotMyTypeException(Exception):
     pass
+class TaskFailed(Exception):
+    pass
+#---------------------------------------------------------------------------------
 
 class Universe_class:
     def __init__(self,YBA_API,json):
@@ -225,9 +251,10 @@ class Universe_class:
         self.targetXClusterConfigs   = json['universeDetails'].get('targetXClusterConfigs')
         self.PLACEMENT_TASK_FIELD    = json['universeDetails'].get(PLACEMENT_TASK_FIELD)
         self.SKIP_DEAD_NODE_CHECK    = False
+        self.SKIP_HEALTH_CHECK       = False
 
 
-    def get_node_json(self,hostname,ip):
+    def get_node_json(self,hostname,ip=None):
         for candidate_node in self.nodeDetailsSet:
             if str(candidate_node['nodeName']).upper() in hostname.upper() or hostname.upper() in \
                 str(candidate_node['nodeName']).upper() or \
@@ -264,7 +291,11 @@ class Universe_class:
         """
         http://172.31.23.16:7000/api/v1/tablet-under-replication
         Sample output
-        {"underreplicated_tablets":[{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"c0acc61a6f874a489d113494ab266c39","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"4bcb4184a80c4c0dbdd5bd07063fe66b","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"98c7852212ad4919b726ad5ad8f27025","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"70d12ac57b9449b2b04f30d4a0a5dbc7","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"dc97c6805d234c88a39dab8443eb2cda","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"b6bb01582efe47008a583fcaa4698258","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"7dcdeefeaa48457ea7155f572cc9aaee","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"c9eaf49983784050b41aa981706b9648","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"fea04949daee498fbddb6ae5f5a54d2e","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"86996c4c524e48c397a5733bfd599cad","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"6cb2f58212ae4495b96f30979839ec31","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"b9cae88995fc4898910c838c0a5c302c","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"000033e9000030008000000000004000","tablet_uuid":"adb412ac66f346db9176abbd4ec3583b","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"000033e9000030008000000000004000","tablet_uuid":"ffc63a74eb94448fb76edb2cd3d1f154","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"000033e9000030008000000000004000","tablet_uuid":"d8e632f4748343e4be6534ffdddfef9e","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},{"table_uuid":"000033e9000030008000000000004000","tablet_uuid":"c6069b51565e4aab9f3f049d4d876684","underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]}]}
+        {"underreplicated_tablets":[{"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"c0acc61a6f874a489d113494ab266c39",
+        "underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},
+        {"table_uuid":"7dff77b01e8c4c528b4047af0d64913c","tablet_uuid":"4bcb4184a80c4c0dbdd5bd07063fe66b",
+        "underreplicated_placements":["0bc2fe62-3180-48b9-99de-ebd84ae0af8c"]},
+        ...]}]}
 
         Check if the system is under replicated. It will go after master(leader) and curl /api/v1/tablet-under-replication.
         It will print out a list of under replicated tablet - table.
@@ -311,7 +342,11 @@ class Universe_class:
         for n in nlist:
             if n != 'universe_uuid':
                 if nlist[n]['node_status'] != 'Live':
-                    log('  Node ' + n + ' is not alive', True)
+                    njson = self.get_node_json(n)
+                    ip    = ""
+                    if njson is not None:
+                        ip = njson['cloudInfo']['private_ip'] 
+                    log('  Node ' + n + " (" + ip +  ') is not alive', True)
                     dead_nodes += 1
 
                 for nodes in self.nodeDetailsSet:
@@ -338,7 +373,58 @@ class Universe_class:
             except ValueError: # no JSON returned
                 raise Exception("Did not get JSON for master health. Got:"+ resp.text)
 
+    def follower_lag_exceeded(self,server_type:str,threshold_seconds:int,label_dimensions:str=""):
+        #promnodes =''
+        #for tnode in self.nodeDetailsSet:
+        #    if tnode['isTserver' if server_type=='tserver' else 'isMaster']:
+        #        promnodes += tnode['nodeName'] + '|'
+        promql = 'topk(5,max '+ label_dimensions +'(max_over_time(follower_lag_ms{' \
+                    + 'universe_uuid="' + self.UUID + '",'                   \
+                    + 'export_type="'   + server_type + '_export"}[' + str(LAG_LOOKBACK_MINUTES) + 'm])))'
+        log('  Executing the following Prometheus query for ' + server_type + ' '+label_dimensions+':')
+        log('   ' + promql)
+        resp = requests.get(self.YBA_API.promhost, params={'query':promql}, verify=False)
+        metrics = resp.json()
+        lag = float(0.00)
+        if      'data' in metrics and \
+                'result' in metrics['data'] and \
+                len(metrics['data']['result']) > 0 and \
+                isinstance(metrics['data']['result'],list) and \
+                len(metrics['data']['result']) > 0 and \
+                'value' in metrics['data']['result'][0] and \
+                len(metrics['data']['result'][0]['value']) > 1:
+            pass
+        else:
+            return
+        
+        exceed_threshold_count = 0
+        for val  in metrics['data']['result']:
+            lag_sec = float(val['value'][1]) / 1000
+            labels_and_values = val.get("metric")
+            label_text = ""
+            for key, value in labels_and_values.items():
+                label_text += "," + value 
+            if lag_sec > threshold_seconds:
+                log('Check failed - '+ server_type + label_text +' lag of {} seconds is above threshhold of {}.'.format(lag_sec, threshold_seconds), True)
+                exceed_threshold_count += 1
+                if label_dimensions == "":
+                    # Get details ...
+                    self.follower_lag_exceeded(server_type,threshold_seconds,"by (exported_instance,table_name)")
+                    #topk(5,max by (exported_instance,table_name)(follower_lag_ms{universe_uuid="38aeee98-7d1a-4c54-9490-3876458c7f48",export_type='master_export'}) > 10)
+        
+        if label_dimensions != "":
+            return False # No further summary if this is a recursive call.
+        if exceed_threshold_count > 0:
+            log('Check failed - '+ server_type +' follower lag.')
+            return True 
+        else:
+            log('  Check passed - '+ server_type + ' lag of {} seconds is below threshhold of {}'.format(lag, threshold_seconds))
+            return False
+            
+
     def health_check(self):
+        if self.SKIP_HEALTH_CHECK:
+            return
         log('Performing health checks for universe {}, UUID {}...'.format(self.name, self.UUID))
         log('- Checking for task placement UUID',logTime=True)
         errcount = 0;
@@ -392,7 +478,7 @@ class Universe_class:
                         log('   ' + json.dumps(hc[n]))
             elif len(hc[n]) > 0:
                 log('Health check found an issue with ' + n + ' - see below', True)
-                log(json.dumps(hc[n], indent=2))
+                log(str(json.dumps(hc[n], indent=2))[:1024] + " ...")
                 errcount += 1
                 hc_errs += 1
         if hc_errs == 0:
@@ -401,6 +487,8 @@ class Universe_class:
         ## Check tablet balance
         log('- Checking tablet health')
         log('  --- Tablet Report --')
+        log('  TServer             Active.tablets   User.tablets  User.leaders  Sys.Tablets  Sys.leaders')
+        #log('  10.231.0.132:9000 Active tablets: 339, User tablets: 326, User tablet leaders: 107, System Tablets: 13, System tablet leaders')
         tabs = None
         totalTablets = 0
         try:  # try both http and https endpoints
@@ -415,14 +503,9 @@ class Universe_class:
                 if tabs[uid][svr]['status'] != 'ALIVE':
                     log('  TServer ' + svr + ' is not alive and likely a deprecated node - skipping')
                 else:
-                    log('  TServer {} Active tablets: {}, User tablets: {}, User tablet leaders: {}, System Tablets: {}, System tablet leaders: {}'.format(
-                        svr,
-                        tabs[uid][svr]['active_tablets'],
-                        tabs[uid][svr]['user_tablets_total'],
-                        tabs[uid][svr]['user_tablets_leaders'],
-                        tabs[uid][svr]['system_tablets_total'],
-                        tabs[uid][svr]['system_tablets_leaders']
-                        ))
+                    log(f'  {svr:20s}{tabs[uid][svr]["active_tablets"]:14d}{tabs[uid][svr]["user_tablets_total"]:14d}'
+                        + f'{tabs[uid][svr]["user_tablets_leaders"]:15d}'
+                        + f'{tabs[uid][svr]["system_tablets_total"]:13d}{tabs[uid][svr]["system_tablets_leaders"]:13d}')
                     totalTablets = totalTablets + tabs[uid][svr]['active_tablets'] + tabs[uid][svr]['user_tablets_total'] + tabs[uid][svr]['user_tablets_leaders']
 
         htmlresp = None
@@ -439,29 +522,10 @@ class Universe_class:
 
         # Check tablet lag
         if totalTablets > 0:
-            log('  Checking replication lag for t-servers')
-            promnodes =''
-            for tnode in self.nodeDetailsSet:
-                if tnode['isTserver']:
-                    promnodes += tnode['nodeName'] + '|'
-            promql = 'max(max_over_time(follower_lag_ms{exported_instance=~"' + promnodes +\
-                        '",export_type="tserver_export"}[' + str(LAG_LOOKBACK_MINUTES) + 'm]))'
-            log('  Executing the following Prometheus query:')
-            log('   ' + promql)
-            resp = requests.get(self.YBA_API.promhost, params={'query':promql}, verify=False)
-            metrics = resp.json()
-            lag = float(0.00)
-            if 'data' in metrics and \
-                'result' in metrics['data'] and \
-                len(metrics['data']['result']) > 0 and \
-                'value' in metrics['data']['result'][0] and \
-                len(metrics['data']['result'][0]['value']) > 1:
-                lag = float(metrics['data']['result'][0]['value'][1]) / 1000
-            if lag > TSERVER_LAG_THRESHOLD_SECONDS:
-                log('Check failed - t-server lag of {} seconds is above threshhold of {}'.format(lag, TSERVER_LAG_THRESHOLD_SECONDS), True)
+            if self.follower_lag_exceeded("tserver", TSERVER_LAG_THRESHOLD_SECONDS):
                 errcount+=1
             else:
-                log('  Check passed - t-server lag of {} seconds is below threshhold of {}'.format(lag, TSERVER_LAG_THRESHOLD_SECONDS))
+                pass
         else:
             log('  Tablet count in universe is zero - bypassing t-server replication lag check')
 
@@ -482,32 +546,20 @@ class Universe_class:
 
         # Check master lag
         if totalTablets > 0:
-            log('  Checking replication lag for masters')
-            promnodes =''
-            for mnode in self.nodeDetailsSet:
-                if mnode['isMaster']:
-                    promnodes += mnode['nodeName'] + '|'
-            promql = 'max(max_over_time(follower_lag_ms{exported_instance=~"' + promnodes +\
-                        '",export_type="master_export"}[' + str(LAG_LOOKBACK_MINUTES) + 'm]))'
-            log('  Executing the following Prometheus query:')
-            log('   ' + promql)
-            resp = requests.get(self.YBA_API.promhost, params={'query':promql}, verify=False)
-            metrics = resp.json()
-            lag = float(0.00)
-            if 'data' in metrics and \
-                'result' in metrics['data'] and \
-                len(metrics['data']['result']) > 0 and \
-                'value' in metrics['data']['result'][0] and \
-                len(metrics['data']['result'][0]['value']) > 1:
-                lag = float(metrics['data']['result'][0]['value'][1]) / 1000
-            if lag > MASTER_LAG_THRESHOLD_SECONDS:
-                log('Check failed - master lag of {} seconds is above threshhold of {}'.format(lag, MASTER_LAG_THRESHOLD_SECONDS), True)
+            if self.follower_lag_exceeded('master', MASTER_LAG_THRESHOLD_SECONDS):
                 errcount+=1
             else:
-                log('  Check passed - master lag of {} seconds is below threshhold of {}'.format(lag, MASTER_LAG_THRESHOLD_SECONDS))
+                pass
         else:
             log('  Tablet count in universe is zero - bypassing master replication lag check')
 
+
+        def check_active_maintenance_windows(win):
+            if win['state'] != 'ACTIVE':
+                return
+            log("  WARNING:Found active Maintenence window:"+ win["name"]+ ", which expires on " + win["endTime"])
+
+        self.YBA_API.search_maintenance_windows(None, check_active_maintenance_windows)
         ## End health checks,
         if errcount > 0:
             log('--- Health check has failed - ' + str(
@@ -525,10 +577,16 @@ class Universe_class:
             if PLACEMENT_TASK_FIELD in f and len(f[PLACEMENT_TASK_FIELD]) > 0:
                 f[PLACEMENT_TASK_FIELD] = ''
                 mods.append('placement')
-                # This requires running PSQL with:
-                #    "update universe set universe_details_json='{}' where universe.universe_uuid='{}';"
-                log("Sorry - FIX for placement is not implemented.", isError=True)
-                raise Exception("Not Implemented")
+                # This requires running PSQL ---
+                if not os.path.isfile(PSQL_BINARY):
+                    raise Exception("could not find file:"+PSQL_BINARY)
+                del_mod_task = PSQL_ZAP_PLACEMENTMODTASK + "WHERE universe_uuid='" + self.UUID + "'"
+                log("  Running PSQL command:" + del_mod_task)
+                result=subprocess.check_output([PSQL_BINARY] + PSQL_PARAMS + ['-c', del_mod_task ]
+                                               ,stderr=subprocess.STDOUT,text=True,timeout=10)
+
+                log("Placement updated in DB:"+str(result),logTime=True)
+                return
 
         if len(mods) == 0:
             log('No items exist to fix')
@@ -553,14 +611,13 @@ class Universe_class:
             raise Exception("Failed to create gflag update task")
         if retry_successful(self.YBA_API.wait_for_task, params=[ task['taskUUID'] ],sleep=TASK_COMPLETE_WAIT_TIME_SECONDS,verbose=True,retry=15):
             log(' Server items fixed', logTime=True)
-            restarted = True
         else:
             log("Fix task failed",isError=True,logTime=True)
             raise Exception("Fix task failed")
 
     def Pause_xCluster_Replication(self):
         ## pause source replication
-        log('\n- Pausing x-cluster replication', logTime=True)
+        log('- Pausing x-cluster replication', logTime=True,newline=True)
         paused_count = 0
         ## pause source replication
         if 'sourceXClusterConfigs' in self.universeDetails:
@@ -587,7 +644,7 @@ class Universe_class:
 
     def Resume_xCluster_replication(self):
         ## resume source replication
-        log('\n- Resuming x-cluster replication')
+        log('- Resuming x-cluster replication',newline=True)
         resume_count = 0
         if 'sourceXClusterConfigs' in self.universeDetails:
             for rpl in self.sourceXClusterConfigs:
@@ -710,6 +767,8 @@ class Multiple_Nodes_Class:
         if self.args.dryrun:
             log("Dry Run : Not performing STOP")
             return
+        self.universe.health_check()              # Do health-check ONCE
+        self.universe.SKIP_HEALTH_CHECK    = True # and not once per node 
         self.universe.SKIP_DEAD_NODE_CHECK = True
 
         try:
@@ -851,16 +910,16 @@ class YBA_Node:
                 except subprocess.CalledProcessError as err:
                     log('Error stopping service' + svc + '- see output below', isError=True)
                     log(err)
-                    log('\nProcess failed - exiting with code ' + str(NODE_YBA_ERROR))
+                    log('Process failed - exiting with code ' + str(NODE_YBA_ERROR), newline=True)
                     exit(NODE_YBA_ERROR)
             except subprocess.CalledProcessError as e:
                 log('  Service {} is not running - skipping'.format(svc))
 #-------------------------------------------------------------------------------------------
 class YBA_API_CLASS:
-    def __init__(self,api_host, customer_uuid, api_token,args):
-        self.api_host      = api_host
-        self.customer_uuid = customer_uuid
-        self.api_token     = api_token
+    def __init__(self,env_dict,args):
+        self.api_host      = env_dict['YBA_HOST']
+        self.customer_uuid = env_dict['CUST_UUID']
+        self.api_token     = env_dict['API_TOKEN']
         self.args          = args
         self.universe_list = []
         self.promhost      = None
@@ -869,11 +928,16 @@ class YBA_API_CLASS:
     def Initialize(self):
         if self.initialized:
             return
-        retry_successful(self.get_customers, params=[], retry=5,verbose=True,sleep=5,fatal=True)
+        retry_successful(self._Initialize_w_retry, params=[], verbose=True,sleep=30,fatal=True)
+
+    def _Initialize_w_retry(self):
+        self.get_customers()
         log('Retrieving Universes from YBA server at ' +self.api_host)
+        self.universe_list = []
         # Get all universes on YBA deployment.  Note that a list of nodes is included here, so we return the entire universes array
         response = requests.get(self.api_host + '/api/customers/' + self.customer_uuid + '/universes',
                                 headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False)
+        response.raise_for_status()
         for univ in response.json():
             self.universe_list.append(Universe_class(self,univ)) # List of "Universe_class" objects 
 
@@ -882,7 +946,7 @@ class YBA_API_CLASS:
         tmp_url = self.api_host.split(':')
         promhost = tmp_url[0] + ':' + tmp_url[1] + ':' + str(PROMETHEUS_PORT) + '/api/v1/query'
         try:
-            log('\nChecking for prometheus host at {}'.format(promhost))
+            log('Checking for prometheus host at {}'.format(promhost), newline=True)
             resp = requests.get(promhost, params={'query': 'min(node_boot_time_seconds)'}, verify=False)
         except:
             if 'https' in promhost:
@@ -895,6 +959,7 @@ class YBA_API_CLASS:
         log('Using prometheus host at {}\n'.format(promhost))
         self.promhost=promhost
         self.initialized = True
+        return(True)
 
     def find_universe_by_name_or_uuid(self,lookfor_name:str=None):
         if lookfor_name is None:
@@ -951,14 +1016,15 @@ class YBA_API_CLASS:
     
     def maintenance_window(self, node, action):
         host = node.hostname
-        w_id = self.find_window_by_name(host)
+        desc = "IP:" + node.ip + ", nodeName:" + node.node_json["nodeName"]
+        win = self.search_maintenance_windows(host)
         if action == 'create':
             mins_to_add = timedelta(minutes=MAINTENANCE_WINDOW_DURATION_MINUTES)
             j = {"customerUUID" : self.customer_uuid,
                 "name" : MAINTENANCE_WINDOW_NAME + host,
-                "description" : MAINTENANCE_WINDOW_NAME + host,
-                "startTime": datetime.now().isoformat('T','seconds') + "Z",                #yyyy-MM-dd'T'HH:mm:ss'Z'
-                "endTime": (datetime.now() + mins_to_add).isoformat('T','seconds') + "Z",
+                "description" : MAINTENANCE_WINDOW_NAME + host + ", " + desc,
+                "startTime": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),                #yyyy-MM-dd'T'HH:mm:ss'Z'
+                "endTime": (datetime.now(timezone.utc) + mins_to_add).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "alertConfigurationFilter": {
                     "targetType": "UNIVERSE",
                     "target": {
@@ -967,45 +1033,77 @@ class YBA_API_CLASS:
                     }
                 }
             }
-            if w_id is not None:
-                log('\n- Updating existing Maintenance window "{}" for {} minutes' \
+            if win is not None:
+                log('- Updating existing Maintenance window "{}" for {} minutes' \
                     .format(MAINTENANCE_WINDOW_NAME + host, str(MAINTENANCE_WINDOW_DURATION_MINUTES)) \
-                    , logTime=True)
-                j['uuid'] = w_id
+                    , logTime=True,newline=True)
+                j['uuid'] = win['uuid']
                 response = requests.put(
                     self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + w_id,
                     headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
                     json = j)
+                response.raise_for_status() # Trap error responses
             else:
-                log('\n- Creating Maintenance window "{}" for {} minutes' \
+                log('- Creating Maintenance window "{}" for {} minutes' \
                     .format(MAINTENANCE_WINDOW_NAME + host, str(MAINTENANCE_WINDOW_DURATION_MINUTES)) \
-                    , logTime=True)
+                    , logTime=True,newline=True)
                 response = requests.post(
                     self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows',
                     headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
                     json = j)
-        else:
-            if w_id is not None:
-                log('\n- Removing Maintenance window "{}"'.format(MAINTENANCE_WINDOW_NAME + host), logTime=True)
-                response = requests.delete(
-                    self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + w_id,
-                    headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False)
+                response.raise_for_status() # Trap error responses
+        else: # "finish" the window
+            if win is not None:
+                mins_to_add = timedelta(minutes=5) # add 5 min from now, to allow load-bal.
+                win['endTime'] = (datetime.now(timezone.utc) + mins_to_add).strftime("%Y-%m-%dT%H:%M:%SZ") 
+                log('- Finishing Maintenance window "{}" at {} UTC'.format(win["name"],win['endTime']),
+                     logTime=True,newline=True)
+                response = requests.put(
+                    self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + win['uuid'],
+                    headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
+                    json = win)
+                response.raise_for_status() # Trap error responses
             else:
-                log('\n- No existing Maintenance window "{}" found to remove' \
-                    .format(MAINTENANCE_WINDOW_NAME + host), logTime=True)
+                log('- No existing Maintenance window "{}" found for "{}"' \
+                    .format(MAINTENANCE_WINDOW_NAME + host,action), logTime=True,newline=True)
 
-
-
-    def find_window_by_name(self, host):
-        name = MAINTENANCE_WINDOW_NAME + host
+    def search_maintenance_windows(self, host:str=None, callback=None):
+        name = MAINTENANCE_WINDOW_NAME + str(host or "")
         response = requests.post(
             self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/list',
             headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
-            json={})
+            json={} # Attempting to specify "filter": here does not work
+            )
         for w in response.json():
-            if w['name'] == name:
-                return(w['uuid'])
+            if w.get("uuid") is None:
+                continue # THis window had no UUID - probably got invalid response above 
+            if host is None:
+                callback(w)
+                continue
+            if w.get('name') == name  and  w.get('state') == 'ACTIVE':
+                return(w)
+            
         return None
+
+    def delete_expired_maintenance_windows(self):
+        expiry_date = (datetime.now(timezone.utc) - timedelta(days=MAINTENANCE_WINDOW_RETENTION_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ") 
+        def win_handler(w):
+            if w['state'] != 'FINISHED':
+                return
+            if MAINTENANCE_WINDOW_NAME not in w['name']:
+                return
+            if w['endTime'] > expiry_date:
+                return
+            log("  Deleting Expired maintenance Window '"+ w["name"]+"' which completed on "+ w['endTime'])
+            response = requests.delete(
+                    self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + w['uuid'],
+                    headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False)
+        try:
+            # Any failures here are explicitly ignored
+            self.search_maintenance_windows(
+                None,  win_handler )
+        except:
+            pass
 
     def get_customers(self):
             response = requests.get(self.api_host + '/api/customers/' + self.customer_uuid,
@@ -1024,8 +1122,9 @@ class YBA_API_CLASS:
         if jsonResponse['status'] == 'Failure':
             log('Task failed - see below for details', isError=True,logTime=True)
             log(json.dumps(jsonResponse, indent=2))
-            return False
-        raise ValueError("Still waiting for success/completion. Current state="+ jsonResponse['status'] + " at "+  str(jsonResponse['percent'])+"%")
+            raise TaskFailed("Task " + task_uuid + " Failed")
+        raise ValueError("Still waiting for " + task_uuid + " success/completion. Current state="
+                         + jsonResponse['status'] + " at "+   str(round(float(jsonResponse['percent']),2))+"%")
 
     def alter_replication(self, xcluster_action, rpl_id):
         ## Get xcluster config
@@ -1058,7 +1157,7 @@ class YBA_API_CLASS:
                 if response.status_code == 200:
                     retries = 0
                     task = response.json()
-                    if self.wait_for_task(task['taskUUID']):
+                    if retry_successful(self.wait_for_task, params=[ task['taskUUID'] ],sleep=TASK_COMPLETE_WAIT_TIME_SECONDS,verbose=True):
                         log( ' Xcluster replication ' + xcl_cfg['name'] + ' is now ' + xcNewState, logTime=True)
                     else:
                         retries -= 1
@@ -1084,6 +1183,7 @@ class YB_Data_Node:
         self.YBA_API  = YBA_API
         self.args     = args
         self.universe = None
+        self.node_info_printed = False 
         try: # See if the 'yugabyte' user exists
            services = subprocess.check_output(['id','-u','yugabyte'])
            self.yugabyte_id = int(services.decode())
@@ -1126,54 +1226,74 @@ class YB_Data_Node:
         self.isMaster = json['isMaster']
         self.isTserver= json['isTserver']
         return self
-    
+
+    def Print_node_info_line(self):
+        if self.node_info_printed:
+            return()
+        if not self.universe:
+            raise Exception("Programming ERROR: Attempting to print node with uninitialized Universe")
+        if not self.node_json:
+            raise Exception("Programming ERROR: Attempting to print node with uninitialized node json")
+        n = self.node_json
+        log(self.args.ACTION + " on " + n["nodeName"] + "(" + n['cloudInfo']['private_ip']
+            + ("" if self.ip == n['cloudInfo']['private_ip'] else ("(private_ip) / "+ self.ip)  )
+            + ", " + self.hostname + ") in Universe "
+            +  self.universe.name + '(' + self.universe.UUID + ')'
+            ,logTime=True,newline=True)
+        self.node_info_printed = True
 
     # Start node, then x-cluster - only print xluster status if dry run
     def resume(self): # aka start_node 
         self.YBA_API.Initialize()
         if self.universe is None:
             self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname, self.ip)        
-        log('  Found node ' + self.node_json['nodeName'] + ' in Universe ' + self.universe.name
-            + ' - UUID ' + self.universe.UUID)
+        #log('  Found node ' + self.node_json['nodeName'] + ' in Universe ' + self.universe.name
+         #   + ' - UUID ' + self.universe.UUID)
+        if self.node_json is None:
+            log("Node " + self.hostname + " is not in any known universe" ,isError=True,logTime=True)
+            log("Treating this like an UNKNOWN node. NO ACTION PERFORMED. " ,isError=True,logTime=True)
+            return
+        self.Print_node_info_line()
         if self.args.dryrun:
-            log('--- Dry run only - all checks will be done, but replication will not be resumed and nothing will be started ')
+            log('--- Dry run only - replication will not be resumed and nothing will be started ')
             log('Node ' + self.node_json['nodeName'] + ' state: ' + self.node_json['state'])
+            return
+
+        ## Startup server
+        log(' Starting up DB server', logTime=True)
+        if self.node_json['state'] != 'Stopped':
+            if self.node_json['state'] != 'Live':
+                log('  Node ' + self.node_json['nodeName'] + ' is in "' + self.node_json['state'] +
+                    '" state - needs to be in "Stopped" or "Live" state to continue')
+                log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
+                exit(NODE_DB_ERROR)
+            log('  Node ' + self.node_json['nodeName'] + ' is already in "Live" state - skipping startup')
         else:
-            ## Startup server
-            log(' Starting up DB server', logTime=True)
-            if self.node_json['state'] != 'Stopped':
-                if self.node_json['state'] != 'Live':
-                    log('  Node ' + self.node_json['nodeName'] + ' is in "' + self.node_json['state'] +
-                        '" state - needs to be in "Stopped" or "Live" state to continue')
-                    log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
-                    exit(NODE_DB_ERROR)
-                log('  Node ' + self.node_json['nodeName'] + ' is already in "Live" state - skipping startup')
+            response = requests.put(
+                self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' + 
+                    self.universe.UUID + '/nodes/' + self.node_json['nodeName'],
+                headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token},
+                json=json.loads('{"nodeAction": "START"}'),verify=False)
+            task = response.json()
+            if 'error' in task:
+                log('Could not start node : ' + task['error'], logTime=True,isError=True)
+                log('Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
+                exit(NODE_DB_ERROR)
+            if retry_successful(self.YBA_API.wait_for_task, params=[ task['taskUUID'] ],sleep=TASK_COMPLETE_WAIT_TIME_SECONDS,verbose=True,retry=15):
+                log(' Server startup complete', logTime=True)
             else:
-                response = requests.put(
-                    self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' + 
-                        self.universe.UUID + '/nodes/' + self.node_json['nodeName'],
-                    headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token},
-                    json=json.loads('{"nodeAction": "START"}'),verify=False)
-                task = response.json()
-                if 'error' in task:
-                    log('Could not start node : ' + task['error'], logTime=True,isError=True)
-                    log('Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
-                    exit(NODE_DB_ERROR)
-                if retry_successful(self.YBA_API.wait_for_task, params=[ task['taskUUID'] ],sleep=TASK_COMPLETE_WAIT_TIME_SECONDS,verbose=True,retry=15):
-                    log(' Server startup complete', logTime=True)
-                    restarted = True
-                else:
-                    raise Exception("Failed to resume DB Node")
+                raise Exception("Failed to resume DB Node")
 
         ## Resume x-cluster replication
         if self.args.skip_xcluster:
-            log('\n- Skipping resume of x-cluster replication')
+            log('- Skipping resume of x-cluster replication',newline=True)
         else:
-            self.universe.Resume_xCluster_replication()
+            retry_successful(self.universe.Resume_xCluster_replication,params=[],fatal=True,verbose=True)
 
-        # Remove existing maintenence window
+        # "FINISH"" existing maintenence window
         if not self.args.skip_maint_window:
-            self.YBA_API.maintenance_window( self, 'remove')
+            retry_successful(self.YBA_API.maintenance_window,params=[self, 'finish'],verbose=True,fatal=True)
+        self.YBA_API.delete_expired_maintenance_windows()
 
     def _compare_node_service_status_to_YBA (self,node_type):
         uri = None
@@ -1210,7 +1330,8 @@ class YB_Data_Node:
     def verify(self):
         self.YBA_API.Initialize()
         if self.universe is None:
-            self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname, self.ip)    
+            self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname, self.ip)
+        self.Print_node_info_line()
         log('Verifying Master and tServer on node {} are in correct state per YBA'.format(self.node_json['cloudInfo']['private_ip']))
         log(' - YBA shows node as being {}'.format(self.node_json['state']))
         errs = 0
@@ -1291,21 +1412,28 @@ class YB_Data_Node:
         self.YBA_API.Initialize()
         if self.universe is None:
             self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname,self.ip)
+        if self.node_json is None:
+            log("Node " + self.hostname + " is not in any known universe" ,isError=True,logTime=True)
+            log("Treating this like an UNKNOWN node. NO ACTION PERFORMED. " ,isError=True,logTime=True)
+            return
+        self.Print_node_info_line()
         if self.universe.get_dead_node_count() > 0:
             log("Cannot stop node because one or more other nodes/services is down", isError=True)
             raise Exception("Cannot stop node because one or more other nodes/services is down")
+        retry_successful(self.universe.health_check,verbose=True,params=[],
+                         retry=3,sleep=120,fatal=True)
         # Add maintenence window
         if not self.args.skip_maint_window:
-            self.YBA_API.maintenance_window(self, 'create')
+            retry_successful(self.YBA_API.maintenance_window, verbose=True,params=[self, 'create'],fatal=True)
 
         ## Pause x-cluster replication if specified
         if self.args.skip_xcluster:
-            log('\n- Skipping pause of x-cluster replication')
+            log('- Skipping pause of x-cluster replication',newline=True)
         else:
-            self.universe.Pause_xCluster_Replication()
+            retry_successful(self.universe.Pause_xCluster_Replication,params=[],verbose=True,fatal=True,sleep=15)
 
         ## Step down if master
-        log('\n - Checking if node {} is master leader before shutting down'.format(self.node_json['cloudInfo']['private_ip']))
+        log(' - Checking if node {} is master leader before shutting down'.format(self.node_json['cloudInfo']['private_ip']),newline=True)
         ldr_ip = self.get_master_leader_ip()
         if ldr_ip == get_node_ip(self.node_json['cloudInfo']['private_ip']):
             if self.args.skip_stepdown:
@@ -1333,7 +1461,8 @@ class YB_Data_Node:
             log('Could not shut down node : ' + task['error'], isError=True,logTime=True)
             log(' Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
             exit(NODE_DB_ERROR)
-        if retry_successful(self.YBA_API.wait_for_task, params=[ task['taskUUID'] ],sleep=TASK_COMPLETE_WAIT_TIME_SECONDS,verbose=True,retry=15):
+        if retry_successful(self.YBA_API.wait_for_task, params=[ task['taskUUID'] ],sleep=TASK_COMPLETE_WAIT_TIME_SECONDS,
+                            verbose=True,retry=15,fatal=True):
             log(' Server shut down and ready for maintenance', logTime=True)
         else:
             log(' Error stopping node', True, logTime=True)
@@ -1348,29 +1477,29 @@ class YB_Data_Node:
         if self.node_json is None:
             log("Node " + self.hostname + " is not in any known universe" ,isError=True,logTime=True)
             raise Exception("Node " + self.hostname + " is not in any known universe" )
-        
-        log('Found node ' + self.node_json['nodeName'] + ' in Universe ' + self.universe.name + ' - UUID ' + self.universe.UUID)
+        self.Print_node_info_line()
+        #log('Found node ' + self.node_json['nodeName'] + ' in Universe ' + self.universe.name + ' - UUID ' + self.universe.UUID)
         self.universe.health_check()
         self.verify()
 
 #-------------------------------------------------------------------------------------------
 
 def Get_Environment_info():
-    api_host      = os.environ.get("YBA_HOST")
-    api_token     = os.environ.get("API_TOKEN")
-    customer_uuid = os.environ.get("CUST_UUID")
-
-    if api_host is not None  and  api_token is not None  and customer_uuid is not None:
-        return (api_host,api_token,customer_uuid)
+    env_dict = dict(YBA_HOST   = os.environ.get("YBA_HOST"),
+                    API_TOKEN  = os.environ.get("API_TOKEN"),
+                    CUST_UUID  = os.environ.get("CUST_UUID"))
+    if None not in env_dict.values():
+        return env_dict # We have all values specified 
+    
     if not os.path.exists(ENV_FILE_PATH):
         log(ENV_FILE_PATH + " does not exist.",isError=True)
-        return (api_host,api_token,customer_uuid) # "None" values
+        return None
     
     # find env variable file - should be only 1
     flist = fnmatch.filter(os.listdir(ENV_FILE_PATH), ENV_FILE_PATTERN)
     if len(flist) < 1:
         log('No environment variable file found in ' + ENV_FILE_PATH, isError=True,logTime=True)
-        log('\nProcess failed - exiting with code ' + str(OTHER_ERROR))
+        log('Process failed - exiting with code ' + str(OTHER_ERROR),newline=True)
         if (not LOG_TO_TERMINAL):
             LOG_FILE.close()
         exit(OTHER_ERROR)
@@ -1383,34 +1512,28 @@ def Get_Environment_info():
         exit(OTHER_ERROR)
 
     log('Retrieving environment variables from file ' + ENV_FILE_PATH + flist[0])
-    env_file = open(ENV_FILE_PATH + flist[0], "r")
-    ln = env_file.readline()
-    while ln:
-        if 'YBA_HOST' in ln:
-            api_host = ln.split('=')[1].replace("'", "").replace('"', '').replace('\n', '').replace('\r', '')
-        if 'API_TOKEN' in ln:
-            api_token = ln.split('=')[1].replace("'", "").replace('"', '').replace('\n', '').replace('\r', '')
-        if 'CUST_UUID' in ln:
-            customer_uuid = ln.split('=')[1].replace("'", "").replace('"', '').replace('\n', '').replace('\r', '')
-        ln = env_file.readline()
-    env_file.close()
-    missingEnv = False
-    if api_host is None:
-        log('Environment variable YBA_HOST not found', True)
-        missingEnv = True
-    if api_token is None:
-        log('Environment variable API_TOKEN not found', True)
-        missingEnv = True
-    if customer_uuid is None:
-        log('Environment variable CUST_UUID not found', True)
-        missingEnv = True
-    if missingEnv:
+    with open(ENV_FILE_PATH + flist[0], "r") as env_file:
+        for line in env_file:
+            parts = line.split("=",1)
+            if len(parts) < 2:
+                continue
+            value = parts[1].replace("'", "").replace('"', '').replace('\n', '').replace('\r', '')
+            for name in env_dict.keys():
+                if name in parts[0]:
+                    env_dict[name] = value
+                    break
+
+    for name,value in env_dict.items():
+        if value is None:
+            log('Environment variable " + name + " not found', True)
+
+    if None in env_dict.values():
         log(' Process failed - exiting with code ' + str(OTHER_ERROR), logTime=True)
         if (not LOG_TO_TERMINAL):
             LOG_FILE.close()
         exit(OTHER_ERROR)
     
-    return (api_host,api_token,customer_uuid)
+    return env_dict
 
 ### Main Code ##############################################################################################
 def main():
@@ -1498,6 +1621,7 @@ def main():
     elif args.verify:
         action = 'verify'
         dry_run = True
+    args.ACTION = action
     # Overwritting the EVN_FILE_PATH
     if args.ENV_FILE_PATH is not None:
         global ENV_FILE_PATH
@@ -1514,18 +1638,23 @@ def main():
         LOG_FILE = open(logdir + 'yb_os_maint_' + hostname + '_' + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                         + '_' + action + '.log', "a")
 
-    log('\n--------------------------------------')
-    log(' script version {} started on {} with action={}'.format(Version,hostname,action), logTime=True)
+    log('--------------------------------------',newline=True)
+    log('{} {} script version {} started on {} with action={}'.format(
+         datetime.now().astimezone().tzname(),  # EDT / PST etc.. 
+         datetime.now(timezone.utc).strftime('(%Y-%m-%d %H:%M UTC)'),
+         Version,hostname,action), logTime=True)
     if args.availability_zone is not None and args.region is None:
         log('--region parameter must be specified when --availability_zone is specified', True)
         if (not LOG_TO_TERMINAL):
             LOG_FILE.close()
         exit(OTHER_ERROR)
     
-    (api_host,api_token,customer_uuid) = Get_Environment_info()
+    env_dict = Get_Environment_info()
+    if env_dict is None:
+        raise Exception("ERROR: Did not get YBA API Info from enviornment")
 
     # ---- Mainline code -------
-    YBA_API   = YBA_API_CLASS(api_host,customer_uuid,api_token,args) # Instantiated , but not Initialized yet
+    YBA_API   = YBA_API_CLASS(env_dict,args) # Instantiated , but not Initialized yet
     this_node = None # The node object I will perform "action" upon
     for node_class in (Multiple_Nodes_Class, YBA_Node, YB_Data_Node):
         try:
