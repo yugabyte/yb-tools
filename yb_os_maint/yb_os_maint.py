@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.17"
+Version = "2.18"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -120,6 +120,8 @@ v 2.12 - 2.14
     Implement "--fix placement" (placementModificationTaskUUID zapped in DB)
 v 2.15 - 2.16 - 2.17
     Mark MAINT window Complete, managed expired delete. Retry Health on STOP node. lag metric improvement.
+v 2.18
+    --resume for ZONE; Maint alert suppress.; Allow YBA region action; snooze health alerts. --reprovision.
 '''
 
 import argparse
@@ -860,6 +862,10 @@ class YBA_Node:
         log(status,logTime=True)
 
     def resume(self):
+        if self.args.region:
+            log("Unexpected --region in YBA resume. Did you specify --universe ?",isError=True)
+            raise("Incorrect or extra arguments found.")
+        
         log(' Host is YBA Server - Starting up services...', logTime=True)
         if self.ybaVersion >= '2.18.0':
             try:
@@ -888,6 +894,10 @@ class YBA_Node:
                     exit(NODE_YBA_ERROR)
 
     def stop(self):
+        if self.args.region:
+            log("Unexpected --region in YBA stop. Did you specify --universe ?",isError=True)
+            raise("Incorrect or extra arguments found.")
+        
         log(' Host is YBA Server {} - Shutting down services...'.format(self.ybaVersion), logTime=True)
         if self.ybaVersion >= '2.18.0':
             try:
@@ -914,6 +924,11 @@ class YBA_Node:
                     exit(NODE_YBA_ERROR)
             except subprocess.CalledProcessError as e:
                 log('  Service {} is not running - skipping'.format(svc))
+
+    def fix(self): # This is a 'Universe_class' method - we land here if -u is not specified
+        log("--fix requires that --universe must be specified",isError=True,newline=True)
+        os.exit(10)
+
 #-------------------------------------------------------------------------------------------
 class YBA_API_CLASS:
     def __init__(self,env_dict,args):
@@ -1014,6 +1029,17 @@ class YBA_API_CLASS:
                 headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False)
         return resp.json()
     
+    def snooze_health_alerts(self,universe:Universe_class=None,disable=True,duration_sec=MAINTENANCE_WINDOW_DURATION_MINUTES*60):
+        log('- Snoozing health alerts for {} seconds' \
+            .format(str(duration_sec)) \
+            , logTime=True)
+        response = requests.post(
+            self.api_host + '/api/v1/customers/' + self.customer_uuid 
+                    +'/universes/' + universe.UUID + '/config_alerts',
+            headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
+            json = {"disabled": disable, "disablePeriodSecs": duration_sec})
+        response.raise_for_status() # Trap error responses
+
     def maintenance_window(self, node, action):
         host = node.hostname
         desc = "IP:" + node.ip + ", nodeName:" + node.node_json["nodeName"]
@@ -1039,10 +1065,11 @@ class YBA_API_CLASS:
                     , logTime=True,newline=True)
                 j['uuid'] = win['uuid']
                 response = requests.put(
-                    self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + w_id,
+                    self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + win['uuid'],
                     headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
                     json = j)
                 response.raise_for_status() # Trap error responses
+                self.snooze_health_alerts(node.universe,disable=True,duration_sec=MAINTENANCE_WINDOW_DURATION_MINUTES*60)
             else:
                 log('- Creating Maintenance window "{}" for {} minutes' \
                     .format(MAINTENANCE_WINDOW_NAME + host, str(MAINTENANCE_WINDOW_DURATION_MINUTES)) \
@@ -1052,6 +1079,7 @@ class YBA_API_CLASS:
                     headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
                     json = j)
                 response.raise_for_status() # Trap error responses
+                self.snooze_health_alerts(node.universe,disable=True,duration_sec=MAINTENANCE_WINDOW_DURATION_MINUTES*60)
         else: # "finish" the window
             if win is not None:
                 mins_to_add = timedelta(minutes=5) # add 5 min from now, to allow load-bal.
@@ -1063,6 +1091,7 @@ class YBA_API_CLASS:
                     headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
                     json = win)
                 response.raise_for_status() # Trap error responses
+                self.snooze_health_alerts(node.universe,disable=False,duration_sec=1) # Zero sec fails, so use 1.
             else:
                 log('- No existing Maintenance window "{}" found for "{}"' \
                     .format(MAINTENANCE_WINDOW_NAME + host,action), logTime=True,newline=True)
@@ -1225,6 +1254,7 @@ class YB_Data_Node:
         self.args     = args
         self.isMaster = json['isMaster']
         self.isTserver= json['isTserver']
+        self.node_info_printed = False 
         return self
 
     def Print_node_info_line(self):
@@ -1428,7 +1458,7 @@ class YB_Data_Node:
 
         ## Pause x-cluster replication if specified
         if self.args.skip_xcluster:
-            log('- Skipping pause of x-cluster replication',newline=True)
+            log('- Skipping pause of x-cluster replication',logTime=True)
         else:
             retry_successful(self.universe.Pause_xCluster_Replication,params=[],verbose=True,fatal=True,sleep=15)
 
@@ -1481,6 +1511,31 @@ class YB_Data_Node:
         #log('Found node ' + self.node_json['nodeName'] + ' in Universe ' + self.universe.name + ' - UUID ' + self.universe.UUID)
         self.universe.health_check()
         self.verify()
+
+    def reprovision(self):
+        self.YBA_API.Initialize()
+        if self.universe is None:
+            self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname, self.ip)        
+        if self.args.dryrun:
+            log('--- Dry run only - (reprovision) no action performed')
+            return
+
+        ## Startup server
+        log(' re-provisioning DB server', logTime=True)
+        response = requests.put(
+            self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' + 
+                self.universe.UUID + '/nodes/' + self.node_json['nodeName'],
+            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token},
+            json=json.loads('{"nodeAction": "REPROVISION"}'),verify=False)
+        task = response.json()
+        if 'error' in task:
+            log('Could not reprovision node : ' + task['error'], logTime=True,isError=True)
+            log('Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
+            exit(NODE_DB_ERROR)
+        if retry_successful(self.YBA_API.wait_for_task, params=[ task['taskUUID'] ],sleep=TASK_COMPLETE_WAIT_TIME_SECONDS,verbose=True,retry=15):
+            log(' Server reprovision complete', logTime=True)
+        else:
+            raise Exception("Failed to reprovision DB Node")
 
 #-------------------------------------------------------------------------------------------
 
@@ -1544,7 +1599,10 @@ def main():
     mxgroup.add_argument('-s', '--stop',
                          action='store_true',
                          help='Stop services for YB host prior to O/S patch')
-    mxgroup.add_argument('-r', '--resume',
+    mxgroup.add_argument('-p', '--reprovision',
+                         action='store_true',
+                         help='Re-Provision (dead) node before bringing it back to life')
+    mxgroup.add_argument('-r', '--resume','--start',
                          action='store_true',
                          help='Resume services for YB host after O/S patch')
     mxgroup.add_argument('-t', '--health',
@@ -1621,6 +1679,8 @@ def main():
     elif args.verify:
         action = 'verify'
         dry_run = True
+    elif args.reprovision:
+        action = 'reprovision'
     args.ACTION = action
     # Overwritting the EVN_FILE_PATH
     if args.ENV_FILE_PATH is not None:
