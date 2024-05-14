@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.33";
+our $VERSION = "1.34";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -256,7 +256,7 @@ sub Get_Node_Metrics{
      server_uptime_ms   => sub{my ($m,$val)=$_[1]=~/^(\w+).+?\s(\d+)/;$callback->($m,$_[0],0,$val)},
      async_replication_ => sub{  # committed_lag_micros and sent_lag_micros
                               my ($m,$table_id,$val)=$_[1]=~/^(\w+).+table_id="(\w+)".+}\s*(\d+)/;
-                              $val > 500 and $callback->($m,$_[0],$table_id,$val);
+                              $val and $val > 500 and $callback->($m,$_[0],$table_id,$val);
                               },
      hybrid_clock_skew  => sub{my ($m,$val)=$_[1]=~/^(\w+).+?\s(\d+)/;$callback->($m,$_[0],0,$val)},
      'handler_latency_yb_tserver_TabletServerService_Read{quantile="p99' #microseconds
@@ -476,7 +476,7 @@ sub daemonize {
     # 	The child itself forks and it then exits right away, so its child is taken over by init and can't be a zombie.
     warn (unixtime_to_printable(time()) 
 	     . " Daemonizing. Expected to run in background until "
-		 .  unixtime_to_printable($opt{ENDTIME_EPOCH} + time()). " + time for Table info initialization(~2 min).\n");
+		 .  unixtime_to_printable($opt{ENDTIME_EPOCH} + time()). " (+ time for Table info initialization(~2 min)).\n");
     my $pid = fork ();
     if ($pid < 0) {
       die "first fork failed: $!";
@@ -1106,7 +1106,7 @@ sub new{
         $opt{$_} or die "ERROR: Required parameter --$_ was not specified.\n";
     }
 	for(qw|API_TOKEN  CUST_UUID UNIV_UUID|){
-        (my $value=$opt{$_})=~tr/-//d; # Extract and zap dashes
+        (my $value=$opt{$_})=~tr/-'"//d; # Extract and zap dashes,quotes
 		my $len = length($value);
 		next if $len == 32; # Expecting these to be exactly 32 bytes 
         warn "WARNING: Expecting 32 valid bytes in Option $_=$opt{$_} but found $len bytes. \n";
@@ -1325,7 +1325,7 @@ our $VERSION = '0.02';
 sub new {
   my $p = shift;
   my $c = ref($p) || $p;
-  my $o = {};
+  my $o = {MIME_HDR=>'MIME Version: 1.0'};
   bless $o, $c;
   return $o;
 }
@@ -1355,9 +1355,9 @@ sub parse {
   $o->{CALLER}   = $caller;
   $o->{callback} = $callback;
 
-  my $mp1 = readline($o->{fh});
-  my $mp1e = 'MIME Version: 1.0';
-  die "Multipart header line 1 must begin ``$mp1e'' " unless $mp1 =~ /^$mp1e/;
+  chomp(my $mp1 = readline($o->{fh}));
+  #my $mp1e = 'MIME Version: 1.0';
+  die "Multipart header line 1 must begin '$$o->{MIME_HDR}' " unless $mp1 eq $o->{MIME_HDR};
  
   $o->{general_header} = $o->parseHeader();
   croak "no boundary defined" unless $o->{general_header}->{"Content-Type.params"}->{"boundary"};
@@ -1379,10 +1379,11 @@ sub parseBody {
   my ($o) = @_;
   my $fh = $o->{fh};
   my $boundary = $o->{boundary};
+  my $mime_hdr = $o->{MIME_HDR};
   $o->{recordnumber} = 0;
   while(<$fh>){
-    $o->{eof} = 1 if /^--$boundary--/;
-    if (/^--$boundary/){
+    $o->{eof} = 1 if /^--$boundary--|^$mime_hdr/;
+    if (/^--$boundary|^$mime_hdr/){
 		$o->{callback}->($o->{CALLER},undef); # Indiates Piece completed.
 		$o->{general_header} = undef;
 		return;
