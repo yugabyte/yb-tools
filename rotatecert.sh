@@ -24,7 +24,7 @@
 # Please report any issues with this script to Ian Anderson <ianderson@yugabyte.com>.                                 #
 #######################################################################################################################
 
-VERSION=0.1.3
+VERSION=0.1.4
 
 set -o nounset
 set -o pipefail
@@ -35,6 +35,7 @@ CAT=/bin/cat
 DATE=/bin/date
 ECHO=/bin/echo
 GREP=/bin/grep
+MKDIR=/usr/bin/mkdir
 MV=/bin/mv
 OPENSSL=/usr/bin/openssl
 RM=/bin/rm
@@ -42,6 +43,8 @@ SSH=/usr/bin/ssh
 SCP=/usr/bin/scp
 SUDO=/usr/bin/sudo
 TAR=/bin/tar
+TEE=/usr/bin/tee
+TOUCH=/usr/bin/touch
 
 # This must be a space-separated list of IP addresses or hostnames. This node list will be used for making SSH connections,
 # setting certificate CNs and SANs, and various other important bits of the script, so make sure you have it right!
@@ -73,6 +76,7 @@ REMOTE_CLIENT_TLS_DIR=.yugabytedb
 RESTART_WAIT_SECONDS=5
 
 CLEANUP=true
+WRITELOGFILE=true
 DEBUG=true
 # TODO: Add support for an expiry threshold flag, so certs are regenerated if they will expire with the next n days
 FORCE=false
@@ -80,6 +84,7 @@ FORCE=false
 TS=$($DATE +%s)
 
 WORKDIR=$HOME/rotatecert-$TS
+LOGFILE=rotatecert-$TS.log
 
 CA_CONF_FILE=$WORKDIR/openssl-ca.cnf
 CLIENT_CRT_CONF_FILE=$WORKDIR/openssl-client-crt.cnf
@@ -90,26 +95,41 @@ REMOTE_CERT_BACKUP_FILE=tls-cert-backup-$TS.tgz
 
 debug () {
   if [[ "$DEBUG" = true ]]; then
-    $ECHO "DEBUG: $1" 1>&2
+    log_message "DEBUG" "$1"
   fi
 }
 
 info () {
-  $ECHO "INFO: $1"
+  log_message "INFO" "$1"
 }
 
 warn () {
-  $ECHO "WARN: $1"
+  log_message "WARN" "$1"
 }
 
 error () {
-  $ECHO "ERROR: $1"
+  log_message "ERROR" "$1"
 }
 
 fatal () {
   code=$1
-  $ECHO "FATAL: $2"
+  log_message "FATAL" "$2"
   exit $code
+}
+
+log_message () {
+  level=$1
+  message=$2
+  if [[ "$WRITELOGFILE" = true ]]; then
+    $ECHO "$(date -Iseconds) $level: $message" | $TEE -a $LOGFILE
+  else
+    $ECHO "$(date -Iseconds) $level: $message"
+  fi
+}
+
+function handle_ctrlc() {
+  warn "Aborting on SIGINT"
+  exit
 }
 
 check_cert_expiry () {
@@ -231,7 +251,18 @@ scp_put () {
   # TODO: Error handling
 }
 
+trap handle_ctrlc SIGINT
+
+$TOUCH $LOGFILE
+if [[ $? -ne 0 ]]; then
+  warn "Unable to write logfile $LOGFILE. Keep a copy of this output!"
+  WRITELOGFILE=false
+fi
+
 info "Starting $($BASENAME -- $0) version $VERSION"
+if [[ "$WRITELOGFILE" = "true" ]]; then
+  info "Logging to $LOGFILE"
+fi
 debug "Nodelist is $NODELIST"
 
 if [[ $EUID -eq 0 ]]; then
@@ -239,9 +270,17 @@ if [[ $EUID -eq 0 ]]; then
   SUDO=""
 fi
 
-mkdir $WORKDIR
+$MKDIR $WORKDIR
 if [[ $? -ne 0 ]]; then
   fatal 6 "Failed to create working directory $WORKDIR. Check ownership and permissions."
+fi
+
+if [[ ! -r $ROOT_CERT ]]; then
+  fatal 7 "Specified certificate file $ROOT_CERT could not be read. Verify that the ROOT_CERT_DIR environment variable is specified correctly."
+fi
+
+if [[ ! -e $SSH_KEY ]]; then
+  fatal 8 "Specified SSH key $SSH_KEY not found. Verify that the SSH_KEY environment variable is specified correctly."
 fi
 
 # Bail out if the "root cert" has multiple certs inside, since that means it's a cert bundle and we're likely dealing with real CA certs
@@ -251,7 +290,9 @@ if [[ $root_cert_count -gt 1 ]]; then
 fi
 
 debug "Backing up certificate files on platform node"
-$SUDO $TAR -czf $PLATFORM_CERT_BACKUP_FILE $ROOT_CERT_DIR/
+tar_cmd="$SUDO $TAR -czf $PLATFORM_CERT_BACKUP_FILE $ROOT_CERT_DIR/"
+debug "Running $tar_cmd"
+$tar_cmd
 if [[ $? -ne 0 ]]; then
   fatal 4 "Failed to back up certificate files on platform node. Cowardly refusing to proceed without a backup."
 fi

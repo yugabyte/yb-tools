@@ -10,9 +10,9 @@ This script is used to prepare for node maintenance such as O/S patching.  It is
  - Stop or resume a node:
    - For YBA hosts, will stop/start the YBA related services on the node it is run on
    - For DB nodes:
-     - Pause x-cluster replication
+     - Pause x-cluster replication if stopping a single node and not skipping
      - Stop T-Server and Master processes
-     - Create a maitenance window to stop alerts
+     - Create a maitenance window to stop alerts if stopping a single node and not skipping
      - Resume is the reverse of the above
 
 # Usage
@@ -23,12 +23,27 @@ usage: python yb_os_maint.py [-h] (-s | -r | -t | -f FIX [FIX ...]) [-d] [-l LOG
   -s, --stop            Stop services for YB host prior to O/S patch
   -r, --resume          Resume services for YB host after O/S patch
   -t, --health          Healthcheck only - specify Universe Name or "ALL" if not running on a DB Node
+                        If no Universe is specified, the check will be run on the node's Universe. 
   -v, --verify          Verify Master and tServer process are in correct state per universe config
   -f, --fix [item]      Fix one or more of the following: 'placement'
   -d, --dryrun          Dry Run - pre-flight checks only - no actions taken.
   -l, --log_file_directory [folder]
-                           Log file folder location. Output is sent to terminal
-                           stdout if not specified.
+                        Log file folder location. Output is sent to terminal
+                        stdout if not specified.
+  -x, --skip_xcluster   Skip Pause or Resume of xCluster replication when
+                        stopping or resuming nodes - False if not specified,
+                        forced to True if stopping multiple nodes in a region/AZ.
+  -m, --skip_maint_window
+                        Skip creation/removal of maintenence window when
+                        stopping or resuming nodes - False if not specified,
+                        forced to True if stopping multiple nodes in a region/AZ.
+  -g REGION, --region REGION
+                        Region for nodes to be stopped/resumed - action taken
+                        on local node if not specified.
+  -a AVAILABILITY_ZONE, --availability_zone AVAILABILITY_ZONE
+                        AZ for nodes to be stopped/resumed - action taken on
+                        local node if not specified. Script will abort if --region is
+                        not specified along with the AZ
 ```
                         
 # Setup
