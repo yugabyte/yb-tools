@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.34";
+our $VERSION = "1.35";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -45,16 +45,16 @@ my %option_specs=( # Specifies info for globals saved in %opt. TYPE=>undef means
     MAX_QUERY_LEN =>{TYPE=>'=i', DEFAULT=> 2048, ALT=>"MAXQL|MAXL",},
     MAX_ERRORS    =>{TYPE=>'=i', DEFAULT=> 10,},
     SANITIZE      =>{TYPE=>'!',  DEFAULT=> 0,   HELP=>"Remove PII by truncating to WHERE clause"},
-    ANALYZE       =>{TYPE=>'=s', DEFAULT=> undef, ALT=>"PROCESS", HELP=>"ANALYSIS mode Input File-name ('..csv.gz' ) to process through sqlite"},
+    ANALYZE       =>{TYPE=>'=s', DEFAULT=> undef, ALT=>"PROCESS", HELP=>"ANALYSIS mode Input File-name ('..mime.gz' ) to process through sqlite"},
     DB            =>{TYPE=>'=s', DEFAULT=> undef,     HELP=>"Analysis mode output SQLITE database file name. Automatic, but you can overrided here"},
     SQLITE        =>{TYPE=>'=s', DEFAULT=> "sqlite3", HELP=>"path to Sqlite binary"},
     UNIVERSE      =>{TYPE=>undef,DEFAULT=> undef,  },   # Universe detail info (Populated in initialize)
     HTTPCONNECT   =>{TYPE=>'=s', DEFAULT=> "curl",   HELP=>"How to connect to the YBA : 'curl', or 'tiny' (HTTP::Tiny)"},
     USETESTDATA   =>{TYPE=>'!',  DEFAULT=> undef,   HELP=>"TESTING only !! - Do not use."},
-    TZOFFSET      =>{TYPE=>undef,DEFAULT=> undef,  },# This is set inside 'unixtime_to_printable', on first use 
+    TZOFFSET      =>{TYPE=>'=s', DEFAULT=> undef, HELP=>"+HH:MM  or -HH:MM Used for Latency distribution report under --ANALYZE" },# This is set inside 'unixtime_to_printable', on first use in "capture" mode
     RPCZ          =>{TYPE=>'!',  DEFAULT=> 1,     HELP=>"If set, get query from each node, instead of /live_queries"},
     MASTER_LEADER =>{TYPE=>undef,DEFAULT=>undef, },  # Obtained and Used internally
-    DBINFO        =>{TYPE=>undef,DEFAULT=>undef, },  # Namespaces, tablespaces, tables, tablets .. Obtained and Used internally	
+    DBINFO        =>{TYPE=>undef,DEFAULT=>undef, },  # Namespaces, tablespaces, tables, tablets .. Obtained and Used internally
 );
 my %opt = map {$_=> $option_specs{$_}{DEFAULT}} keys %option_specs;
 
@@ -627,6 +627,7 @@ sub Handle_MIME_HEADER  {
     for ( grep {!/_SECTION_|Content-Type|params$/} sort keys %{$self->{INPUT}{general_header}} ){
 		   $self->{INPUT}{general_header}{$_} =~tr/'//d; # Zap single quotes (UNIV_UUID)
 		   print {$self->{OUTPUT_FH}} "INSERT INTO kv_store VALUES ('MIMEHDR','$_','$self->{INPUT}{general_header}{$_}');\n";
+       "TZOFFSET" eq $_  and $opt{TZOFFSET} = $self->{INPUT}{general_header}{$_}; # Save collector system's TZoffset 
 	}
 }
 
@@ -688,7 +689,23 @@ sub Handle_CSVHEADER	{
 	my $type = $self->{INPUT}{general_header}{TYPE};
 	my ($Ignore_type_field_in_fieldnames,$timestamp_field,@field_names) 
 	           = split /,/, $self->{INPUT}{general_header}{FIELDS};
-    $self->{FIELDS}{$type} = [@field_names];
+  if ($self->{TYPE_EXISTS}{$type}){
+      if ( $#field_names > $#{$self->{FIELDS}{$type}} ){
+        # This header has more fields than we previously had  .. we need a the new field names..
+        for my $new_field ( grep {!$self->{FIELDS_HASH}{$type}{$_}} @field_names ){
+            print {$self->{OUTPUT_FH}} "ALTER  TABLE $type ADD COLUMN $new_field "
+                   . ($new_field=~/_ms$/ ? "INTEGER " : "")
+                   ."DEFAULT NULL;\n";
+            push @{$self->{FIELDS}{$type}}, $new_field;
+            $self->{FIELDS_HASH}{$type}{$new_field} = 1;
+        }
+      }
+      return;
+  }
+  # This is a brand new $type 
+  $self->{FIELDS}{$type} = [@field_names];
+  $self->{FIELDS_HASH}{$type} = { map {$_=>1} @field_names };
+
 	$_ = "$_ INTEGER" for grep {/milli|_ms/i} @field_names; # Make MILLISECONDS an integer 
 	$opt{DEBUG} and print "--DEBUG:","CREATE TABLE IF NOT EXISTS $type ($timestamp_field INTEGER,",
                     join(",",@field_names), ");\n";
@@ -764,7 +781,7 @@ sub Handle_ENTITIES_Data{
     # Fixup Node UUIDs : These are not in the Universe JSON - so we update from tablets 
 	print {$self->{OUTPUT_FH}} "UPDATE NODE ",
        "SET nodeUuid=(select server_uuid FROM tablets ",
-           "WHERE  substr(addr,1,instr(addr,\":\")-1) = private_ip limit 1);\n";
+           "WHERE  substr(addr,1,instr(addr,':')-1) = private_ip limit 1);\n";
 }
 
 sub Handle_Namespaces_Data{
@@ -797,6 +814,7 @@ sub Handle_Table_Description{
 		#tablecol(tableid TEXT PRIMARY KEY, isPartitionKey INTEGER, isClusteringKey INTEGER, columnOrder TEXT, sortOrder TEXT, 
         #                           name TEXT, type TEXT, partitionKey TEXT, clusteringKey TEXT);
         for my $c (@{$bj->{tableDetails}{columns}}){
+           $bj->{tableUUID} =~tr/-//d; # Zap "-" : allows easier match between tableid and 'tables.id'
            print {$self->{OUTPUT_FH}} "INSERT INTO tablecol VALUES('", $bj->{tableUUID},"'",
                  map ({defined $c->{$_} ? ",'" .($c->{$_}||"") . "'"  :  ",NULL"}
                            qw|isPartitionKey isClusteringKey columnOrder sortOrder name type partitionKey clusteringKey|),
@@ -811,6 +829,11 @@ sub Handle_Tablet_Metrics{
 	my ($self,$dispatch_type,$body ) = @_;
 	$opt{DEBUG} and print "--DEBUG:IN: ",(caller(0))[3]," handler type $dispatch_type\n";
 	if ( $dispatch_type eq "Header" ){
+    if (not $self->{TABLETMETRIC_HEADER}){
+       # JIT create table
+       print {$self->{OUTPUT_FH}}
+       "CREATE TABLE IF NOT EXISTS tabletmetric(timestamp INTEGER, node_uuid TEXT, tablet_id TEXT, metric_name TEXT, metric_value NUMERIC);\n";
+    }
 		$self->{TABLETMETRIC_HEADER} = $self->{INPUT}{general_header};
 		$self->{TABLETMETRIC_BODY}   = "";
 		return;
@@ -829,9 +852,9 @@ sub Handle_Tablet_Metrics{
 	     print {$self->{OUTPUT_FH}} "INSERT INTO TABLETMETRIC VALUES("
 	           #timestamp INTEGER, node-uuid , tablet_id TEXT, metric_name TEXT, metric_value NUMERIC
 		   ,$self->{TABLETMETRIC_HEADER}{TIMESTAMP}
-		   ,qq|,"$self->{TABLETMETRIC_HEADER}{NODE}"|  # Node UUID 
-		   ,qq|,"$metricInfo->{id}"| # Tablet ID
-		   ,qq|,"$m->{name}"|,
+		   ,qq|,'$self->{TABLETMETRIC_HEADER}{NODE}'|  # Node UUID 
+		   ,qq|,'$metricInfo->{id}'| # Tablet ID
+		   ,qq|,'$m->{name}'|,
 		   ,qq|,|,$m->{value}
 		   ,");\n";
 	   }
@@ -902,6 +925,11 @@ sub Parse_Body_Record{
    $dispatch and $dispatch->($self,"Body", $rec); # Handler is called here    
 }
 
+sub no_header_output{
+  my ($self, $msg) = @_;
+  print {$self->{OUTPUT_FH}} ".header off\n$msg\n.header on\n";
+}
+
 sub Process_file_and_create_Sqlite{
 	my ($self) = @_;
 	
@@ -922,19 +950,19 @@ sub Process_file_and_create_Sqlite{
 	# Incomplete file or bad JSON may cause the next parse to fail:
 	eval { $self->{INPUT}->parse($self, \&Parse_Body_Record) };
   if ($@){
-       print {$self->{OUTPUT_FH}} "SELECT '-- ERROR Parsing input:$@ --';\n";
+       $self->no_header_output( "SELECT '-- ERROR Parsing input:$@ --';" );
 	}else{
-       print {$self->{OUTPUT_FH}} "SELECT 'All input records processed.';\n";
+       $self->no_header_output( "SELECT 'All input records processed.';" );
   }
 	if ($self->{TYPE_EXISTS}{ycql}){
      $self->Create_and_run_views_for_ycql();
   }else{
-      print {$self->{OUTPUT_FH}} "SELECT 'NO YCQL queries recorded.';\n";
+      $self->no_header_output( "SELECT 'NO YCQL queries recorded.';" );
   }
   if ($self->{TYPE_EXISTS}{ysql}){
      $self->Create_and_run_views_for_ysql();
   }else{
-      print {$self->{OUTPUT_FH}} "SELECT 'NO YSQL queries recorded.';\n";
+      $self->no_header_output( "SELECT 'NO YSQL queries recorded.';" );
   }
 	
 	close $self->{OUTPUT_FH};
@@ -945,15 +973,18 @@ sub Process_file_and_create_Sqlite{
 sub Create_and_run_views_for_ycql{
     my ($self) = @_;
 	
-	my ($count_by_region_and_type,$count_by_region) = ("","");
+	my ($count_by_region_and_type,$count_by_region,$reg_qry_csv) = ("","","");
 	for my $r (sort keys %{ $self->{REGION} }){
 	   my $preferred =  $self->{REGION}{$r}{PREFERRED} ? "(P)" : "";
 	   $count_by_region_and_type .= "sum(case when instr(query,' system.')>0 and region='$r' then 1 else 0 end) as [sys_$r],\n";
 	   $count_by_region_and_type .= "sum(case when instr(query,' system.')=0 and region='$r' then 1 else 0 end) as [cql_$r$preferred],\n";
 	   $count_by_region    .= "sum ( CASE WHEN region = '$r' THEN 1 ELSE 0 END) as [${r}_queries],\n";
+     $reg_qry_csv        .= "[${r}_queries],";
 	}
 	$count_by_region=~s/,$//; # Zap trailing comma 
-   my ($elapsed_ms) = grep {m/milli/i} @{ $self->{FIELDS}{ycql} }; 	
+  $reg_qry_csv    =~s/,$//;
+   my ($elapsed_ms) = grep {m/milli/i} @{ $self->{FIELDS}{ycql} };
+   my $BUSINESS_HOURS_SQL =" time(ts,'UNIXEPOCH','$opt{TZOFFSET}') >= '08:00:00' AND time(ts,'UNIXEPOCH','$opt{TZOFFSET}') <= '17:00:00'";
    print {$self->{OUTPUT_FH}} <<"__Summary_SQL__";
 CREATE VIEW IF NOT EXISTS summary_cql as
 SELECT datetime((ts/600)*600,'unixepoch') as UTC,
@@ -970,13 +1001,28 @@ WHERE ycql.nodename=node.nodename
 GROUP BY UTC;
 
 CREATE VIEW IF NOT EXISTS slow_queries AS
-SELECT query, count(*) as nbr_querys, round(avg($elapsed_ms),1) as avg_milli ,
-      sum (CASE when $elapsed_ms > 120 then 1 else 0 END)*100 / count(*) as pct_gt120,
-      $count_by_region
-FROM ycql, node
-WHERE ycql.nodename=node.nodename
-GROUP BY query
-HAVING nbr_querys > 50 and avg_milli >10  ORDER by avg_milli  desc;
+WITH slow as (
+	SELECT query,count(*) as nbr_querys, round(avg($elapsed_ms),1) as avg_milli ,
+		  sum (CASE when $elapsed_ms > 120 then 1 else 0 END)*100 / count(*) as pct_gt120,
+		  $count_by_region,
+		  sum ( CASE WHEN time(ts,'UNIXEPOCH','-04:00') >= '08:00:00' AND time(ts,'UNIXEPOCH','-04:00') <= '17:00:00' THEN 1 ELSE 0 END) as live_count
+	FROM ycql as outer, node
+	WHERE outer.nodename=node.nodename
+	GROUP BY query
+	HAVING nbr_querys > 50 and avg_milli >10
+)
+SELECT substr(query,1,80) as qry, nbr_querys, avg_milli,
+       (SELECT $elapsed_ms as p99_ms
+        FROM ycql 
+        WHERE $BUSINESS_HOURS_SQL
+          AND ycql.query = slow.query
+        ORDER BY $elapsed_ms asc 
+        LIMIT 1
+        OFFSET (SELECT live_count * 99 / 100 -1  FROM slow) ) as p99,
+		pct_gt120, $reg_qry_csv
+FROM slow 
+ORDER by avg_milli  desc
+LIMIT 50;
 
 CREATE VIEW IF NOT EXISTS node_summary_cql AS 
 SELECT ycql.nodename, round(avg($elapsed_ms),1) as avg_ms, 
@@ -1019,10 +1065,59 @@ FROM q_detail
 GROUP BY tbl,type,verb
 ORDER BY avg_millis*queries  desc 
 LIMIT 25;
- 
+
+CREATE VIEW IF NOT EXISTS LATENCY_DISTRIBUTION AS
+WITH 
+    workday AS (
+        SELECT  COUNT(*) AS selects 
+        FROM ycql  
+        WHERE $BUSINESS_HOURS_SQL
+          AND query LIKE 'SELECT%'
+    ),
+    dt AS (
+        SELECT DATE(ts, 'unixepoch') AS [date] 
+        FROM event 
+        LIMIT 1
+    ),
+    p99 AS (
+        SELECT $elapsed_ms as p99_ms
+        FROM ycql
+        WHERE $BUSINESS_HOURS_SQL
+          AND query LIKE 'SELECT%'
+        ORDER BY $elapsed_ms asc 
+        LIMIT 1
+        OFFSET ( SELECT COUNT(*) from ycql
+         WHERE  $BUSINESS_HOURS_SQL
+             AND query LIKE 'SELECT%'
+        ) * 99 / 100  -1
+)
+SELECT 
+    dt.date,
+    selects,
+    p99_ms,
+    ROUND(SUM(CASE WHEN $elapsed_ms < 10    THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt10%],
+    ROUND(SUM(CASE WHEN $elapsed_ms < 20    THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt20%],
+    ROUND(SUM(CASE WHEN $elapsed_ms < 30    THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt30%],
+    ROUND(SUM(CASE WHEN $elapsed_ms < 40    THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt40%],
+    ROUND(SUM(CASE WHEN $elapsed_ms < 50    THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt50%],
+    ROUND(SUM(CASE WHEN $elapsed_ms < 100   THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt100%],
+    ROUND(SUM(CASE WHEN $elapsed_ms < 120   THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt120%],
+    ROUND(SUM(CASE WHEN $elapsed_ms < 500   THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt500%],
+    ROUND(SUM(CASE WHEN $elapsed_ms < 1000  THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt 1s%],
+    ROUND(SUM(CASE WHEN $elapsed_ms < 2000  THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt 2s%],
+    ROUND(SUM(CASE WHEN $elapsed_ms < 5000  THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt 5s%],
+    ROUND(SUM(CASE WHEN $elapsed_ms >= 5000 THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [ge 5s%]
+FROM  ycql
+JOIN  dt      ON 1=1
+JOIN  workday ON 1=1
+JOIN  p99     ON 1=1
+WHERE 
+    $BUSINESS_HOURS_SQL
+    AND query LIKE 'SELECT%';
+
 .header off
 .mode column
-SELECT 'Imported ' || count(*) ||' ycql rows from $opt{ANALYZE}.' as Imported_count from ycql;
+SELECT 'Imported ' , count(*) ,' ycql rows from ', '$opt{ANALYZE}.' as Imported_count from ycql;
 SELECT '====== summary_cql Report ====';
 .header on
 SELECT * from summary_cql;
@@ -1031,6 +1126,10 @@ SELECT '';
 SELECT '======= Slow Queries =======';
 .header on
 select * from slow_queries;
+.header off
+SELECT '======= Latency Distribution =======';
+.header on
+SELECT * FROM LATENCY_DISTRIBUTION;
 __Summary_SQL__
 }
 
