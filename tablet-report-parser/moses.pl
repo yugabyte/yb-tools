@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.30";
+our $VERSION = "0.34";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, \x1b[1;33;100mmoses.pl\x1b[0m  Version $VERSION
                ========
@@ -12,10 +12,13 @@ my $HELP_TEXT = << "__HELPTEXT__";
 \x1b[1;33;100mRun options:\x1b[0;1m
    --YBA_HOST         [=] <YBA hostname or IP> (Required) "[http(s)://]<hostname-or-ip>[:<port>]"
    --API_TOKEN        [=] <API access token>   (Required)
-   --UNIVERSE         [=] <Universe-Name-or-uuid>  (Required. Name Can be partial, sufficient to be Unique)
+   --UNIVERSE         [=] <Universe-Name-or-uuid>  (Required(*). Name Can be partial, sufficient to be Unique)
    --CUSTOMER         [=] <Customer-uuid-or-name> (Optional. Required if more than one customer exists)
    --GZIP             Use this if you want to create a sql.gz for export, instead of a sqlite DB
                       In addition, this collects additional debug info as a comment in the SQL.
+   --OMNIVERSE        Selects ALL universes and exports(gzip) their JSON. (*) Do not specify --UNIVERSE.
+   --DBFILE           [=] <output-file-name> (Optional. Generated if unspecified)
+
 \x1b[1;33;100mADVANCED options\x1b[0m
    --HTTPCONNECT            [=] [curl | tiny]    (Optional. Whether to use 'curl' or HTTP::Tiny(Default))
    --FOLLOWER_LAG_MINIMUM   [=] <value> (milisec)(collect tablet follower lag for values >= this value(default 1000))
@@ -75,6 +78,7 @@ my %opt = (
    WAIT_INDEX_BACKFILL  => 0,
    INDEX_NAME           => undef,
    SLEEP_INTERVAL_SEC   => 30,
+   OMNIVERSE            => 0,  # If set, capture ALL universe's JSON
 );
 
 #---- Start ---
@@ -163,7 +167,7 @@ sub Get_and_Parse_tablets_from_tservers{
       Get_Node_Metrics($n);
       $db->putsql("END TRANSACTION; --Tablets for  tserver $n->{nodeName}");
       $db->putlog("Found $tabletCount tablets on $n->{nodeName}:"
-          . join (", ",map{ " $leaders{$_} leaders  on $_" } sort keys %leaders));
+          . join (",\n\t ",map{ " $leaders{$_} leaders  on $_" } sort keys %leaders));
       $prev_node_msg= "(Idx $n->{nodeIdx} had $tabletCount tablets, "
                     . ($leaders{$n->{private_ip}} || 0) . " leaders"
                     . ")";
@@ -205,7 +209,7 @@ sub Initialize{
                         CONFIG_FILE_PATH=s CONFIG_FILE_NAME=s CUSTOMER=s
                         WAIT_INDEX_BACKFILL|WAITINDEXBACKFILL|WAITBACKFILL|WAIT_BACKFILL!
                         INDEX_NAME|INDEXNAME=s SLEEP_INTERVAL_SEC|INTERVAL=i
-                        ]
+                        OMNIVERSE|COSMOS|KRAMER!]
                ) or die "ERROR: Invalid command line option(s). Try --help.";
 
     if ($opt{HELP}){
@@ -274,12 +278,17 @@ sub Initialize{
    }
    for my $u (@{$opt{UNIVERSE_LIST}}){ # Try regex match
       $opt{DEBUG} and print "--DEBUG: Scanning Universe: $u->{name}\t $u->{universeUUID}\n";
+      next if $opt{OMNIVERSE};
       last if $YBA_API->{"UNIV_UUID"}; # Already set 
       if ($opt{UNIVERSE}  and  $u->{name} =~/$opt{UNIVERSE}/i){
          $opt{DEBUG} and print  "-- Selected Universe $u->{name}\t $u->{universeUUID}\n";
          $YBA_API->Set_Value("UNIV_UUID",$u->{universeUUID});
          last;
       }
+   }
+   if ( $opt{OMNIVERSE} ){
+      Capture_All_UNiverses_JSON();
+      exit 0;
    }
    if (! $YBA_API->{"UNIV_UUID"}){
        warn "Please select a universe name (or unique part thereof) from:\n";
@@ -297,6 +306,10 @@ sub Initialize{
   }
   $universe->Check_Status(sub{warn "WARNING:$_[0]\n"});
 
+  if (! $universe->{MASTER_LEADER_NODE}){
+     die "ERROR: Cannot find Master/Leader for this universe";
+  }
+
   if ($opt{WAIT_INDEX_BACKFILL}){
      return; # No need to create output etc...
   }
@@ -310,7 +323,7 @@ sub Initialize{
   $db->Insert_nodes($universe->{NODES});
   $db->CreateTable("gflags",qw|type key  value|);
   $opt{DEBUG} and print "SELECT '",TimeDelta("DEBUG:Extracting gflags..."),"';\n";
-  Extract_gflags($universe);
+  $universe->Extract_gflags_into_DB($db);
   $universe->Check_placementModificationTaskUuid($db);
   
   # Get dump_entities JSON from MASTER_LEADER
@@ -471,36 +484,7 @@ sub Handle_xCluster_Data{
     }
   );
 }
-#------------------------------------------------------------------------------------------------
-sub Extract_gflags{
-  my ($univ_hash) = @_;
 
-  for my $k (qw| uuid clusterType |){
-     next unless defined ( my $v= $univ_hash->{universeDetails}{clusters}[0]{$k} );
-     $db->putsql("INSERT INTO gflags VALUES ('CLUSTER','$k','$v');");
-  }
-  for my $k (qw|universeName provider providerType replicationFactor numNodes ybSoftwareVersion enableYCQL
-               enableYSQL enableYEDIS nodePrefix instanceType useSystemd useTimeSync|){
-     next unless defined ( my $v= $univ_hash->{universeDetails}{clusters}[0]{userIntent}{$k} );
-     $db->putsql("INSERT INTO gflags VALUES ('CLUSTER','$k','$v');");
-  }
-  for my $flagtype (qw|masterGFlags tserverGFlags |){
-     next unless my $flag = $univ_hash->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
-     for my $k(sort keys %$flag){
-        (my $v = $flag->{$k}) =~tr/'/~/; # Zap potential single quote in gflag value 
-        $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
-     }
-  }
-  for my $flagtype (qw|MASTER TSERVER |){ # New gflag location for 2.18
-     next unless my $flag = $univ_hash->{universeDetails}{clusters}[0]{userIntent}{specificGFlags};
-     next unless $flag = $flag->{perProcessFlags}{value}{$flagtype};
-     for my $k(sort keys %$flag){
-        (my $v = $flag->{$k}) =~tr/'/~/; # Zap potential single quote in gflag value 
-        $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
-     }
-  }
-
-}
 #------------------------------------------------------------------------------------------------
 sub Get_Node_Metrics{
   my ($n) = @_; # NODE 
@@ -524,13 +508,13 @@ sub Get_Node_Metrics{
      'handler_latency_yb_tserver_TabletServerService_Write{quantile="p99'
                         => sub{my ($val)=$_[1]=~/\s(\d+)/;save_metric('tserver_write_latency_p99',$_[0],0,$val)},
   );
-  my $regex = "^(" . join("|^",map {quotemeta} keys(%metric_handler)). ")";
+  my $regex = "(^" . join("|^",map {quotemeta} keys(%metric_handler)). ")";
 
   if ($n->{isTserver}){
       my $metrics_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/prometheus-metrics?reset_histograms=false",
                                       "BASE_URL_UNIVERSE",1); # RAW
 
-      while($metrics_raw=~/$regex(.+$)/mg){
+      while($metrics_raw=~/$regex(.+)$/mg){
         $metric_handler{$1}-> ($n->{Tserver_UUID},"$1$2");
       }
   }
@@ -560,6 +544,7 @@ sub Get_Node_Metrics{
 #------------------------------------------------------------------------------------------------
 sub save_metric{
   my ($metric,$node_uuid,$table_uuid,$value)=@_;
+  return unless defined $metric  and  defined $value;
   $db->putsql("INSERT INTO METRICS VALUES('$metric','$node_uuid','TABLE','$table_uuid',$value);");
 }
 #------------------------------------------------------------------------------------------------
@@ -582,6 +567,35 @@ sub Check_Index_Backfill_complete{
     },
   );
   return $active_backfills;
+}
+#------------------------------------------------------------------------------------------------
+sub Capture_All_UNiverses_JSON{ # Handles $opt{OMNIVERSE}
+  warn TimeDelta("Getting JSON for " 
+             . scalar(@{$opt{UNIVERSE_LIST}}) . " Universes..."), "\n";
+  my $output_sqlite_dbfilename = $opt{DBFILE} ||=
+      join(".", unixtime_to_printable($opt{STARTTIME},"YYYY-MM-DD"),$opt{LOCALHOST},"UniverseInfo","gz");
+
+  open ($SQL_OUTPUT_FH, "|-", "gzip -c > $output_sqlite_dbfilename")
+         or die "ERROR: Could not start gzip : $!";
+  for my $u (@{$opt{UNIVERSE_LIST}}){
+      $opt{DEBUG} and warn "--DEBUG: Scanning Universe: $u->{name}\t $u->{universeUUID}\n";
+      $YBA_API->Set_Value("UNIV_UUID",$u->{universeUUID});
+      $universe = UniverseClass::->new($YBA_API) ; # $YBA_API->Get(""); # Huge Univ JSON 
+      
+      $universe->{name} or  die "ERROR: Universe info not found for $u->{universeUUID} \n";
+      print $SQL_OUTPUT_FH "-- Universe $u->{name} JSON --\n",  $universe->{JSON_STRING},"\n";
+
+      if (my $dead_nodes = $universe->Check_Status(sub{})){
+          warn "WARNING: $dead_nodes Nodes are not LIVE, in '$universe->{name}'. Skipping ENTITIES.\n";
+      }else{
+          my $entities = $universe->Get_Master_leader_Endpoint_data("/dump-entities", 0);
+          print $SQL_OUTPUT_FH "-- ENTITIES --\n",  $YBA_API->{json_string},"\n\n";
+      }
+      print $SQL_OUTPUT_FH "\n"; # Extra blank line after universe data 
+  }
+  
+  close $SQL_OUTPUT_FH;
+  warn TimeDelta("COMPLETED. '$opt{DBFILE}' Created " , $opt{STARTTIME}),"\n";
 }
 #------------------------------------------------------------------------------------------------
 sub Read_this_buffer_HTML_Table_w_callback{
@@ -832,7 +846,8 @@ sub Create_Views{
    from tablet t,node ,tablet_replica_detail trd
    WHERE  node.isTserver  AND nodeuuid=node_uuid
          AND  t.tablet_uuid=trd.tablet_uuid  
-       AND trd.leader_count !=1;
+       AND trd.leader_count !=1
+       AND t.state = 'RUNNING';
   CREATE VIEW IF NOT EXISTS table_sizes AS 
   SELECT T.NAMESPACE,T.TABLE_NAME,count(*) as tablets,RF1_tablets,
      sum(T.NUM_SST_FILES) as sst_files, -- D.sst_files as RF1_SST_files,
@@ -1206,9 +1221,11 @@ sub _Extract_nodes{
 sub _Get_Master_Leader{
   my ($self) = @_;
   # Find Master/Leader 
+  $self->{MASTER_LEADER_NODE} = undef;
   my $leader_IP  = $self->{YBA_API}->Get("/leader")->{privateIP};
   if (! $leader_IP ){
-    die "ERROR:Could not get Master/Leader:\n\t" . $YBA_API->{json_string};
+    warn "WARNING:Could not get Master/Leader:\n\t" . $YBA_API->{json_string};
+    return undef;
   }
   $opt{DEBUG} and print "--DEBUG:Master/Leader JSON:",$YBA_API->{json_string},". IP is $leader_IP .\n";
   ( $self->{MASTER_LEADER_NODE} ) = grep {$_->{private_ip} eq $leader_IP } @{ $self->{NODES} } or die "ERROR : No Master/Leader NODE found for $leader_IP ";
@@ -1222,24 +1239,38 @@ sub Get_Master_leader_Endpoint_data{
   return $self->{YBA_API}->Get("/proxy/$self->{MASTER_LEADER_NODE}->{private_ip}:$master_http_port$endpoint","BASE_URL_UNIVERSE",$RAW); # Get RAW data
 }
 
-sub GetFlags_with_callback{
-  my ($self, $callback,$escape_quote) = @_;
-    for my $flagtype (qw|masterGFlags tserverGFlags |){
-     next unless my $flag = $self->{UNIV}->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
+
+#------------------------------------------------------------------------------------------------
+sub Extract_gflags_into_DB{
+  my ($self, $db) = @_;
+
+  for my $k (qw| platformVersion universeUUID ybcSoftwareVersion|){
+     next unless defined ( my $v= $self->{$k} );
+     $db->putsql("INSERT INTO gflags VALUES ('CLUSTER','$k','$v');");
+  }
+  for my $k (qw| uuid clusterType |){
+     next unless defined ( my $v= $self->{universeDetails}{clusters}[0]{$k} );
+     $db->putsql("INSERT INTO gflags VALUES ('CLUSTER','$k','$v');");
+  }
+  for my $k (qw|universeName provider providerType replicationFactor numNodes ybSoftwareVersion enableYCQL
+               enableYSQL enableYEDIS nodePrefix instanceType useSystemd useTimeSync|){
+     next unless defined ( my $v= $self->{universeDetails}{clusters}[0]{userIntent}{$k} );
+     $db->putsql("INSERT INTO gflags VALUES ('CLUSTER','$k','$v');");
+  }
+  for my $flagtype (qw|masterGFlags tserverGFlags |){
+     next unless my $flag = $self->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
      for my $k(sort keys %$flag){
-        my $v = $flag->{$k};
-        $escape_quote and $v =~tr/'/~/; # Zap potential single quote in gflag value 
-        # $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
-        $callback->($flagtype,$k,$v)
+        (my $v = $flag->{$k}) =~tr/'/~/; # Zap potential single quote in gflag value 
+        $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
      }
   }
-}
-
-sub GetFlags_JSON{
-  my ($self) = @_;
-    for my $flagtype (qw|masterGFlags tserverGFlags |){
-     next unless my $flag = $self->{UNIV}->{universeDetails}{clusters}[0]{userIntent}{$flagtype};
-
+  for my $flagtype (qw|MASTER TSERVER |){ # New gflag location for 2.18
+     next unless my $flag = $self->{universeDetails}{clusters}[0]{userIntent}{specificGFlags};
+     next unless $flag = $flag->{perProcessFlags}{value}{$flagtype};
+     for my $k(sort keys %$flag){
+        (my $v = $flag->{$k}) =~tr/'/~/; # Zap potential single quote in gflag value 
+        $db->putsql("INSERT INTO gflags VALUES ('$flagtype','$k','$v');");
+     }
   }
 }
 

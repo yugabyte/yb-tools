@@ -54,7 +54,9 @@ Moses.pl is intended to replace the current (multi-step) process of obtaining an
 In a single step, **moses.pl** collects tablet, configuration, xCluster and some metrics information, analyzes it, and produces a 
 sqlite database, and a summary report.
 
-In "Wait for Index backfill" mode (--WAIT_INDEX_BACKFILL), moses.pl will wait untill backfill completes. This can be used to automate index creation.
+* By Default, Tablet and config info is collected for the specified `--UNIVERSE`
+* In "Wait for Index backfill" mode (`--WAIT_INDEX_BACKFILL`), moses.pl will wait untill backfill completes. This can be used to automate index creation.
+* If `--OMNIVERSE` is specified, collects Universe JSON, and entities, for ALL Universes
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
@@ -82,10 +84,12 @@ The host must have perl >= 5.16 installed.
 | ------------- |-------------|
 |  `--YBA_HOST`        | [=] \<YBA hostname or IP> (Required) "[http(s)://]\<hostname-or-ip>[:\<port>]"|
 |  `--API_TOKEN` or `--TOKEN` | [=] \<API access token>   (Required)|
-|  `--UNIVERSE`        | [=] \<Universe-Name-or-uuid>  (Required. Name Can be partial, sufficient to be Unique)|
+|  `--UNIVERSE`        | [=] \<Universe-Name-or-uuid>  (\* Required. Name Can be partial, sufficient to be Unique)|
 |  `--CUSTOMER`        | [=] \<Customer-uuid-or-name> (Optional. Required if more than one customer exists)|
 |  `--GZIP`            | Use this if you want to create a sql.gz for export, instead of a sqlite DB<br/> In addition, this collects additional debug info as a comment in the SQL.|
 |  `--DEBUG`           | Shows additional debugging  information|
+|  `--OMNIVERSE` or `--COSMOS` or `--kramer` | Selects ALL universes and exports(gzip) their JSON. (*) Do not specify `--UNIVERSE`. |
+|  `--DBFILE`          | [=] \<output-file-name> (Optional. Generated if unspecified)|
 
    **ADVANCED options** 
 | Option name  | Value/explanation |
@@ -169,6 +173,14 @@ Backfill#1: kRunning 5.28 min ago, running for 5.28 min: Backfill Index Table(s)
 -- 17:52:43 Index backfill wait COMPLETED. Exiting. after 6 minutes 3 seconds at ./moses.pl line 89.
 ```
 
+### Sample run (Collect info on ALL universes)
+
+```
+$ perl ./moses.pl --yba=http://MY_YBA --api redacted  --omni
+-- 2023-12-13 15:57 -08:00 : Moses version 0.31 @va-win-VBG4Q starting ...
+-- 15:57:50 Getting JSON for 2 Universes...
+-- 15:57:56 COMPLETED. '2023-12-13.MY_YBA.UniverseInfo.gz' Created
+```
 
 <!-- CONTACT -->
 ## Contact
