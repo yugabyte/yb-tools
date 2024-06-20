@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.18"
+Version = "2.19"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -122,11 +122,14 @@ v 2.15 - 2.16 - 2.17
     Mark MAINT window Complete, managed expired delete. Retry Health on STOP node. lag metric improvement.
 v 2.18
     --resume for ZONE; Maint alert suppress.; Allow YBA region action; snooze health alerts. --reprovision.
+v 2.19
+    Health check will check for active alerts
 '''
 
 import argparse
 from logging import fatal
 from re import T
+from uuid import UUID
 import requests
 import json
 import socket
@@ -555,6 +558,8 @@ class Universe_class:
         else:
             log('  Tablet count in universe is zero - bypassing master replication lag check')
 
+        if self.YBA_API.active_alerts(self):
+            errcount += 1
 
         def check_active_maintenance_windows(win):
             if win['state'] != 'ACTIVE':
@@ -860,6 +865,8 @@ class YBA_Node:
             log(e.output,isError=True)
             raise # re-raise for caller's benefit 
         log(status,logTime=True)
+        if self.YBA_API.active_alerts(None): # No universe specified .. so report on all of them 
+            raise ValueError("Active alerts found.")
 
     def resume(self):
         if self.args.region:
@@ -1039,6 +1046,27 @@ class YBA_API_CLASS:
             headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
             json = {"disabled": disable, "disablePeriodSecs": duration_sec})
         response.raise_for_status() # Trap error responses
+
+    def active_alerts(self, universe):
+        response = requests.get(
+            self.api_host + '/api/v1/customers/' + self.customer_uuid +'/alerts/active',
+            headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False)
+        response.raise_for_status() # Trap error responses
+        
+        foundAlert = False
+        for alert in response.json():
+            if universe is None:
+                pass # Fall through
+            elif alert.get("configurationType") == "UNIVERSE" and alert.get("sourceUUID") == universe.UUID :
+                pass # fall through
+            else:
+                continue # Do not report other universers 
+            log(alert.get("createTime") + " " + alert.get('state') + " ALERT: " + alert.get("name") +"(" + alert.get("message") + ")", isError=True)
+            if alert.get("configurationType") == "UNIVERSE":
+                log('  for Universe ' + alert.get("sourceName"))
+            foundAlert = True
+        
+        return foundAlert
 
     def maintenance_window(self, node, action):
         host = node.hostname
