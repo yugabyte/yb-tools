@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.19"
+Version = "2.20"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -122,8 +122,8 @@ v 2.15 - 2.16 - 2.17
     Mark MAINT window Complete, managed expired delete. Retry Health on STOP node. lag metric improvement.
 v 2.18
     --resume for ZONE; Maint alert suppress.; Allow YBA region action; snooze health alerts. --reprovision.
-v 2.19
-    Health check will check for active alerts
+v 2.19 - 2.20
+    Health check will check for active alerts - and give WARNING if any. Error out if not "root" user.
 '''
 
 import argparse
@@ -559,7 +559,7 @@ class Universe_class:
             log('  Tablet count in universe is zero - bypassing master replication lag check')
 
         if self.YBA_API.active_alerts(self):
-            errcount += 1
+            pass # This is a WARNING only 
 
         def check_active_maintenance_windows(win):
             if win['state'] != 'ACTIVE':
@@ -865,8 +865,7 @@ class YBA_Node:
             log(e.output,isError=True)
             raise # re-raise for caller's benefit 
         log(status,logTime=True)
-        if self.YBA_API.active_alerts(None): # No universe specified .. so report on all of them 
-            raise ValueError("Active alerts found.")
+        self.YBA_API.active_alerts(None) # No universe specified .. so report on all of them
 
     def resume(self):
         if self.args.region:
@@ -1061,7 +1060,7 @@ class YBA_API_CLASS:
                 pass # fall through
             else:
                 continue # Do not report other universers 
-            log(alert.get("createTime") + " " + alert.get('state') + " ALERT: " + alert.get("name") +"(" + alert.get("message") + ")", isError=True)
+            log("*WARNING: "+ alert.get("createTime") + " " + alert.get('state') + " ALERT: " + alert.get("name") +"(" + alert.get("message") + ")")
             if alert.get("configurationType") == "UNIVERSE":
                 log('  for Universe ' + alert.get("sourceName"))
             foundAlert = True
@@ -1570,7 +1569,8 @@ class YB_Data_Node:
 def Get_Environment_info():
     env_dict = dict(YBA_HOST   = os.environ.get("YBA_HOST"),
                     API_TOKEN  = os.environ.get("API_TOKEN"),
-                    CUST_UUID  = os.environ.get("CUST_UUID"))
+                    CUST_UUID  = os.environ.get("CUST_UUID"),
+                    RUNNING_AS_ROOT = os.getuid() == 0)
     if None not in env_dict.values():
         return env_dict # We have all values specified 
     
@@ -1739,7 +1739,9 @@ def main():
     
     env_dict = Get_Environment_info()
     if env_dict is None:
-        raise Exception("ERROR: Did not get YBA API Info from enviornment")
+        raise Exception("ERROR: Failed to get YBA API Info from enviornment")
+    if not env_dict.get("RUNNING_AS_ROOT"):
+        raise Exception("ERROR: This program must be run as the ROOT user.")
 
     # ---- Mainline code -------
     YBA_API   = YBA_API_CLASS(env_dict,args) # Instantiated , but not Initialized yet
