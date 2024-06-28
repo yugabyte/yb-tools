@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.35";
+our $VERSION = "1.36";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -815,6 +815,7 @@ sub Handle_Table_Description{
         #                           name TEXT, type TEXT, partitionKey TEXT, clusteringKey TEXT);
         for my $c (@{$bj->{tableDetails}{columns}}){
            $bj->{tableUUID} =~tr/-//d; # Zap "-" : allows easier match between tableid and 'tables.id'
+           $c->{name} =~tr/'/~/;       # Zap quotes in the col name (used by jasonb fields)
            print {$self->{OUTPUT_FH}} "INSERT INTO tablecol VALUES('", $bj->{tableUUID},"'",
                  map ({defined $c->{$_} ? ",'" .($c->{$_}||"") . "'"  :  ",NULL"}
                            qw|isPartitionKey isClusteringKey columnOrder sortOrder name type partitionKey clusteringKey|),
