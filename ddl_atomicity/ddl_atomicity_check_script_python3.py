@@ -84,11 +84,11 @@ for dbname, tables in db_tables.items():
         pg_oid = pg_class_entry['oid']
         
         if tablename != pg_class_entry['relname']:
-            print("❌ - Table {} with oid {} and uuid {} exists in {} but has a mismatched table name - TABLE NAME NEEDS TO BE FIXED".format(tablename, pg_oid, tableid, dbname))
+            print("❌ - Table {} with oid {} and uuid {} exists in {} but has a mismatched table name: table name in YSQL metadata is {} - TABLE NAME NEEDS TO BE FIXED".format(tablename, pg_oid, tableid, dbname, pg_class_entry['relname']))
             errorcount += 1
             continue
-
-        print("✅ - Table {} with oid {} and uuid {} exists in database {} - NO ISSUE".format(tablename, pg_oid, tableid, dbname))
+        else:
+            print("✅ - Table {} with oid {} and uuid {} exists in database {} - NO ISSUE".format(tablename, pg_oid, tableid, dbname))
 
         # Get columns
         table_schema_json = json.loads(subprocess.check_output(["curl", "-s", "http://{}:7000/api/v1/table?id={}".format(webserver_interface, tableid)]).decode())
