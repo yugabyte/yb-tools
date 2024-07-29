@@ -16,6 +16,10 @@ parser.add_argument('--master_interface_address', type=str, default=None, help='
 parser.add_argument('--master_interface_port', type=int, default=7000, help='Port for the master UI interface.')
 parser.add_argument('--ysql_host', type=str, default="/tmp/.yb.0.0.0.0:5433/", help='Host for ysqlsh.')
 parser.add_argument('--master_leader_only', action='store_true', help='Check if the node is the master leader and exit if it is not.')
+parser.add_argument('--curl_path', type=str, default='curl', help='Path to curl executable.')
+parser.add_argument('--grep_path', type=str, default='grep', help='Path to grep executable.')
+parser.add_argument('--awk_path', type=str, default='awk', help='Path to awk executable.')
+
 args = parser.parse_args()
 
 # Initialize error count and message list
@@ -28,12 +32,12 @@ FNULL = open(os.devnull, 'w')
 if args.master_leader_only:
     print("Checking if the node is the master leader.")
     is_leader = subprocess.check_output(
-        r"curl -s http://localhost:9300/metrics | grep yb_node_is_master_leader\{ | awk '{print $2}'", 
+        f"{args.curl_path} -s http://localhost:9300/metrics | {args.grep_path} yb_node_is_master_leader{{ | {args.awk_path} '{{print $2}}'", 
         shell=True
     ).decode('utf-8').strip()
     if is_leader == "0":
         print("Not master leader, exiting.")
-        exit(0)
+        sys.exit(0)
 
 # Get master UI interface
 if args.master_interface_address is None:
@@ -47,7 +51,7 @@ else:
 # Get table data
 tables_output = json.loads(
     subprocess.check_output(
-        ["curl", "-s", f"http://{master_interface_address}:{args.master_interface_port}/api/v1/tables"]
+        [args.curl_path, "-s", f"http://{master_interface_address}:{args.master_interface_port}/api/v1/tables"]
     ).decode('utf-8')
 )
 table_data_json = tables_output["user"]
@@ -108,7 +112,6 @@ for dbname, tables in db_tables.items():
 
     # Iterate through each table
     for tablename, pg_oid, yb_pg_table_oid, tableid in tables:
-        print("\n\n")
         # Check if the table exists in pg_class
         if yb_pg_table_oid not in pg_class_oid_tableinfo_dict:
             # Note: on versions older than 2024.1, the oid in this log will refer to the relfilenode
@@ -135,13 +138,18 @@ for dbname, tables in db_tables.items():
             )
 
         # Get columns
-        table_schema_json = json.loads(
-            subprocess.check_output([
-                "curl", 
-                "-s", 
-                f"http://{master_interface_address}:{args.master_interface_port}/api/v1/table?id={tableid}"
-            ]).decode()
-        )
+        try:
+            table_schema_json = json.loads(
+                subprocess.check_output([
+                    args.curl_path,
+                    "-s",
+                    f"http://{master_interface_address}:{args.master_interface_port}/api/v1/table?id={tableid}"
+                ]).decode()
+            )
+        except:
+            print("Failed to load schema. Exiting.")
+            sys.exit(1)
+
         columns = [html.unescape(column['column']) for column in table_schema_json["columns"]]
         # Check if each column exists in pg_attribute
         for column in columns:
@@ -156,6 +164,7 @@ for dbname, tables in db_tables.items():
             print(
                 f"✅ - Column {column} exists in table {tablename} in database {dbname} - NO ISSUE"
             )
+        print("\n\n")
 
 # Print collected error messages
 if errorcount > 0:
