@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.20"
+Version = "2.21"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -124,6 +124,8 @@ v 2.18
     --resume for ZONE; Maint alert suppress.; Allow YBA region action; snooze health alerts. --reprovision.
 v 2.19 - 2.20
     Health check will check for active alerts - and give WARNING if any. Error out if not "root" user.
+v 2.21
+    Properly handle the case where there is no 'private_ip' (Decomissioned node)
 '''
 
 import argparse
@@ -261,11 +263,18 @@ class Universe_class:
 
     def get_node_json(self,hostname,ip=None):
         for candidate_node in self.nodeDetailsSet:
-            if str(candidate_node['nodeName']).upper() in hostname.upper() or hostname.upper() in \
-                str(candidate_node['nodeName']).upper() or \
-                    candidate_node['cloudInfo']['private_ip'] == ip or \
-                    candidate_node['cloudInfo']['public_ip'] == ip or \
-                    candidate_node['cloudInfo']['private_ip'].upper() in hostname.upper():
+            if str(candidate_node['nodeName']).upper() in hostname.upper() \
+                or hostname.upper() in str(candidate_node['nodeName']).upper():
+                return candidate_node
+            if 'private_ip' in candidate_node['cloudInfo']:
+                if candidate_node['cloudInfo']['private_ip'] is None:
+                    continue
+                if  candidate_node['cloudInfo']['private_ip'] == ip or \
+                    candidate_node['cloudInfo'].get('private_ip').upper() in hostname.upper():
+                    return candidate_node
+            if 'public_ip' not in candidate_node['cloudInfo']:
+                continue
+            if candidate_node['cloudInfo'].get('public_ip') == ip:
                 return candidate_node
         return None
     
