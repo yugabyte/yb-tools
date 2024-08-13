@@ -1,4 +1,4 @@
-# coding: utf8
+# -*- coding: UTF8 -*-
 # !/usr/bin/python
 ###############################################################
 ## Application Control for use with UNIX Currency Automation ##
