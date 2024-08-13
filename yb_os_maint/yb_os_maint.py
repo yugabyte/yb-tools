@@ -1,5 +1,5 @@
+#!/usr/bin/env python3
 # -*- coding: UTF8 -*-
-# !/usr/bin/python
 ###############################################################
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
