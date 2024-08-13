@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Python 3.7.7
 # create virtual env
 # mkdir project; cd project
