@@ -33,7 +33,7 @@ html_parser = HTMLParser.HTMLParser()
 if args.master_leader_only:
     print("Checking if the node is the master leader.")
     is_leader = subprocess.check_output(
-        "{} -s http://localhost:9300/metrics | {} yb_node_is_master_leader{{ | {} '{{print $2}}'".format(
+        "{} -skL http://localhost:9300/metrics | {} yb_node_is_master_leader{{ | {} '{{print $2}}'".format(
             args.curl_path,
             args.grep_path,
             args.awk_path
@@ -56,7 +56,7 @@ else:
 # Get table data
 tables_output = json.loads(
     subprocess.check_output(
-        [args.curl_path, "-s", "http://{}:{}/api/v1/tables".format(
+        [args.curl_path, "-skL", "http://{}:{}/api/v1/tables".format(
             master_interface_address,
             args.master_interface_port
         )]
@@ -155,7 +155,7 @@ for dbname, tables in db_tables.items():
             table_schema_json = json.loads(
                 subprocess.check_output([
                     args.curl_path, 
-                    "-s", 
+                    "-skL", 
                     "http://{}:{}/api/v1/table?id={}".format(
                         master_interface_address,
                         args.master_interface_port,
