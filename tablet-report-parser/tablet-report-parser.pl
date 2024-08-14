@@ -37,7 +37,7 @@
 #   * Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
 #         ./yugatool -m $MASTERS $TLS_CONFIG tablet_info $TABLET_UUID > $TABLET_UUID.txt 
 ##########################################################################
-our $VERSION = "0.40";
+our $VERSION = "0.42";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -331,7 +331,7 @@ my %entity = (
 				HANDLER=>\&Parse_Tablet_line,
 				LINE_REGEX =>
                  	qr| ^\s(?<tablet_uuid>(\w{32}))\s{3}
-					(?<tablename>([\w\-]+))\s+
+					(?<tablename>([\w\-.]+))\s+
 					(?<table_uuid>(\w{32})?)\s* # This exists only if --show_table_uuid is set
 					(?<namespace>([\w\-]+))\s+
 					(?<state>(\w+))\s*
@@ -742,6 +742,10 @@ sub collect{
 	my $start_key = hex($tablet->{start_key} || '0x0000'); # Convert to a binary number 
 	my $end_key   = hex($tablet->{end_key}   || '0xffff');
 	
+	if ($end_key < $start_key) {
+		print "--- ERROR: Rec#$.:'END key'= $end_key($tablet->{end_key}) is less than 'start key'=$start_key($tablet->{start_key})\n";
+		$end_key=$start_key;
+	}
 	if (0 == ($self->{UNIQ_TABLETS_ESTIMATE}||=0)){
 	   # Need to calcuate this 	
 	   $self->{KEYS_PER_TABLET}        = $end_key - $start_key; # keys < $end key, so don't add 1. 
