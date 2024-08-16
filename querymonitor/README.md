@@ -53,7 +53,40 @@ You can specify the flagfile to use:
 If the program finds a file called `querymonitor.defaultflags`, 
 the contents are automatically loaded unless the `--flagfile` option is used.
 
-A `--help` parameter provides a full list of available flags.
+### Parameter Details
+
+For details on how to retrieve the minimal set of parameters:
+
+**`--API_TOKEN=<value>`** 
+>> To generate an API token in YugabyteDB Anywhere (YBA), follow these steps:
+>> 
+>> 1.  In YugabyteDB Anywhere, click the profile icon at the top right and choose User Profile.
+>> 
+>> 2.  Under API Key management, copy your API token. If the API Token field is blank, click Generate Key, and then copy the resulting API token.
+>>
+>> `NOTE`: Generating a new API token invalidates your existing token. Only the most-recently generated API token is valid.
+>> 
+>> Some more reference about this here: <https://docs.yugabyte.com/stable/yugabyte-platform/anywhere-automation/>
+
+**`--YBA_HOST =<value>`**
+>> -   This would be the same URL used to access your Yugabyte Anywhere Host in your browser.
+
+**`--CUST_UUID=<value>`**
+>> - This is present in the area of the UI where the API token for the first parameter. On the "User Profile" page this is under the sub-area labeled, "Profile Info."
+
+**`--UNIV_UUID=<value>`**
+>>-   This can most easily be gathered from the URL of the browser when going to the "Overview" page of the Yugabyte Anywhere UI.
+>>
+>>    For example:
+>>    
+>>    -   <https://exampleyba.com/universes/374ca8ac-d9a7-48a2-9842-a73ae2e4dd07>
+>>    
+>>    Where:
+>>    
+>>    -   `374ca8ac-d9a7-48a2-9842-a73ae2e4dd07` is the Universe UUID
+
+
+A **`--help`** parameter provides a full list of available flags.
 
 ```
 $ ./querymonitor.pl --help
