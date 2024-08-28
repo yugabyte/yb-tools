@@ -174,6 +174,19 @@ SELECT * FROM system.local WHERE key='local'                                    
 SELECT keyspace_name, table_name, start_key, end_key, replica_addresses FROM system.partitions    1277        98.2       30         830
 select customerid,emails,individual407typecode,rescountrycode,customertypecode,inccountrycode...  783         44.4       1          743
 ```
+**Column info for "Summary Report"**
+
+|Column Name      | Description                                         |
+|-----------------|-----------------------------------------------------|
+| **EDT/UTC**     | 10-minute Time slice in the specified time zone     |
+| **systemq**     | Number of "System" (Metadata) queries (Not originated by clients|
+| **sys_gt120**   | Number of "System" queries that took more than 120 ms |
+| **cql_gt120**   | Number of user (cql) queries that took more than 120 ms |
+| **Zone-name**   | Number of queries sent to that zone |
+| **Zone-name(P)**| The *(P)* indicates that this is the **PREFERRED** zone|
+| **breach_pct**  | Percentage of queries that esceeded 120 ms |
+
+
 
 ## Info available for analysis
 
