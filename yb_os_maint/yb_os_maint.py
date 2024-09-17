@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.21"
+Version = "2.22"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -917,8 +917,8 @@ class YBA_Node:
         if self.ybaVersion >= '2.18.0':
             try:
                 status=subprocess.check_output(['yba-ctl','stop'],  stderr=subprocess.STDOUT) # No output
-                time.sleep(2)
-                self.health()
+                #  time.sleep(2)
+                #  self.health() - Disabled. Fails with Connection aborted, ConnectionResetError
                 return(True)
             except subprocess.CalledProcessError as e:
                 log('  yba-ctl stop failed - skipping. Err:{}'.format(str(e)),logTime=True)
