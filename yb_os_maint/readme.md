@@ -1,7 +1,7 @@
 # yb_os_maint.py instructions
 
 This script is used to prepare for node maintenance such as O/S patching.  It is intended to run on the node to be shut down and can be placed there using automation tools such as Ansible/SALT.  The script will do the following:
- - Perform a healtcheck on the universe including the following:
+ - Perform a healthcheck on one or more universe(s) including the following:
    -  Check for dead nodes, T-Server and Masters
    -  Check master and tablet health
    -  Ensure all nodes have been up for the specified amount of time
@@ -14,50 +14,78 @@ This script is used to prepare for node maintenance such as O/S patching.  It is
      - Stop T-Server and Master processes
      - Create a maitenance window to stop alerts if stopping a single node and not skipping
      - Resume is the reverse of the above
-
+  - Reprovision a node
 # Usage
 ```
-usage: python yb_os_maint.py [-h] (-s | -r | -t | -f FIX [FIX ...]) [-d] [-l LOG_FILE_DIRECTORY]
-             
+usage: yb_os_maint.py [-h]
+                      (-s | -p | -r | -t [HEALTH] | -f FIX [FIX ...] | -v)
+                      [-d] [-l LOG_FILE_DIRECTORY] [-x] [-m] [-g REGION]
+                      [-a AVAILABILITY_ZONE] [-e ENV_FILE_PATH] [-u UNIVERSE]
+                      [-k]
+
+Yugabyte pre/post flight check - Start and Stop Services before and after O/S
+patch
+
+optional arguments:
   -h, --help            show this help message and exit
   -s, --stop            Stop services for YB host prior to O/S patch
-  -r, --resume          Resume services for YB host after O/S patch
-  -t, --health          Healthcheck only - specify Universe Name or "ALL" if not running on a DB Node
-                        If no Universe is specified, the check will be run on the node's Universe. 
-  -v, --verify          Verify Master and tServer process are in correct state per universe config
-  -f, --fix [item]      Fix one or more of the following: 'placement'
-  -d, --dryrun          Dry Run - pre-flight checks only - no actions taken.
-  -l, --log_file_directory [folder]
+  -p, --reprovision     Re-Provision (dead) node before bringing it back to
+                        life
+  -r, --resume, --start
+                        Resume services for YB host after O/S patch
+  -t [HEALTH], --health [HEALTH]
+                        Healthcheck - specify Universe Name or "ALL" if not
+                        running on a DB Node
+  -f FIX [FIX ...], --fix FIX [FIX ...]
+                        Fix one or more of the following: placement
+  -v, --verify          Verify Master and tServer process are in correct state
+                        per universe config
+  -d, --dryrun          Dry Run - health checks only - no actions taken.
+  -l LOG_FILE_DIRECTORY, --log_file_directory LOG_FILE_DIRECTORY
                         Log file folder location. Output is sent to terminal
                         stdout if not specified.
   -x, --skip_xcluster   Skip Pause or Resume of xCluster replication when
                         stopping or resuming nodes - False if not specified,
-                        forced to True if stopping multiple nodes in a region/AZ.
+                        forced to True if stopping multiple nodes in a
+                        region/AZ.
   -m, --skip_maint_window
                         Skip creation/removal of maintenence window when
                         stopping or resuming nodes - False if not specified,
-                        forced to True if stopping multiple nodes in a region/AZ.
+                        forced to True if stopping multiple nodes in a
+                        region/AZ.
   -g REGION, --region REGION
                         Region for nodes to be stopped/resumed - action taken
                         on local node if not specified.
   -a AVAILABILITY_ZONE, --availability_zone AVAILABILITY_ZONE
-                        AZ for nodes to be stopped/resumed - action taken on
-                        local node if not specified. Script will abort if --region is
-                        not specified along with the AZ
+                        AZ for nodes to be stopped/resumed(optional) - Script
+                        will abort if --region is not specified along with the
+                        AZ
+  -e ENV_FILE_PATH, --ENV_FILE_PATH ENV_FILE_PATH
+                        By default, the script will look for the
+                        ENV_FILE_PATTERN in /home/yugabyte. You can overwrite
+                        this by providing --ENV_FILE_PATH <new path>, example
+                        is --ENV_FILE_PATH /tmp/
+  -u UNIVERSE, --universe UNIVERSE
+                        Universe to operate on, or "ALL" (health, or regional
+                        ops)
+  -k, --skip_stepdown   Skip master-stepdown if this is a STOP on a master-
+                        leader. If not set, we will attempt stepdown.
 ```
                         
 # Setup
 1. Tune the parameters in the file (see the variables under '##Globals')
 2. Script should be placed on the server to be shutdown/resumed.  It will detect if the server is a YBA or DB node.
-3. Create a file with the name pattern '.yba_*.rc' for the YBA information.  This should include the following exports:
-    -  export YBA_HOST='<YBA Host URL>'
-    -  export API_TOKEN='<API Token>'
-    -  export CUST_UUID='<Customer ID>'
+3. Create a file with the name pattern '.yba_&lt;appname&gt;.rc' for the YBA information.  This should include the following exports:
+    -  export YBA_HOST='&lt;YBA Host URL&gt;'
+    -  export API_TOKEN='&lt;API Token&gt;'
+    -  export CUST_UUID='&lt;Customer ID&gt;'
+  
+   These values can also be supplied directly via environment variables (no need for the .rc file)
 
 # Sample output for stop command:
 ```
 --------------------------------------
-2023-10-25 20:37:51 script started
+2024-10-25 20:37:51 script started
 Retrieving environment variables from file /home/yugabyte/.yba_dev.rc
 Checking host yb-dev-xcluster-src-n1 with IP 10.202.0.54
 Checking if host 10.202.0.54 is YBA Instance...
