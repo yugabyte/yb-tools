@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.36";
+our $VERSION = "1.31";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -45,16 +45,16 @@ my %option_specs=( # Specifies info for globals saved in %opt. TYPE=>undef means
     MAX_QUERY_LEN =>{TYPE=>'=i', DEFAULT=> 2048, ALT=>"MAXQL|MAXL",},
     MAX_ERRORS    =>{TYPE=>'=i', DEFAULT=> 10,},
     SANITIZE      =>{TYPE=>'!',  DEFAULT=> 0,   HELP=>"Remove PII by truncating to WHERE clause"},
-    ANALYZE       =>{TYPE=>'=s', DEFAULT=> undef, ALT=>"PROCESS", HELP=>"ANALYSIS mode Input File-name ('..mime.gz' ) to process through sqlite"},
+    ANALYZE       =>{TYPE=>'=s', DEFAULT=> undef, ALT=>"PROCESS", HELP=>"ANALYSIS mode Input File-name ('..csv.gz' ) to process through sqlite"},
     DB            =>{TYPE=>'=s', DEFAULT=> undef,     HELP=>"Analysis mode output SQLITE database file name. Automatic, but you can overrided here"},
     SQLITE        =>{TYPE=>'=s', DEFAULT=> "sqlite3", HELP=>"path to Sqlite binary"},
     UNIVERSE      =>{TYPE=>undef,DEFAULT=> undef,  },   # Universe detail info (Populated in initialize)
     HTTPCONNECT   =>{TYPE=>'=s', DEFAULT=> "curl",   HELP=>"How to connect to the YBA : 'curl', or 'tiny' (HTTP::Tiny)"},
     USETESTDATA   =>{TYPE=>'!',  DEFAULT=> undef,   HELP=>"TESTING only !! - Do not use."},
-    TZOFFSET      =>{TYPE=>'=s', DEFAULT=> undef, HELP=>"+HH:MM  or -HH:MM Used for Latency distribution report under --ANALYZE" },# This is set inside 'unixtime_to_printable', on first use in "capture" mode
+    TZOFFSET      =>{TYPE=>undef,DEFAULT=> undef,  },# This is set inside 'unixtime_to_printable', on first use 
     RPCZ          =>{TYPE=>'!',  DEFAULT=> 1,     HELP=>"If set, get query from each node, instead of /live_queries"},
     MASTER_LEADER =>{TYPE=>undef,DEFAULT=>undef, },  # Obtained and Used internally
-    DBINFO        =>{TYPE=>undef,DEFAULT=>undef, },  # Namespaces, tablespaces, tables, tablets .. Obtained and Used internally
+    DBINFO        =>{TYPE=>undef,DEFAULT=>undef, },  # Namespaces, tablespaces, tables, tablets .. Obtained and Used internally	
 );
 my %opt = map {$_=> $option_specs{$_}{DEFAULT}} keys %option_specs;
 
@@ -81,10 +81,12 @@ while (not ($quit_daemon  or my $this_iter_ts=time() > $opt{ENDTIME_EPOCH} )){  
    $loop_count++;
    my $next_iter_ts = $this_iter_ts + $opt{INTERVAL_SEC};
    Main_loop_Iteration();
-  if ($loop_count % 12 == 0  and  $output->{OUTPUT_FH}){ # Every 60s  get node metrics
-     Save_all_nodes_metrics();
-  }
-
+   #if ($loop_count % 120 == 0  and  $output->{OUTPUT_FH}){ # After 120 loops and we have Output, get lag 
+   #   Save_tserver_follower_lag_metrics();
+   #}
+   if ($loop_count % 10 == 0  and  $output->{OUTPUT_FH}){ # After 10 loops and we have Output, get node metrics 
+      Save_all_nodes_metrics();
+   }   
    my $sleep_sec = $next_iter_ts - time();
    $sleep_sec > 0 and  sleep($sleep_sec);
 }
@@ -215,24 +217,16 @@ sub Save_tserver_follower_lag_metrics{
 }
 #------------------------------------------------------------------------------
 sub Save_all_nodes_metrics{
-  my $data_csv = "";
-  my $ts = time();
+	$output->Write_Section($ts,"TABLETMETRIC","NODE:$n->{nodeUuid}\nmetric:follower_lag_ms"
+		              ,$YBA_API->{json_string},"text/json");
 	for my $n (@{ $opt{NODES} }){
-     Get_Node_Metrics($n,
-                      sub{my ($metric,$node_uuid,$table_uuid,$value) = @_;
-                          return unless defined $metric  and  defined $value;
-                          $data_csv .= 
-                             "$metric,$node_uuid,TABLE,$table_uuid,$value\n"
-                      }
-     );
+    Get_Node_Metrics($n);
 	}
-	$output->Write_Section($ts,"NODEMETRICS","metric,node_uuid,type,table_uuid,value"
-		              ,$data_csv,"text/csv");
-
+  # Close section
 }
 #------------------------------------------------------------------------------
 sub Get_Node_Metrics{
-  my ($n, $callback) = @_; # NODE 
+  my ($n) = @_; # NODE 
   my %post_process;
 
   my %metric_handler=(
@@ -243,26 +237,26 @@ sub Get_Node_Metrics{
     ql_write_latency   => sub{my ($m,$table,$val)=$_[1]=~/^(\w+)\{table_id="(\w+).+?\s(\d+)/ or return;
                                $post_process{$m}{$_[0]}{$table}=$val;},
     follower_lag_ms    => sub{my ($m,$table_id,$val)=$_[1]=~/^(\w+)\{table_id="(\w+).+?\s(\d+)/ or return;
-                              $val > 500 and  $callback->($m,$_[0],$table_id,$val)},
+                              $val > 100 and  save_metric($m,$_[0],$table_id,$val)},
     transactions_running => sub{my ($m,$table_id,$val)=$_[1]=~/^(\w+)\{table_id="(\w+).+?\s(\d+)/ or return;
-                              $val > 0 and  $callback->($m,$_[0],$table_id,$val)},
+                              $val > 0 and  save_metric($m,$_[0],$table_id,$val)},
     transaction_not_found => sub{my ($m,$table_id,$val)=$_[1]=~/^(\w+)\{table_id="(\w+).+?\s(\d+)/ or return;
-                              $val > 0 and  $callback->($m,$_[0],$table_id,$val)},
+                              $val > 0 and  save_metric($m,$_[0],$table_id,$val)},
     service_response_bytes_yb_tserver_TabletServerAdminService_CountIntents
                           => sub{my ($val)=$_[1]=~/\s(\d+)/ or return;
-                              $val > 0 and  $callback->("CountIntentsBytes",$_[0],"N/A",$val)}, 
+                              $val > 0 and  save_metric("CountIntentsBytes",$_[0],$table_id,$val)}, 
     'handler_latency_yb_tserver_TabletServerAdminService_CountIntents{quantile="p99"'
-                         => sub{my ($val)=$_[1]=~/\s(\d+)/;$callback->('tserver_latency_CountIntents_p99',$_[0],0,$val)},
-     server_uptime_ms   => sub{my ($m,$val)=$_[1]=~/^(\w+).+?\s(\d+)/;$callback->($m,$_[0],0,$val)},
+                         => sub{my ($val)=$_[1]=~/\s(\d+)/;save_metric('tserver_latency_CountIntents_p99',$_[0],0,$val)},
+     server_uptime_ms   => sub{my ($m,$val)=$_[1]=~/^(\w+).+?\s(\d+)/;save_metric($m,$_[0],0,$val)},
      async_replication_ => sub{  # committed_lag_micros and sent_lag_micros
                               my ($m,$table_id,$val)=$_[1]=~/^(\w+).+table_id="(\w+)".+}\s*(\d+)/;
-                              $val and $val > 500 and $callback->($m,$_[0],$table_id,$val);
+                              save_metric($m,$_[0],$table_id,$val);
                               },
-     hybrid_clock_skew  => sub{my ($m,$val)=$_[1]=~/^(\w+).+?\s(\d+)/;$callback->($m,$_[0],0,$val)},
+     hybrid_clock_skew  => sub{my ($m,$val)=$_[1]=~/^(\w+).+?\s(\d+)/;save_metric($m,$_[0],0,$val)},
      'handler_latency_yb_tserver_TabletServerService_Read{quantile="p99' #microseconds
-                        => sub{my ($val)=$_[1]=~/\s(\d+)/;$callback->('tserver_read_latency_p99',$_[0],0,$val)},
+                        => sub{my ($val)=$_[1]=~/\s(\d+)/;save_metric('tserver_read_latency_p99',$_[0],0,$val)},
      'handler_latency_yb_tserver_TabletServerService_Write{quantile="p99'
-                        => sub{my ($val)=$_[1]=~/\s(\d+)/;$callback->('tserver_write_latency_p99',$_[0],0,$val)},
+                        => sub{my ($val)=$_[1]=~/\s(\d+)/;save_metric('tserver_write_latency_p99',$_[0],0,$val)},
   );
   my $regex = "(^" . join("|^",map {quotemeta} keys(%metric_handler)). ")";
 
@@ -271,7 +265,7 @@ sub Get_Node_Metrics{
                                       "BASE_URL_UNIVERSE",1); # RAW
 
       while($metrics_raw=~/$regex(.+)$/mg){
-        $metric_handler{$1}-> ($n->{nodeUuid},"$1$2");
+        $metric_handler{$1}-> ($n->{Tserver_UUID},"$1$2");
       }
   }
   if ($n->{isMaster}){
@@ -291,12 +285,17 @@ sub Get_Node_Metrics{
         for my $table_uuid (keys %{$count_metric->{$node_uuid}}){
           my $count   = $count_metric->{$node_uuid}{$table_uuid} or next;
           my $avg_val = $post_process{$sum_key}{$node_uuid}{$table_uuid} / $count;
-          next unless $avg_val > 500;
-          $callback->($metric_base_name."_avg", $node_uuid, $table_uuid,sprintf('%.2f',$avg_val));
+          save_metric($metric_base_name."_avg", $node_uuid, $table_uuid,sprintf('%.2f',$avg_val));
         } 
      }
   }
 
+}
+#------------------------------------------------------------------------------------------------
+sub save_metric{
+  my ($metric,$node_uuid,$table_uuid,$value)=@_;
+  return unless defined $metric  and  defined $value;
+  $db->putsql("INSERT INTO METRICS VALUES('$metric','$node_uuid','TABLE','$table_uuid',$value);");
 }
 #------------------------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
@@ -340,7 +339,6 @@ sub Initialize{
     $opt{DEBUG} and print "--DEBUG: Reading Flagfile $opt{FLAGFILE}\n";
     open my $ff, "<", $opt{FLAGFILE} or die "ERROR: Could not open $opt{FLAGFILE}:$!";
     chomp (my @flag_options = grep !m/^\s*#/, <$ff>);
-    m/^\s*export (\w+)(.+)/ and exists $option_specs{$1} and $_="--$1$2"  for @flag_options; # Handle bash .rc file style options 
     close $ff;
     $opt{DEBUG} and print "--DEBUG: Flagfile option:'$_'\n;" for @flag_options;
     my %flagfile_option_value;
@@ -411,7 +409,7 @@ sub Initialize{
   
   if ($opt{USETESTDATA}){
 	 print "--Writing ONE record of test data, then exiting...\n";
-	 #Save_tserver_follower_lag_metrics();
+	 Save_tserver_follower_lag_metrics();
 	 $output->WriteQuery(time(), "ycql", {FIVE=>5,SIX=>6,COW=>"Moo",elapsed_millis=>200,query=>undef,nodename=>'BogusNode'},"SELECT some_junk FROM made_up");
 	 $output->Close("FINAL");
 	 exit 2;
@@ -476,7 +474,7 @@ sub daemonize {
     # 	The child itself forks and it then exits right away, so its child is taken over by init and can't be a zombie.
     warn (unixtime_to_printable(time()) 
 	     . " Daemonizing. Expected to run in background until "
-		 .  unixtime_to_printable($opt{ENDTIME_EPOCH} + time()). " (+ time for Table info initialization(~2 min)).\n");
+		 .  unixtime_to_printable($opt{ENDTIME_EPOCH} + time()). " + time for Table info initialization(~2 min).\n");
     my $pid = fork ();
     if ($pid < 0) {
       die "first fork failed: $!";
@@ -627,7 +625,6 @@ sub Handle_MIME_HEADER  {
     for ( grep {!/_SECTION_|Content-Type|params$/} sort keys %{$self->{INPUT}{general_header}} ){
 		   $self->{INPUT}{general_header}{$_} =~tr/'//d; # Zap single quotes (UNIV_UUID)
 		   print {$self->{OUTPUT_FH}} "INSERT INTO kv_store VALUES ('MIMEHDR','$_','$self->{INPUT}{general_header}{$_}');\n";
-       "TZOFFSET" eq $_  and $opt{TZOFFSET} = $self->{INPUT}{general_header}{$_}; # Save collector system's TZoffset 
 	}
 }
 
@@ -689,23 +686,7 @@ sub Handle_CSVHEADER	{
 	my $type = $self->{INPUT}{general_header}{TYPE};
 	my ($Ignore_type_field_in_fieldnames,$timestamp_field,@field_names) 
 	           = split /,/, $self->{INPUT}{general_header}{FIELDS};
-  if ($self->{TYPE_EXISTS}{$type}){
-      if ( $#field_names > $#{$self->{FIELDS}{$type}} ){
-        # This header has more fields than we previously had  .. we need a the new field names..
-        for my $new_field ( grep {!$self->{FIELDS_HASH}{$type}{$_}} @field_names ){
-            print {$self->{OUTPUT_FH}} "ALTER  TABLE $type ADD COLUMN $new_field "
-                   . ($new_field=~/_ms$/ ? "INTEGER " : "")
-                   ."DEFAULT NULL;\n";
-            push @{$self->{FIELDS}{$type}}, $new_field;
-            $self->{FIELDS_HASH}{$type}{$new_field} = 1;
-        }
-      }
-      return;
-  }
-  # This is a brand new $type 
-  $self->{FIELDS}{$type} = [@field_names];
-  $self->{FIELDS_HASH}{$type} = { map {$_=>1} @field_names };
-
+    $self->{FIELDS}{$type} = [@field_names];
 	$_ = "$_ INTEGER" for grep {/milli|_ms/i} @field_names; # Make MILLISECONDS an integer 
 	$opt{DEBUG} and print "--DEBUG:","CREATE TABLE IF NOT EXISTS $type ($timestamp_field INTEGER,",
                     join(",",@field_names), ");\n";
@@ -781,7 +762,7 @@ sub Handle_ENTITIES_Data{
     # Fixup Node UUIDs : These are not in the Universe JSON - so we update from tablets 
 	print {$self->{OUTPUT_FH}} "UPDATE NODE ",
        "SET nodeUuid=(select server_uuid FROM tablets ",
-           "WHERE  substr(addr,1,instr(addr,':')-1) = private_ip limit 1);\n";
+           "WHERE  substr(addr,1,instr(addr,\":\")-1) = private_ip limit 1);\n";
 }
 
 sub Handle_Namespaces_Data{
@@ -814,11 +795,8 @@ sub Handle_Table_Description{
 		#tablecol(tableid TEXT PRIMARY KEY, isPartitionKey INTEGER, isClusteringKey INTEGER, columnOrder TEXT, sortOrder TEXT, 
         #                           name TEXT, type TEXT, partitionKey TEXT, clusteringKey TEXT);
         for my $c (@{$bj->{tableDetails}{columns}}){
-           $bj->{tableUUID} =~tr/-//d; # Zap "-" : allows easier match between tableid and 'tables.id'
-           $c->{name} =~tr/'/~/;       # Zap quotes in the col name (used by jasonb fields)
            print {$self->{OUTPUT_FH}} "INSERT INTO tablecol VALUES('", $bj->{tableUUID},"'",
-                 map ({defined $c->{$_} ? ",'" .($c->{$_}||"") . "'"  :  ",NULL"}
-                           qw|isPartitionKey isClusteringKey columnOrder sortOrder name type partitionKey clusteringKey|),
+                 map ({",'" .($c->{$_}||"") . "'"} qw|isPartitionKey isClusteringKey columnOrder sortOrder name type partitionKey clusteringKey|),
                  ");\n";
         };
 		delete $self->{TABLE_HDR};
@@ -830,11 +808,6 @@ sub Handle_Tablet_Metrics{
 	my ($self,$dispatch_type,$body ) = @_;
 	$opt{DEBUG} and print "--DEBUG:IN: ",(caller(0))[3]," handler type $dispatch_type\n";
 	if ( $dispatch_type eq "Header" ){
-    if (not $self->{TABLETMETRIC_HEADER}){
-       # JIT create table
-       print {$self->{OUTPUT_FH}}
-       "CREATE TABLE IF NOT EXISTS tabletmetric(timestamp INTEGER, node_uuid TEXT, tablet_id TEXT, metric_name TEXT, metric_value NUMERIC);\n";
-    }
 		$self->{TABLETMETRIC_HEADER} = $self->{INPUT}{general_header};
 		$self->{TABLETMETRIC_BODY}   = "";
 		return;
@@ -853,9 +826,9 @@ sub Handle_Tablet_Metrics{
 	     print {$self->{OUTPUT_FH}} "INSERT INTO TABLETMETRIC VALUES("
 	           #timestamp INTEGER, node-uuid , tablet_id TEXT, metric_name TEXT, metric_value NUMERIC
 		   ,$self->{TABLETMETRIC_HEADER}{TIMESTAMP}
-		   ,qq|,'$self->{TABLETMETRIC_HEADER}{NODE}'|  # Node UUID 
-		   ,qq|,'$metricInfo->{id}'| # Tablet ID
-		   ,qq|,'$m->{name}'|,
+		   ,qq|,"$self->{TABLETMETRIC_HEADER}{NODE}"|  # Node UUID 
+		   ,qq|,"$metricInfo->{id}"| # Tablet ID
+		   ,qq|,"$m->{name}"|,
 		   ,qq|,|,$m->{value}
 		   ,");\n";
 	   }
@@ -863,29 +836,6 @@ sub Handle_Tablet_Metrics{
 	$self->{TABLETMETRIC_HEADER} = {};
 }
 
-sub Handle_Node_Metrics{
-	my ($self,$dispatch_type,$body ) = @_;
-	$opt{DEBUG} and print "--DEBUG:IN: ",(caller(0))[3]," handler type $dispatch_type\n";
-	if ( $dispatch_type eq "Header" ){
-		$self->{NODEMETRIC_HEADER} = $self->{INPUT}{general_header};
-		$self->{NODEMETRIC_BODY}   = "";
-		return;
-	}
-	if ( $dispatch_type eq "Body" and $body){
-		 my @items = split /,/, $body;
-	   for my $m( @items ){
-	     print {$self->{OUTPUT_FH}} "INSERT INTO NODEMETRIC VALUES("
-	           #timestamp INTEGER, node-uuid , tablet_id TEXT, metric_name TEXT, metric_value NUMERIC
-        ,$self->{NODEMETRIC_HEADER}{TIMESTAMP}
-        ,map({",'$_'"}@items[0..($#items - 1)])
-        ,qq|,|,$items[$#items] # The value is unquoted 
-        ,");\n";
-		   return;
-	   }
-  }
-  return unless $dispatch_type eq "EOF";
-  $self->{NODEMETRIC_HEADER} = {};
-}
 my %Section_Handler =( # Defines Handler subroutines for each Mime piect (_SECTION_) received
 	MIME_HEADER		=> \&Handle_MIME_HEADER	,
 	UNIVERSE_JSON	=> \&Handle_UNIVERSE_JSON ,
@@ -896,7 +846,6 @@ my %Section_Handler =( # Defines Handler subroutines for each Mime piect (_SECTI
 	TABLEDESC       => \&Handle_Table_Description,
 	NAMESPACES      => \&Handle_Namespaces_Data,
 	TABLETMETRIC    => \&Handle_Tablet_Metrics,
-  NODEMETRICS     => \&Handle_Node_Metrics,
 	NONE            => sub{$opt{DEBUG} and print "--DEBUG:GOT 'NONE' Section at  $_[0]->{INPUT}{recordnumber} - ignored\n"},
 );
 
@@ -926,11 +875,6 @@ sub Parse_Body_Record{
    $dispatch and $dispatch->($self,"Body", $rec); # Handler is called here    
 }
 
-sub no_header_output{
-  my ($self, $msg) = @_;
-  print {$self->{OUTPUT_FH}} ".header off\n$msg\n.header on\n";
-}
-
 sub Process_file_and_create_Sqlite{
 	my ($self) = @_;
 	
@@ -950,22 +894,13 @@ sub Process_file_and_create_Sqlite{
     $self->Initialize_SQLITE_Output();
 	# Incomplete file or bad JSON may cause the next parse to fail:
 	eval { $self->{INPUT}->parse($self, \&Parse_Body_Record) };
-  if ($@){
-       $self->no_header_output( "SELECT '-- ERROR Parsing input:$@ --';" );
+    if ($@){
+       print {$self->{OUTPUT_FH}} "SELECT '-- ERROR Parsing input:$@ --';\n";
 	}else{
-       $self->no_header_output( "SELECT 'All input records processed.';" );
-  }
-	if ($self->{TYPE_EXISTS}{ycql}){
-     $self->Create_and_run_views_for_ycql();
-  }else{
-      $self->no_header_output( "SELECT 'NO YCQL queries recorded.';" );
-  }
-  if ($self->{TYPE_EXISTS}{ysql}){
-     $self->Create_and_run_views_for_ysql();
-  }else{
-      $self->no_header_output( "SELECT 'NO YSQL queries recorded.';" );
-  }
-	
+       print {$self->{OUTPUT_FH}} "SELECT 'All input records processed.';\n";
+    }
+	$self->{TYPE_EXISTS}{ycql} and $self->Create_and_run_views_for_ycql();
+	$self->{TYPE_EXISTS}{ysql} and $self->Create_and_run_views_for_ysql();
 	close $self->{OUTPUT_FH};
 	print "--For detailed analysis, run: $opt{SQLITE} -header -column $self->{SQLITE_FILENAME}\n";
 	return;
@@ -974,18 +909,15 @@ sub Process_file_and_create_Sqlite{
 sub Create_and_run_views_for_ycql{
     my ($self) = @_;
 	
-	my ($count_by_region_and_type,$count_by_region,$reg_qry_csv) = ("","","");
+	my ($count_by_region_and_type,$count_by_region) = ("","");
 	for my $r (sort keys %{ $self->{REGION} }){
 	   my $preferred =  $self->{REGION}{$r}{PREFERRED} ? "(P)" : "";
 	   $count_by_region_and_type .= "sum(case when instr(query,' system.')>0 and region='$r' then 1 else 0 end) as [sys_$r],\n";
 	   $count_by_region_and_type .= "sum(case when instr(query,' system.')=0 and region='$r' then 1 else 0 end) as [cql_$r$preferred],\n";
 	   $count_by_region    .= "sum ( CASE WHEN region = '$r' THEN 1 ELSE 0 END) as [${r}_queries],\n";
-     $reg_qry_csv        .= "[${r}_queries],";
 	}
 	$count_by_region=~s/,$//; # Zap trailing comma 
-  $reg_qry_csv    =~s/,$//;
-   my ($elapsed_ms) = grep {m/milli/i} @{ $self->{FIELDS}{ycql} };
-   my $BUSINESS_HOURS_SQL =" time(ts,'UNIXEPOCH','$opt{TZOFFSET}') >= '08:00:00' AND time(ts,'UNIXEPOCH','$opt{TZOFFSET}') <= '17:00:00'";
+   my ($elapsed_ms) = grep {m/milli/i} @{ $self->{FIELDS}{ycql} }; 	
    print {$self->{OUTPUT_FH}} <<"__Summary_SQL__";
 CREATE VIEW IF NOT EXISTS summary_cql as
 SELECT datetime((ts/600)*600,'unixepoch') as UTC,
@@ -1002,28 +934,13 @@ WHERE ycql.nodename=node.nodename
 GROUP BY UTC;
 
 CREATE VIEW IF NOT EXISTS slow_queries AS
-WITH slow as (
-	SELECT query,count(*) as nbr_querys, round(avg($elapsed_ms),1) as avg_milli ,
-		  sum (CASE when $elapsed_ms > 120 then 1 else 0 END)*100 / count(*) as pct_gt120,
-		  $count_by_region,
-		  sum ( CASE WHEN time(ts,'UNIXEPOCH','-04:00') >= '08:00:00' AND time(ts,'UNIXEPOCH','-04:00') <= '17:00:00' THEN 1 ELSE 0 END) as live_count
-	FROM ycql as outer, node
-	WHERE outer.nodename=node.nodename
-	GROUP BY query
-	HAVING nbr_querys > 50 and avg_milli >10
-)
-SELECT substr(query,1,80) as qry, nbr_querys, avg_milli,
-       (SELECT $elapsed_ms as p99_ms
-        FROM ycql 
-        WHERE $BUSINESS_HOURS_SQL
-          AND ycql.query = slow.query
-        ORDER BY $elapsed_ms asc 
-        LIMIT 1
-        OFFSET (SELECT live_count * 99 / 100 -1  FROM slow) ) as p99,
-		pct_gt120, $reg_qry_csv
-FROM slow 
-ORDER by avg_milli  desc
-LIMIT 50;
+SELECT query, count(*) as nbr_querys, round(avg($elapsed_ms),1) as avg_milli ,
+      sum (CASE when $elapsed_ms > 120 then 1 else 0 END)*100 / count(*) as pct_gt120,
+      $count_by_region
+FROM ycql, node
+WHERE ycql.nodename=node.nodename
+GROUP BY query
+HAVING nbr_querys > 50 and avg_milli >10  ORDER by avg_milli  desc;
 
 CREATE VIEW IF NOT EXISTS node_summary_cql AS 
 SELECT ycql.nodename, round(avg($elapsed_ms),1) as avg_ms, 
@@ -1066,59 +983,10 @@ FROM q_detail
 GROUP BY tbl,type,verb
 ORDER BY avg_millis*queries  desc 
 LIMIT 25;
-
-CREATE VIEW IF NOT EXISTS LATENCY_DISTRIBUTION AS
-WITH 
-    workday AS (
-        SELECT  COUNT(*) AS selects 
-        FROM ycql  
-        WHERE $BUSINESS_HOURS_SQL
-          AND query LIKE 'SELECT%'
-    ),
-    dt AS (
-        SELECT DATE(ts, 'unixepoch') AS [date] 
-        FROM event 
-        LIMIT 1
-    ),
-    p99 AS (
-        SELECT $elapsed_ms as p99_ms
-        FROM ycql
-        WHERE $BUSINESS_HOURS_SQL
-          AND query LIKE 'SELECT%'
-        ORDER BY $elapsed_ms asc 
-        LIMIT 1
-        OFFSET ( SELECT COUNT(*) from ycql
-         WHERE  $BUSINESS_HOURS_SQL
-             AND query LIKE 'SELECT%'
-        ) * 99 / 100  -1
-)
-SELECT 
-    dt.date,
-    selects,
-    p99_ms,
-    ROUND(SUM(CASE WHEN $elapsed_ms < 10    THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt10%],
-    ROUND(SUM(CASE WHEN $elapsed_ms < 20    THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt20%],
-    ROUND(SUM(CASE WHEN $elapsed_ms < 30    THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt30%],
-    ROUND(SUM(CASE WHEN $elapsed_ms < 40    THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt40%],
-    ROUND(SUM(CASE WHEN $elapsed_ms < 50    THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt50%],
-    ROUND(SUM(CASE WHEN $elapsed_ms < 100   THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt100%],
-    ROUND(SUM(CASE WHEN $elapsed_ms < 120   THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt120%],
-    ROUND(SUM(CASE WHEN $elapsed_ms < 500   THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt500%],
-    ROUND(SUM(CASE WHEN $elapsed_ms < 1000  THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt 1s%],
-    ROUND(SUM(CASE WHEN $elapsed_ms < 2000  THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt 2s%],
-    ROUND(SUM(CASE WHEN $elapsed_ms < 5000  THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [lt 5s%],
-    ROUND(SUM(CASE WHEN $elapsed_ms >= 5000 THEN 1 ELSE 0 END) * 100.0 / selects, 2) AS [ge 5s%]
-FROM  ycql
-JOIN  dt      ON 1=1
-JOIN  workday ON 1=1
-JOIN  p99     ON 1=1
-WHERE 
-    $BUSINESS_HOURS_SQL
-    AND query LIKE 'SELECT%';
-
+ 
 .header off
 .mode column
-SELECT 'Imported ' , count(*) ,' ycql rows from ', '$opt{ANALYZE}.' as Imported_count from ycql;
+SELECT 'Imported ' || count(*) ||' ycql rows from $opt{ANALYZE}.' as Imported_count from ycql;
 SELECT '====== summary_cql Report ====';
 .header on
 SELECT * from summary_cql;
@@ -1127,10 +995,6 @@ SELECT '';
 SELECT '======= Slow Queries =======';
 .header on
 select * from slow_queries;
-.header off
-SELECT '======= Latency Distribution =======';
-.header on
-SELECT * FROM LATENCY_DISTRIBUTION;
 __Summary_SQL__
 }
 
@@ -1152,13 +1016,7 @@ sub Initialize_SQLITE_Output{
 		}else{
 			die "ERROR: The only valid OUTPUT option is STDOUT in --analyze mode. use --DB.\n";
 		}
-	}elsif ($opt{DB} and $opt{DB}=~/^STDOUT$/i){
-     # Pretend like they specified OUTPUT=STDOUT 
-     $opt{OUTPUT} = $opt{DB};
-     $opt{DB} = undef;
-     $self->Initialize_SQLITE_Output(); # Recurse
-     return;
-  }
+	}
 	my ($sqlite_version) = $opt{SQLITE} ? do {my $vv=qx|$opt{SQLITE} --version|;chomp $vv;$vv=~/([\d\.]+)/}
 	                       : ("N/A");
 	$! and die "ERROR: Cannot run $opt{SQLITE} :$!";
@@ -1188,8 +1046,7 @@ CREATE TABLE IF NOT EXISTS tablecol(tableid TEXT, isPartitionKey INTEGER, isClus
                                     name TEXT, type TEXT, partitionKey TEXT, clusteringKey TEXT);
 CREATE TABLE IF NOT EXISTS tablets(id TEXT, table_id TEXT ,state TEXT,type TEXT,server_uuid TEXT,addr TEXT,leader TEXT); -- Multiple tablet replicas w same ID
 CREATE TABLE IF NOT EXISTS namespaces(namespaceUUID TEXT, name TEXT, tableType TEXT); -- YSQL 
--- CREATE TABLE IF NOT EXISTS tabletmetric(timestamp INTEGER, node_uuid TEXT, tablet_id TEXT, metric_name TEXT, metric_value NUMERIC);
-CREATE TABLE IF NOT EXISTS nodemetric(timestamp INTEGER,metric,node_uuid,type,table_uuid,value NUMERIC);
+CREATE TABLE IF NOT EXISTS tabletmetric(timestamp INTEGER, node_uuid TEXT, tablet_id TEXT, metric_name TEXT, metric_value NUMERIC);
 __SQL1__
 
 }
@@ -1206,7 +1063,7 @@ sub new{
         $opt{$_} or die "ERROR: Required parameter --$_ was not specified.\n";
     }
 	for(qw|API_TOKEN  CUST_UUID UNIV_UUID|){
-        (my $value=$opt{$_})=~tr/-'"//d; # Extract and zap dashes,quotes
+        (my $value=$opt{$_})=~tr/-//d; # Extract and zap dashes
 		my $len = length($value);
 		next if $len == 32; # Expecting these to be exactly 32 bytes 
         warn "WARNING: Expecting 32 valid bytes in Option $_=$opt{$_} but found $len bytes. \n";
@@ -1244,7 +1101,7 @@ sub new{
 }
 
 sub Get{
-	my ($self, $endpoint, $base, $raw) = @_;
+	my ($self, $endpoint, $base,$raw) = @_;
 	$self->{json_string}= "";
 	my $url = $base ? $self->{$base} : $self->{BASE_URL_API_CUSTOMER};
 	if ($self->{HTTPCONNECT} eq "curl"){
@@ -1267,9 +1124,8 @@ sub Get{
 	   $self->{json_string} = $self->{raw_response}{content};
 	}
   if ($raw){
-     return $self->{response} = $self->{json_string}; # Do not decode^M+}
+       return $self->{response} = $self->{json_string}; # Do not decode
   }
-
 	$self->{response} = JSON::Tiny::decode_json( $self->{json_string} );
 	return $self->{response};
 }
@@ -1425,7 +1281,7 @@ our $VERSION = '0.02';
 sub new {
   my $p = shift;
   my $c = ref($p) || $p;
-  my $o = {MIME_HDR=>'MIME Version: 1.0'};
+  my $o = {};
   bless $o, $c;
   return $o;
 }
@@ -1455,9 +1311,9 @@ sub parse {
   $o->{CALLER}   = $caller;
   $o->{callback} = $callback;
 
-  chomp(my $mp1 = readline($o->{fh}));
-  #my $mp1e = 'MIME Version: 1.0';
-  die "Multipart header line 1 must begin '$$o->{MIME_HDR}' " unless $mp1 eq $o->{MIME_HDR};
+  my $mp1 = readline($o->{fh});
+  my $mp1e = 'MIME Version: 1.0';
+  die "Multipart header line 1 must begin ``$mp1e'' " unless $mp1 =~ /^$mp1e/;
  
   $o->{general_header} = $o->parseHeader();
   croak "no boundary defined" unless $o->{general_header}->{"Content-Type.params"}->{"boundary"};
@@ -1479,11 +1335,10 @@ sub parseBody {
   my ($o) = @_;
   my $fh = $o->{fh};
   my $boundary = $o->{boundary};
-  my $mime_hdr = $o->{MIME_HDR};
   $o->{recordnumber} = 0;
   while(<$fh>){
-    $o->{eof} = 1 if /^--$boundary--|^$mime_hdr/;
-    if (/^--$boundary|^$mime_hdr/){
+    $o->{eof} = 1 if /^--$boundary--/;
+    if (/^--$boundary/){
 		$o->{callback}->($o->{CALLER},undef); # Indiates Piece completed.
 		$o->{general_header} = undef;
 		return;

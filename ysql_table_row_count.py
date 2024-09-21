@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # pip install psycopg2
 
 import threading
