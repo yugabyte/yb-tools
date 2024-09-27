@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.34";
+our $VERSION = "0.35";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, \x1b[1;33;100mmoses.pl\x1b[0m  Version $VERSION
                ========
@@ -9,7 +9,7 @@ my $HELP_TEXT = << "__HELPTEXT__";
  and run default reports.
  Moses also collects a snapshot of metrics (tables, tablet, xCluster lag).
  
-\x1b[1;33;100mRun options:\x1b[0;1m
+\x1b[1;33;100mRun options:\x1b[0m
    --YBA_HOST         [=] <YBA hostname or IP> (Required) "[http(s)://]<hostname-or-ip>[:<port>]"
    --API_TOKEN        [=] <API access token>   (Required)
    --UNIVERSE         [=] <Universe-Name-or-uuid>  (Required(*). Name Can be partial, sufficient to be Unique)
@@ -893,10 +893,11 @@ sub Create_Views{
     GROUP BY NAMESPACE) D 
   WHERE t.NAMESPACE=d.NAMESPACE 
   GROUP BY T.NAMESPACE;
-
- SELECT char(27) ||  '[1;40;36;4m-- The following reports are available --' || char(27) ||"[0;2m" ; -- Cyan on Black,UL - then FAINT
+-- "list" mode ("|" delimited) for these single-line , ASCII highlighted output renders properly (Column mode does not)
+.mode list
+ SELECT char(27) ||  '[1;40;36;4m-- The following reports are available --' || char(27) || '[0;2m' ; -- Cyan on Black,UL - then FAINT
 .tables
-SELECT  char(27) || '[40;1;93;4m -- S u m m a r y --' || char(27) ||"[0m" ; -- Bright yellow on black,UL
+SELECT  char(27) || '[40;1;93;4m -- S u m m a r y --' || char(27) || '[0m' ; -- Bright yellow on black,UL
 
  CREATE VIEW IF NOT EXISTS Summary AS 
  SELECT   (SELECT count(*) from node) || ' Nodes ('
@@ -910,23 +911,25 @@ SELECT  char(27) || '[40;1;93;4m -- S u m m a r y --' || char(27) ||"[0m" ; -- B
  SELECT * from Summary;
 
  SELECT tablet_count ||' tablets have '||replicas || ' replicas.' FROM tablet_replica_summary;
- SELECT char(27) || '[93;1mWARNING:' || char(27) ||"[0m " || nodeName||'('|| node_uuid || ') has '|| metric_name || '='||value  
+ SELECT char(27) || '[93;1mWARNING:' || char(27) || '[0m ' || nodeName||'('|| node_uuid || ') has '|| metric_name || '='||value  
          || ' (microseconds)'
  FROM  metrics,node
  WHERE node_uuid=nodeUuid and  node_uuid like 'Master-%' and metric_name='log_append_latency_avg' 
        and value+0 >= $opt{FOLLOWER_LAG_MINIMUM} * 1000;
- SELECT char(27) || '[93;1mWARNING:' || char(27) ||"[0m" || ' Node ' || nodeName||'('|| node_uuid || ') has '|| metric_name || '='||value  
+ SELECT char(27) || '[93;1mWARNING:' || char(27) || '[0m' || ' Node ' || nodeName||'('|| node_uuid || ') has '|| metric_name || '='||value  
          || ' (microseconds)'
  FROM  metrics,node
  WHERE node_uuid=nodeUuid and metric_name IN ('hybrid_clock_skew')
       and value+0 >= $opt{FOLLOWER_LAG_MINIMUM}; -- Treat this as microsec for this metric
- SELECT  char(27) || '[93;1mWARNING:' || char(27) ||"[0m" ||' Node ' || nodeName||'('|| node_uuid || ') has '|| metric_name || '='||value 
+ SELECT  char(27) || '[93;1mWARNING:' || char(27) || '[0m' ||' Node ' || nodeName||'('|| node_uuid || ') has '|| metric_name || '='||value 
         || CASE WHEN entity_uuid != '0' THEN ' (' || entity_name || ' ' || entity_uuid || ')'
            ELSE '' END || ' (microseconds)'
  FROM  metrics,node 
  WHERE node_uuid=nodeUuid and metric_name IN ('tserver_read_latency_p99', 'tserver_write_latency_p99',
                        'async_replication_committed_lag_micros','async_replication_sent_lag_micros')
       and value+0 >=  $opt{FOLLOWER_LAG_MINIMUM}*1000;
+
+.mode column
 __SQL__
 
   for my $msg(@{ $self->{PENDING_MESSAGES} }){
@@ -1096,7 +1099,8 @@ sub new{
     $self->{HT} = HTTP::Tiny->new( default_headers => {
                          'X-AUTH-YW-API-TOKEN' => $opt{API_TOKEN},
                          'Content-Type'      => 'application/json',
-                         # 'max_size'        => 5*1024*1024, # 5MB 
+                         # 'max_size'        => 5*1024*1024, # 5MB
+                         ,verify_SSL         => 0, 
                       });
     if ($HTTP::Tiny::VERSION < 0.05){
        print "--WARNING: HTTP::Tiny version ", $HTTP::Tiny::VERSION, " is too old. Using CURL\n";
