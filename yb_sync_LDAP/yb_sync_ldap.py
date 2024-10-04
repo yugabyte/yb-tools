@@ -10,7 +10,7 @@
 """
 LDAP Sync script for Yugabyte YCQL and YSQL.
 """
-
+import sys
 import os
 import re
 import argparse
@@ -35,7 +35,7 @@ from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
 
-VERSION = "0.42"
+VERSION = "0.43"
 
 
 
@@ -1169,10 +1169,12 @@ class YBLDAPSync:
             logging.info('Run complete.')
         except LDAPSyncException as ex:
             print(json.dumps({"error": "LDAP Sync exception: {}".format(str(ex))}))
+            sys.exit(2)
         except Exception as ex:
             print(json.dumps({"error": "Exception: {}".format(str(ex))}))
             traceback.print_exc()
             traceback.print_stack()
+            sys.exit(3)
 
 
 if __name__ == "__main__":
