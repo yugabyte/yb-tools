@@ -37,7 +37,7 @@
 #   * Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
 #         ./yugatool -m $MASTERS $TLS_CONFIG tablet_info $TABLET_UUID > $TABLET_UUID.txt 
 ##########################################################################
-our $VERSION = "0.42";
+our $VERSION = "0.43";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -169,13 +169,22 @@ CREATE VIEW table_detail AS
      SELECT  namespace,table_name, count(*) as total_tablet_count,count(DISTINCT tablet_uuid) as unique_tablet_count, count(DISTINCT node_uuid) as nodes
 	 FROM tablet GROUP BY namespace,table_name;
 CREATE VIEW tablets_per_node AS
-    SELECT node_uuid,min(ip) as node_ip,min(zone) as zone,  count(*) as tablet_count,
+    SELECT node_uuid,ip as node_ip,zone,  count(*) as tablet_count,
+           sum(CASE WHEN status='TABLET_DATA_COPYING' THEN 1 ELSE 0 END) as copying,
+           sum(CASE WHEN tablet.state = 'TABLET_DATA_TOMBSTONED' THEN 1 ELSE 0 END) as tombstoned,
            sum(CASE WHEN node_uuid = leader THEN 1 ELSE 0 END) as leaders,
-           count(DISTINCT table_name) as table_count	
-	FROM tablet,cluster 
-	WHERE cluster.type='TSERVER' and cluster.uuid=node_uuid 
-	GROUP BY node_uuid
-	ORDER BY tablet_count;
+           count(DISTINCT table_name) as table_count
+        FROM tablet,cluster
+        WHERE cluster.type='TSERVER' and cluster.uuid=node_uuid
+        GROUP BY node_uuid, ip, zone 
+    UNION
+    SELECT '~~TOTAL~~',
+	    '*(All '|| (select count(*) from cluster where type='TSERVER') || ' nodes)*', 'ALL',
+       (Select count(*) from tablet),(Select count(*) from tablet WHERE status='TABLET_DATA_COPYING'),
+	   (SELECT count(*) from tablet where state = 'TABLET_DATA_TOMBSTONED'),
+	   (SELECT count(*) from tablet where node_uuid = leader),
+	   (SELECT count(DISTINCT table_name) as table_count from tablet)
+	   ORDER BY 1;
 CREATE VIEW tablet_replica_detail AS
 	SELECT t.namespace,t.table_name,t.table_uuid,t.tablet_uuid,
     sum(CASE WHEN t.status = 'TABLET_DATA_TOMBSTONED' THEN 0 ELSE 1 END) as replicas  ,
