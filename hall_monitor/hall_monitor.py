@@ -1,6 +1,6 @@
 #!python3
 # This program is going to get Gflags for an universe.
-version = "0.03"
+version = "0.04"
 import requests
 import urllib3
 import json
