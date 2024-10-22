@@ -1,11 +1,12 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.36";
+our $VERSION = "1.37";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
-# Monitor running queries
-# collect gzipped JSON file for offline analysis
+# Runs as a daemon, monitoring running queries and tserver metrics.
+# Collects gzipped mime.gz file for offline analysis
+# In --analysis mode, read the mime.gz file and creates a sqlie DB and produces reports.
 
 __HELPTEXT__
 use strict;
@@ -611,7 +612,8 @@ sub Extract_nodes_From_Universe{ # CLASS method
        push @node, my $thisnode = {map({$_=>$n->{$_}||''} qw|nodeIdx nodeName nodeUuid azUuid isMaster
                                   	   isTserver ysqlServerHttpPort yqlServerHttpPort state tserverHttpPort 
 									   tserverRpcPort masterHttpPort masterRpcPort nodeExporterPort|),
-	                              map({$_=>$n->{cloudInfo}{$_}} qw|private_ip public_ip az region |) };
+	                              map({$_=>$n->{cloudInfo}{$_}} qw|private_ip public_ip az region |),
+                                map({$_=>""} qw|tserver_uuid master_uuid|) };
        $thisnode->{$_} =~tr/-//d for grep {/uuid/i} keys %$thisnode;
        $callback and $callback->($thisnode, $count);
        $count++;
@@ -778,9 +780,9 @@ sub Handle_ENTITIES_Data{
 	}
 	$opt{DEBUG} and printf "--DEBUG: %d Keyspaces, %d tables, %d tablets\n", 
 	                     scalar(@{ $bj->{keyspaces} }),scalar(@{ $bj->{tables} }), scalar(@{ $bj->{tablets} });
-    # Fixup Node UUIDs : These are not in the Universe JSON - so we update from tablets 
+    # Fixup tserver UUIDs : These are not in the Universe JSON - so we update from tablets 
 	print {$self->{OUTPUT_FH}} "UPDATE NODE ",
-       "SET nodeUuid=(select server_uuid FROM tablets ",
+       "SET tserver_uuid=(select server_uuid FROM tablets ",
            "WHERE  substr(addr,1,instr(addr,':')-1) = private_ip limit 1);\n";
 }
 
