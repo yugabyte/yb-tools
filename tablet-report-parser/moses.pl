@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.36";
+our $VERSION = "0.35";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, \x1b[1;33;100mmoses.pl\x1b[0m  Version $VERSION
                ========
@@ -805,22 +805,14 @@ sub Create_Views{
     SELECT '$0' as program, '$VERSION' as version, '$opt{STARTTIME_PRINTABLE}' AS run_on, '$opt{LOCALHOST}' as host;
 
   CREATE VIEW tablets_per_node AS 
-    SELECT node_uuid,ip as node_ip,zone,  count(*) as tablet_count,
-           sum(CASE WHEN status='TABLET_DATA_COPYING' THEN 1 ELSE 0 END) as copying,
+    SELECT node_uuid,min(public_ip) as node_ip,min(region ) as region,  count(*) as tablet_count,
+           sum(CASE WHEN private_ip = leader THEN 1 ELSE 0 END) as leaders,
            sum(CASE WHEN tablet.state = 'TABLET_DATA_TOMBSTONED' THEN 1 ELSE 0 END) as tombstoned,
-           sum(CASE WHEN node_uuid = leader THEN 1 ELSE 0 END) as leaders,
            count(DISTINCT table_name) as table_count
-        FROM tablet,cluster
-        WHERE cluster.type='TSERVER' and cluster.uuid=node_uuid
-        GROUP BY node_uuid, ip, zone 
-    UNION
-    SELECT '~~TOTAL~~',
-	    '*(All '|| (select count(*) from cluster where type='TSERVER') || ' nodes)*', 'ALL',
-       (Select count(*) from tablet),(Select count(*) from tablet WHERE status='TABLET_DATA_COPYING'),
-	   (SELECT count(*) from tablet where state = 'TABLET_DATA_TOMBSTONED'),
-	   (SELECT count(*) from tablet where node_uuid = leader),
-	   (SELECT count(DISTINCT table_name) as table_count from tablet)
-	   ORDER BY 1;
+  FROM tablet,node 
+  WHERE isTserver  and node.nodeuuid=node_uuid 
+  GROUP BY node_uuid
+  ORDER BY tablet_count;
 
   CREATE VIEW tablet_replica_detail AS
     SELECT t.namespace,t.table_name,t.table_uuid,t.tablet_uuid,
