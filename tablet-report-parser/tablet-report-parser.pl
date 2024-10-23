@@ -56,7 +56,7 @@ my %opt=(
 	JSON        => 0, # Auto set to 1 when  "JSON" discovered. default is Reading "table" style.
 	AUTORUN_SQLITE => -t STDOUT , # If STDOUT is NOT redirected, we automatically run sqlite3
 	SQLITE_ERROR   => (qx|sqlite3 -version|=~m/([^\s]+)/  ?  0 : "Could not run SQLITE3: $!"), # Checks if sqlite3 can run
-	PROCESSED_TYPES=> {TABLET_REPORT => 0, ENTITIES57 => 0, TABLET_INFO => 0}, # Stats 
+	PROCESSED_TYPES=> {TABLET_REPORT => 0, ENTITIES => 0, TABLET_INFO => 0}, # Stats 
 );
 my %ANSICOLOR = (
 	ENCLOSE        => sub{"\e[$_[1]m$_[0]\e[0m"},
