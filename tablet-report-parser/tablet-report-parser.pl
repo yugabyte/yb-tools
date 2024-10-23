@@ -37,7 +37,7 @@
 #   * Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
 #         ./yugatool -m $MASTERS $TLS_CONFIG tablet_info $TABLET_UUID > $TABLET_UUID.txt 
 ##########################################################################
-our $VERSION = "0.43";
+our $VERSION = "0.44";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -56,7 +56,7 @@ my %opt=(
 	JSON        => 0, # Auto set to 1 when  "JSON" discovered. default is Reading "table" style.
 	AUTORUN_SQLITE => -t STDOUT , # If STDOUT is NOT redirected, we automatically run sqlite3
 	SQLITE_ERROR   => (qx|sqlite3 -version|=~m/([^\s]+)/  ?  0 : "Could not run SQLITE3: $!"), # Checks if sqlite3 can run
-	PROCESSED_TYPES=> {TABLET_REPORT => 0, ENTITIES => 0, TABLET_INFO => 0}, # Stats 
+	PROCESSED_TYPES=> {TABLET_REPORT => 0, ENTITIES57 => 0, TABLET_INFO => 0}, # Stats 
 );
 my %ANSICOLOR = (
 	ENCLOSE        => sub{"\e[$_[1]m$_[0]\e[0m"},
@@ -341,7 +341,7 @@ my %entity = (
 				LINE_REGEX =>
                  	qr| ^\s(?<tablet_uuid>(\w{32}))\s{3}
 					(?<tablename>([\w\-.]+))\s+
-					(?<table_uuid>(\w{32})?)\s* # This exists only if --show_table_uuid is set
+					(?<table_uuid>(\w{32})?)(:?\.colocation\.parent\.uuid)?\s* # This exists only if --show_table_uuid is set
 					(?<namespace>([\w\-]+))\s+
 					(?<state>(\w+))\s*
 					(?<status>(\w+))\s+
