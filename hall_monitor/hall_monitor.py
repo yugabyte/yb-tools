@@ -1,6 +1,6 @@
 #!python3
 # This program is going to get Gflags for an universe.
-version = "0.05"
+version = "0.06"
 import requests
 import urllib3
 import json
@@ -82,8 +82,19 @@ class MasterLeader(Node): #Inherited from Node
         result = p.search(str(self.raw_response.content))
         print ("Load Balancer Enabled = " + result.group(1) + "  Load is Balanced = " + result.group(2))
 
-
-
+    def get_entities(self):
+        url = 'https://' + self.IP + ':' + str(self.universe.masterHttpPort) + '/dump-entities'
+        self.raw_response = requests.get(url,
+                                         headers={'Content-Type': 'text/html'},
+                                         verify=False)
+        self.raw_response.raise_for_status()
+        print("==== Entity Info ===")
+        print(str(self.raw_response.content)[0:200])
+        self.entity_json = json.loads(self.raw_response.text)
+        for keyspace in self.entity_json['keyspaces']:
+            print("keyspace:" + keyspace['keyspace_name'] + " " + keyspace['keyspace_type'] )
+        for table in self.entity_json['tables']:
+            print("table:" + table['table_name'] + " " + table['table_id'] )
 
 class Zone():
     def __init__(self, zone_json):
@@ -224,6 +235,7 @@ def discover_universes():
         if args.tablets:
             ml = u.get_master_leader()
             ml.get_overview()
+            ml.get_entities()
         print()
 
     if not found:
