@@ -1,6 +1,6 @@
 #!python3
 # This program is going to get Gflags for an universe.
-version = "0.04"
+version = "0.05"
 import requests
 import urllib3
 import json
@@ -13,21 +13,33 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # curl -k --silent --request GET --url https://10.231.0.124/api/v1/customers/0c81e8ae-2e1d-44c9-b907-d580da260ff6/universes/ec6b18f3-69b9-43cc-b986-5f60bb0970b5/
 # --header 'Accept: application/json' --header 'Content-Type: application/json' --header 'X-AUTH-YW-API-TOKEN: 7f743b97-defc-4e29-8e87-90a12b5d5cf3'
 
-YBA_HOST = 'https://10.231.0.124'
-CustomerUUID = '0c81e8ae-2e1d-44c9-b907-d580da260ff6'
-UniverseUUID = 'ec6b18f3-69b9-43cc-b986-5f60bb0970b5'
-AUTHTOKEN = '998f5bca-a8fb-464e-bbe5-a72f9e9890b0'
+#YBA_HOST = 'https://10.231.0.124'
+#CustomerUUID = '0c81e8ae-2e1d-44c9-b907-d580da260ff6'
+#UniverseUUID = 'ec6b18f3-69b9-43cc-b986-5f60bb0970b5'
+#AUTHTOKEN = '998f5bca-a8fb-464e-bbe5-a72f9e9890b0'
 args = None ### This will contain command line Arguments
 
 
 class yba_api():
     def __init__(self):
-        self.baseurl = YBA_HOST + '/api/v1/customers/' + CustomerUUID + '/universes'
-        self.raw_response = None
+        if args.customer_uuid is None:
+            self.__set_customeruuid()
 
-    def Get(self, targeturl=""):
-        url = self.baseurl + targeturl
-        self.raw_response = requests.get(url, headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': AUTHTOKEN},
+        self.baseurl = args.yba_url + '/api/v1/customers/' + args.customer_uuid + '/universes'
+        self.raw_response = None
+    def __set_customeruuid(self):
+        url = args.yba_url + '/api/v1/customers'
+        customer_list = self.Get(url, False)
+        if len(customer_list) > 1:
+            raise SystemExit("ERROR: Multiple Customers Found, Must Specify which Customer UUID to Use!")
+        args.customer_uuid = customer_list[0]['uuid']
+
+    def Get(self, targeturl="", use_base=True):
+        if use_base:
+            url = self.baseurl + targeturl
+        else:
+            url = targeturl
+        self.raw_response = requests.get(url, headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': args.auth_token},
                                 verify=False)
         self.raw_response.raise_for_status()
         # Convert response data to dict
@@ -195,12 +207,16 @@ def discover_universes():
     universe_list = json.loads(response.text)
     '''
     api = yba_api()
+    found = False
+
     for u_raw in api.Get():
         u = Universe(u_raw, api) ### This creates a Universe Object named "u"
         if args.universe == None:
-            pass
+            found = True
         elif args.universe == u.name:
-            pass
+            found = True
+        elif args.universe == u.UUID:
+            found = True
         else:
             continue
 
@@ -208,9 +224,11 @@ def discover_universes():
         if args.tablets:
             ml = u.get_master_leader()
             ml.get_overview()
-
-
         print()
+
+    if not found:
+        raise SystemExit("ERROR: Did not find the specified " + args.universe + " Universe!")
+
 #        print_universe_gflags(u)
 
 def parse_arguments():
@@ -222,6 +240,10 @@ def parse_arguments():
     parser.add_argument('-d', '--debug', action='store_true')
     parser.add_argument('-u', '--universe', help='Universe Name for which information is needed')
     parser.add_argument('-t', '--tablets', action='store_true', help='Get tablet details')
+    parser.add_argument('-y', '--yba_url', required=True, help='YBAnywhere URL')
+    parser.add_argument('-c', '--customer_uuid', help='Customer UUID')
+    parser.add_argument('-a', '--auth_token', required=True, help='YBAnywhere Auth Token')
+
 
     args = parser.parse_args()
     if args.debug:
