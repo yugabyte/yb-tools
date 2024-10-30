@@ -1,6 +1,6 @@
 #!python3
 # This program is going to get Gflags for an universe.
-version = "0.06"
+version = "0.07"
 import requests
 import urllib3
 import json
@@ -44,6 +44,28 @@ class yba_api():
         self.raw_response.raise_for_status()
         # Convert response data to dict
         return json.loads(self.raw_response.text)
+
+class Namespace():
+    def __init__(self, details):
+        self.tables = []  # Since Namespace has tables
+        for attr in details:
+            self.__dict__[attr] = details[attr] # dynamically set attribute
+    def Print(self):
+        print ("Namespace " + self.keyspace_name + " (" + self.keyspace_id + ")" )
+
+class Table():
+    def __init__(self, details):
+        self.tablets = []  # Since tables have tablets
+        for attr in details:
+            self.__dict__[attr] = details[attr]
+
+
+class Tablet():
+    def __init__(self, details):
+        for attr in details:
+            self.__dict__[attr] = details[attr]
+
+
 class Node():
     def __init__(self, node_json, universe_object):
         self.name = node_json['nodeName']
@@ -55,6 +77,9 @@ class Node():
         self.istserver = node_json['isTserver']
         self.region = None
         self.az = None
+        self.namespaces = []
+        self.tables = []
+        self.tablets = []
         self.universe= universe_object
 
     def nodeidx(self):
@@ -67,7 +92,8 @@ class Node():
 
 class MasterLeader(Node): #Inherited from Node
     def __init__(self,node_object):
-        self.__dict__ = node_object.__dict__.copy()
+        self.__dict__ = node_object.__dict__.copy() # clone the node object
+
 
 
     def get_overview(self):
@@ -92,9 +118,19 @@ class MasterLeader(Node): #Inherited from Node
         print(str(self.raw_response.content)[0:200])
         self.entity_json = json.loads(self.raw_response.text)
         for keyspace in self.entity_json['keyspaces']:
-            print("keyspace:" + keyspace['keyspace_name'] + " " + keyspace['keyspace_type'] )
+            n = Namespace(keyspace)
+        #    print("keyspace:" + keyspace['keyspace_name'] + " " + keyspace['keyspace_type'] )
+            n.Print()
+            self.namespaces.append(n) #New Namespace object is created with Namespace(keyspace) and its appended to the array namespaces
         for table in self.entity_json['tables']:
             print("table:" + table['table_name'] + " " + table['table_id'] )
+            t = Table(table)
+            self.tables.append(t)
+        for tablet in self.entity_json['tablets']
+            #print("tablet:" + table['table_name'] + " " + table['table_id'])
+            t = Tablet(tablet)
+            self.tablets.append(t)
+            # Need to add Logic to attach t (tablet object) to its table
 
 class Zone():
     def __init__(self, zone_json):
@@ -234,6 +270,10 @@ def discover_universes():
         u.Print()
         if args.tablets:
             ml = u.get_master_leader()
+            if ml is None:
+                print ("Could not find Master leader for " + u.name)
+                print ()
+                continue
             ml.get_overview()
             ml.get_entities()
         print()
