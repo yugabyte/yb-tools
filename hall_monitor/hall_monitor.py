@@ -1,6 +1,6 @@
 #!python3
 # This program is going to get Gflags for an universe.
-version = "0.07"
+version = "0.08"
 import requests
 import urllib3
 import json
@@ -46,24 +46,32 @@ class yba_api():
         return json.loads(self.raw_response.text)
 
 class Namespace():
-    def __init__(self, details):
+    def __init__(self, id,name,type):
         self.tables = []  # Since Namespace has tables
-        for attr in details:
-            self.__dict__[attr] = details[attr] # dynamically set attribute
+        self.id = id
+        self.name = name
+        self.type = type
+
     def Print(self):
-        print ("Namespace " + self.keyspace_name + " (" + self.keyspace_id + ")" )
+        print ("Namespace " + self.name + " (" + self.id + ")" + " (" + self.type + ")" )
 
 class Table():
-    def __init__(self, details):
-        self.tablets = []  # Since tables have tablets
-        for attr in details:
-            self.__dict__[attr] = details[attr]
+    def __init__(self, id, name, state, namespace): # "namespace" is the namespace object
+        self.tablets = []  # Since Table has tablets
+        self.id = id
+        self.name = name
+        self.state = state
+        self.namespace = namespace
 
 
 class Tablet():
-    def __init__(self, details):
-        for attr in details:
-            self.__dict__[attr] = details[attr]
+    def __init__(self, id, table, state, replicas, leader):
+        self.id = id
+        self.table = table
+        self.state = state
+        self.replicas = [] # Process incoming replicas, which is an array of Server UUIDs
+        self.leader = leader #Tserver UUID
+#        self.namespace = namespace
 
 
 class Node():
@@ -75,6 +83,8 @@ class Node():
         self.azuuid = node_json['azUuid']
         self.ismaster= node_json['isMaster']
         self.istserver = node_json['isTserver']
+        self.tserver_uuid = None
+        self.master_uuid = None
         self.region = None
         self.az = None
         self.namespaces = []
@@ -93,6 +103,9 @@ class Node():
 class MasterLeader(Node): #Inherited from Node
     def __init__(self,node_object):
         self.__dict__ = node_object.__dict__.copy() # clone the node object
+        self.namespace_by_id = {}
+        self.table_by_id = {}
+
 
 
 
@@ -106,7 +119,31 @@ class MasterLeader(Node): #Inherited from Node
         #print(self.raw_response.content)
         p = re.compile("Load Balancer Enabled.+?=..(\w+)..>.+Is Load Balanced.+?=..(\w+)..>")
         result = p.search(str(self.raw_response.content))
-        print ("Load Balancer Enabled = " + result.group(1) + "  Load is Balanced = " + result.group(2))
+        print ("Load Balancer Enabled: " + result.group(1) + "  Load is Balanced: " + result.group(2))
+
+    def get_tservers(self):
+        url = 'https://' + self.IP + ':' + str(self.universe.masterHttpPort) + '/tablet-servers?raw'
+        self.raw_response = requests.get(url,
+                                         headers={'Content-Type': 'text/html'},
+                                         verify=False)
+        self.raw_response.raise_for_status()
+        p = re.compile(r'.+>([\d\.]+):\d+<.+?(\w{32})<') #regex to search for IP Address and a string after > and looks for a continuous string of 32 characters
+        for line in self.raw_response.content.splitlines():
+            result = p.search(str(line))
+            if result is None:
+                continue
+            ip = result.group(1)
+            uuid = result.group(2)
+            print ("TServer IP Address: " + ip + " With TServer UUID: " + uuid)
+            for t in self.universe.nodelist:
+                if not t.istserver:
+                    continue
+                if t.IP == ip:
+                    t.tserver_uuid = uuid
+                    self.universe.tserver_by_uuid[uuid] = t
+                    break
+
+
 
     def get_entities(self):
         url = 'https://' + self.IP + ':' + str(self.universe.masterHttpPort) + '/dump-entities'
@@ -118,17 +155,17 @@ class MasterLeader(Node): #Inherited from Node
         print(str(self.raw_response.content)[0:200])
         self.entity_json = json.loads(self.raw_response.text)
         for keyspace in self.entity_json['keyspaces']:
-            n = Namespace(keyspace)
+            n = Namespace(keyspace['keyspace_id'],keyspace['keyspace_name'], keyspace['keyspace_type'])
+            self.namespace_by_id[n.id] = n
         #    print("keyspace:" + keyspace['keyspace_name'] + " " + keyspace['keyspace_type'] )
             n.Print()
-            self.namespaces.append(n) #New Namespace object is created with Namespace(keyspace) and its appended to the array namespaces
         for table in self.entity_json['tables']:
             print("table:" + table['table_name'] + " " + table['table_id'] )
-            t = Table(table)
-            self.tables.append(t)
-        for tablet in self.entity_json['tablets']
+            t = Table(table['table_id'], table['table_name'], table['state'], self.namespace_by_id[table['keyspace_id']] )
+            self.table_by_id[t.id] = t
+        for tablet in self.entity_json['tablets']:
             #print("tablet:" + table['table_name'] + " " + table['table_id'])
-            t = Tablet(tablet)
+            t = Tablet(tablet['tablet_id'], self.table_by_id[tablet['table_id']], table['replicas'], table['leader']) # this needs to be worked further
             self.tablets.append(t)
             # Need to add Logic to attach t (tablet object) to its table
 
@@ -171,6 +208,7 @@ class Universe():
         self.regionlist = []
         self.masterHttpPort = self.universeDetails["communicationPorts"]["masterHttpPort"]
         self.tserverHttpPort = self.universeDetails["communicationPorts"]["tserverHttpPort"]
+        self.tserver_by_uuid = {}
 
         for r_raw in self.universeDetails["clusters"][0]["placementInfo"]["cloudList"][0]["regionList"]:
             self.regionlist.append(Region(r_raw))
@@ -275,6 +313,7 @@ def discover_universes():
                 print ()
                 continue
             ml.get_overview()
+            ml.get_tservers()
             ml.get_entities()
         print()
 
