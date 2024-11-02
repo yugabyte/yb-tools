@@ -63,16 +63,16 @@ class Table():
         self.state = state
         self.namespace = namespace
 
+    def Print(self):
+        print ("Table " + self.name + " (" + self.id + "," + self.state + ")" )
 
 class Tablet():
     def __init__(self, id, table, state, replicas, leader):
         self.id = id
         self.table = table
         self.state = state
-        self.replicas = [] # Process incoming replicas, which is an array of Server UUIDs
-        self.leader = leader #Tserver UUID
-#        self.namespace = namespace
-
+        self.replicas = replicas # array of tserver Node objects
+        self.leader = leader #Tserver Node object
 
 class Node():
     def __init__(self, node_json, universe_object):
@@ -87,8 +87,6 @@ class Node():
         self.master_uuid = None
         self.region = None
         self.az = None
-        self.namespaces = []
-        self.tables = []
         self.tablets = []
         self.universe= universe_object
 
@@ -103,8 +101,7 @@ class Node():
 class MasterLeader(Node): #Inherited from Node
     def __init__(self,node_object):
         self.__dict__ = node_object.__dict__.copy() # clone the node object
-        self.namespace_by_id = {}
-        self.table_by_id = {}
+
 
 
 
@@ -156,17 +153,31 @@ class MasterLeader(Node): #Inherited from Node
         self.entity_json = json.loads(self.raw_response.text)
         for keyspace in self.entity_json['keyspaces']:
             n = Namespace(keyspace['keyspace_id'],keyspace['keyspace_name'], keyspace['keyspace_type'])
-            self.namespace_by_id[n.id] = n
+            self.universe.namespace_by_id[n.id] = n
         #    print("keyspace:" + keyspace['keyspace_name'] + " " + keyspace['keyspace_type'] )
             n.Print()
+
+        count = 0
         for table in self.entity_json['tables']:
-            print("table:" + table['table_name'] + " " + table['table_id'] )
-            t = Table(table['table_id'], table['table_name'], table['state'], self.namespace_by_id[table['keyspace_id']] )
-            self.table_by_id[t.id] = t
+            #print("table:" + table['table_name'] + " " + table['table_id'] )
+            t = Table(table['table_id'], table['table_name'], table['state'], self.universe.namespace_by_id[table['keyspace_id']] )
+            self.universe.table_by_id[t.id] = t
+            count = count + 1
+            if count < 6:
+                t.print() # Print first 5 tables 
+
         for tablet in self.entity_json['tablets']:
             #print("tablet:" + table['table_name'] + " " + table['table_id'])
-            t = Tablet(tablet['tablet_id'], self.table_by_id[tablet['table_id']], table['replicas'], table['leader']) # this needs to be worked further
-            self.tablets.append(t)
+            replica_nodes=[]
+            my_table = self.table_by_id[tablet['table_id']] # Table object
+            for r in table['replicas']:
+                replica_nodes.append(self.universe.tserver_by_uuid[r["server_uuid"]])
+            t = Tablet(tablet['tablet_id'], my_table, tablet["state"],
+                       replica_nodes, self.universe.tserver_by_uuid(table['leader'])) # this needs to be worked further
+            self.universe.tablets.append(t)
+            for r in t.replicas:
+                r.tablets.append(t) # So that Node object has what tablets are resident
+            my_table.tablets.append(t)
             # Need to add Logic to attach t (tablet object) to its table
 
 class Zone():
@@ -209,6 +220,10 @@ class Universe():
         self.masterHttpPort = self.universeDetails["communicationPorts"]["masterHttpPort"]
         self.tserverHttpPort = self.universeDetails["communicationPorts"]["tserverHttpPort"]
         self.tserver_by_uuid = {}
+        self.namespace_by_id = {}
+        self.table_by_id = {}
+        self.namespaces = []
+
 
         for r_raw in self.universeDetails["clusters"][0]["placementInfo"]["cloudList"][0]["regionList"]:
             self.regionlist.append(Region(r_raw))
