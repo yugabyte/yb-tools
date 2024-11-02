@@ -19,16 +19,17 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 #AUTHTOKEN = '998f5bca-a8fb-464e-bbe5-a72f9e9890b0'
 args = None ### This will contain command line Arguments
 
-
+######################################################################################################################
 class yba_api():
     def __init__(self):
         if args.customer_uuid is None:
             self.__set_customeruuid()
 
-        self.baseurl = args.yba_url + '/api/v1/customers/' + args.customer_uuid + '/universes'
+        self.baseurl = args.yba_url.strip("/") + '/api/v1/customers/' + args.customer_uuid + '/universes'
         self.raw_response = None
+
     def __set_customeruuid(self):
-        url = args.yba_url + '/api/v1/customers'
+        url = args.yba_url.strip("/") + '/api/v1/customers'
         customer_list = self.Get(url, False)
         if len(customer_list) > 1:
             raise SystemExit("ERROR: Multiple Customers Found, Must Specify which Customer UUID to Use!")
@@ -44,7 +45,7 @@ class yba_api():
         self.raw_response.raise_for_status()
         # Convert response data to dict
         return json.loads(self.raw_response.text)
-
+######################################################################################################################
 class Namespace():
     def __init__(self, id,name,type):
         self.tables = []  # Since Namespace has tables
@@ -54,7 +55,7 @@ class Namespace():
 
     def Print(self):
         print ("Namespace " + self.name + " (" + self.id + ")" + " (" + self.type + ")" )
-
+######################################################################################################################
 class Table():
     def __init__(self, id, name, state, namespace): # "namespace" is the namespace object
         self.tablets = []  # Since Table has tablets
@@ -65,7 +66,7 @@ class Table():
 
     def Print(self):
         print ("Table " + self.name + " (" + self.id + "," + self.state + ")" )
-
+######################################################################################################################
 class Tablet():
     def __init__(self, id, table, state, replicas, leader):
         self.id = id
@@ -74,6 +75,18 @@ class Tablet():
         self.replicas = replicas # array of tserver Node objects
         self.leader = leader #Tserver Node object
 
+    def Print(self):
+        leader_txt = "No Leader";
+        if self.leader is not None:
+            leader_txt = self.leader.name + "("+self.leader.IP + " Node#"+str(self.leader.IDX) +")"
+        replica_text = "No Replicas";
+        if self.replicas is not None:
+            replica_text = "Replicas:"
+            for r in self.replicas:
+                replica_text= replica_text + " ["+r.name + "("+r.IP + " Node#"+str(r.IDX) +")]" 
+
+        print ("Tablet " + self.id + " (" + self.state + ", leader : " + leader_txt + " "+replica_text+")" )
+######################################################################################################################
 class Node():
     def __init__(self, node_json, universe_object):
         self.name = node_json['nodeName']
@@ -97,14 +110,10 @@ class Node():
         print(" "*Indent, "Node: " + str(self.IDX) + "["+ self.UUID + "] " + self.name + " has IP: " + self.IP + \
               " is in Zone " + self.az.name + \
               " [" + (" TServer " if self.istserver else "" ) + (" Master " if self.ismaster else "") + " ]")
-
+######################################################################################################################
 class MasterLeader(Node): #Inherited from Node
     def __init__(self,node_object):
         self.__dict__ = node_object.__dict__.copy() # clone the node object
-
-
-
-
 
     def get_overview(self):
         url = 'https://' + self.IP + ':' + str(self.universe.masterHttpPort) + '/?raw'
@@ -140,8 +149,6 @@ class MasterLeader(Node): #Inherited from Node
                     self.universe.tserver_by_uuid[uuid] = t
                     break
 
-
-
     def get_entities(self):
         url = 'https://' + self.IP + ':' + str(self.universe.masterHttpPort) + '/dump-entities'
         self.raw_response = requests.get(url,
@@ -149,7 +156,7 @@ class MasterLeader(Node): #Inherited from Node
                                          verify=False)
         self.raw_response.raise_for_status()
         print("==== Entity Info ===")
-        print(str(self.raw_response.content)[0:200])
+        #print(str(self.raw_response.content)[0:200])
         self.entity_json = json.loads(self.raw_response.text)
         for keyspace in self.entity_json['keyspaces']:
             n = Namespace(keyspace['keyspace_id'],keyspace['keyspace_name'], keyspace['keyspace_type'])
@@ -164,21 +171,28 @@ class MasterLeader(Node): #Inherited from Node
             self.universe.table_by_id[t.id] = t
             count = count + 1
             if count < 6:
-                t.print() # Print first 5 tables 
+                t.Print() # Print first 5 tables 
 
+        count = 0
         for tablet in self.entity_json['tablets']:
             #print("tablet:" + table['table_name'] + " " + table['table_id'])
             replica_nodes=[]
-            my_table = self.table_by_id[tablet['table_id']] # Table object
-            for r in table['replicas']:
-                replica_nodes.append(self.universe.tserver_by_uuid[r["server_uuid"]])
+            my_table = self.universe.table_by_id[tablet['table_id']] # Table object
+            if tablet.get('replicas') is not None:
+                for r in tablet.get('replicas'):
+                    replica_nodes.append(self.universe.tserver_by_uuid[r["server_uuid"]])
+            leader = None # Node object that is this tablet's leader
+            if tablet.get('leader') is not None:
+                leader = self.universe.tserver_by_uuid[tablet.get('leader')]
             t = Tablet(tablet['tablet_id'], my_table, tablet["state"],
-                       replica_nodes, self.universe.tserver_by_uuid(table['leader'])) # this needs to be worked further
-            self.universe.tablets.append(t)
-            for r in t.replicas:
+                       replica_nodes, leader) # this needs to be worked further
+            for r in t.replicas:    #  attach t (tablet object) to its table
                 r.tablets.append(t) # So that Node object has what tablets are resident
             my_table.tablets.append(t)
-            # Need to add Logic to attach t (tablet object) to its table
+            count += 1
+            if count < 6:
+                t.Print()
+######################################################################################################################
 
 class Zone():
     def __init__(self, zone_json):
@@ -192,7 +206,7 @@ class Zone():
         for n in self.nodelist:
             print (" "*(Indent+2), " Node " + n.name)
 
-
+######################################################################################################################
 class Region():
     def __init__(self,region_json):
         self.name = region_json['name']
@@ -206,7 +220,7 @@ class Region():
         for az in self.azlist:
             az.Print(Indent+2)
 
-
+######################################################################################################################
 class Universe():
     def __init__(self, ujson, api):
         self.json = ujson
@@ -356,9 +370,9 @@ def parse_arguments():
         print("Debugging Enabled")
     return args
 
-
+######################################################################################################################
 # Main Program starts here
-
+######################################################################################################################
 args = parse_arguments()
 discover_universes()
 
