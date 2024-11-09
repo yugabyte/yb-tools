@@ -1,16 +1,17 @@
 #!python3
 # YBA User list/creation/Deletion
-version = "0.05"
+version = "0.06"
 from ast import Dict
-from multiprocessing import Value
-import time
-from venv import create
+#from multiprocessing import Value
+#import time
+#from venv import create
 import requests
 import urllib3
 import json
 import argparse
 import re
 import sys
+import os
 from dataclasses import dataclass,field
 #from typing import Optional
 from typing import List
@@ -190,22 +191,32 @@ class User():
 
 
 #=====================================================================================================
+def environ_or_required(key) -> Dict:
+    """
+      If ENV var is available, use it
+      If not, mark this arg as REQUIRED
+    """
+    return (
+        {'default': os.environ.get(key)} if os.environ.get(key)
+        else {'required': True}
+    )
+
 def parse_arguments():
     parser = argparse.ArgumentParser(
         prog='yba-user-admin.py v ' + version,
         description='This Program operates on YBA users (List/Create/Delete)',
         epilog='End of help',
         add_help=True )
-    parser.add_argument('-d', '--debug', action='store_true')
-    parser.add_argument('-y', '--yba_url', required=True, help='YBAnywhere URL')
-    parser.add_argument('-c', '--customer_uuid', help='Customer UUID')
-    parser.add_argument('-a', '--auth_token', required=True, help='YBAnywhere Auth Token')
+    parser.add_argument('-d', '--debug', action='store_true', default=os.getenv("DEBUG",False))
+    parser.add_argument('-y', '--yba_url', help='YBAnywhere URL', **environ_or_required("YBA_HOST"))
+    parser.add_argument('-c', '--customer_uuid', help='Customer UUID: Auto-discovered if unspecified',default=os.getenv("CUST_UUID"))
+    parser.add_argument('-a', '--auth_token', help='YBAnywhere Auth Token', **environ_or_required("API_TOKEN"))
     action_group = parser.add_mutually_exclusive_group()
     action_group.add_argument('-ls','--list',action='store_true',default=True,help="List users (This is the default action)")
     action_group.add_argument('-rm','--remove','--delete',metavar='User@email.addr',help="Delete the specified user")
     action_group.add_argument('-mk','--make','--create',metavar='User@email.addr',help="Add a new user. role & password reqd")
     parser.add_argument('--role',help="Name of role to apply to new user")
-    parser.add_argument('-p','--password',help="Password for new user (8 ch, Upcase+num+special)")
+    parser.add_argument('-p','--password',help="Password for new user (>=8 ch, Upcase+num+special)")
     parser.add_argument("-s","--stdin",action='store_true',help="Read JSON stream from stdin")
     args = parser.parse_args()
     if args.debug:
@@ -279,6 +290,6 @@ if args.remove: # AKA Remove/delete
         break
     
     if not found:
-        raise ValueError("ERROR: Could not find user "+args.rm)
+        raise ValueError("ERROR: Could not find user "+args.remove)
 
 sys.exit(0)
