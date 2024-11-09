@@ -74,6 +74,7 @@ class Tablet():
         self.state = state
         self.replicas = replicas # array of tserver Node objects
         self.leader = leader #Tserver Node object
+        self.is_system_tablet = False
 
     def Print(self):
         leader_txt = "No Leader";
@@ -101,6 +102,7 @@ class Node():
         self.region = None
         self.az = None
         self.tablets = []
+        self.leadercount = 0
         self.universe= universe_object
 
     def nodeidx(self):
@@ -158,12 +160,14 @@ class MasterLeader(Node): #Inherited from Node
         print("==== Entity Info ===")
         #print(str(self.raw_response.content)[0:200])
         self.entity_json = json.loads(self.raw_response.text)
+        #Handle Keyspaces/Namespaces
         for keyspace in self.entity_json['keyspaces']:
-            n = Namespace(keyspace['keyspace_id'],keyspace['keyspace_name'], keyspace['keyspace_type'])
-            self.universe.namespace_by_id[n.id] = n
+            ns = Namespace(keyspace['keyspace_id'],keyspace['keyspace_name'], keyspace['keyspace_type'])
+            self.universe.namespace_by_id[ns.id] = ns
         #    print("keyspace:" + keyspace['keyspace_name'] + " " + keyspace['keyspace_type'] )
-            n.Print()
+            ns.Print()
 
+        #Handle Tables (relationship establised to Universe as well as Namespace)
         count = 0
         for table in self.entity_json['tables']:
             #print("table:" + table['table_name'] + " " + table['table_id'] )
@@ -171,8 +175,9 @@ class MasterLeader(Node): #Inherited from Node
             self.universe.table_by_id[t.id] = t
             count = count + 1
             if count < 6:
-                t.Print() # Print first 5 tables 
+                t.Print() # Print first 5 tables
 
+        #Handle Tablets (Table, Node)
         count = 0
         for tablet in self.entity_json['tablets']:
             #print("tablet:" + table['table_name'] + " " + table['table_id'])
@@ -181,14 +186,18 @@ class MasterLeader(Node): #Inherited from Node
             if tablet.get('replicas') is not None:
                 for r in tablet.get('replicas'):
                     replica_nodes.append(self.universe.tserver_by_uuid[r["server_uuid"]])
-            leader = None # Node object that is this tablet's leader
+            leader = None  # Node object that is this tablet's leader
             if tablet.get('leader') is not None:
                 leader = self.universe.tserver_by_uuid[tablet.get('leader')]
+                leader.leadercount += 1
+
             t = Tablet(tablet['tablet_id'], my_table, tablet["state"],
                        replica_nodes, leader) # this needs to be worked further
             for r in t.replicas:    #  attach t (tablet object) to its table
                 r.tablets.append(t) # So that Node object has what tablets are resident
             my_table.tablets.append(t)
+            if my_table.namespace.name[0:6] == "system":
+                t.is_system_tablet = True
             count += 1
             if count < 6:
                 t.Print()
@@ -237,6 +246,7 @@ class Universe():
         self.namespace_by_id = {}
         self.table_by_id = {}
         self.namespaces = []
+        self.replicationfactor = self.universeDetails["clusters"][0]["userIntent"]["replicationFactor"]
 
 
         for r_raw in self.universeDetails["clusters"][0]["placementInfo"]["cloudList"][0]["regionList"]:
@@ -266,6 +276,28 @@ class Universe():
                 return MasterLeader(n)
         return None
 
+    def Print_underreplicated_tablets(self):
+        underreplicated_tablets = 0
+        overeplicated_tablets = 0
+        total_tablets = 0
+        table_count = 0
+        for table in self.table_by_id.values():
+            table_count += 1
+            for tablet in table.tablets:
+                if tablet.is_system_tablet:
+                    continue
+                replicas = len(tablet.replicas)
+                total_tablets += 1
+                if replicas < self.replicationfactor:
+                    print("Underelicated tablet:" + tablet.id + " in table " + table.name + " Found " + str(replicas) + " replicas")
+                    underreplicated_tablets += 1
+                if replicas > self.replicationfactor:
+                    print("Overrelicated tablet:" + tablet.id + " in table " + table.name + " Found " + str(replicas) + " replicas")
+                    overeplicated_tablets += 1
+        print ("Total Tablets: " +str(total_tablets)+ ", Under Replicated tablets: " + str(underreplicated_tablets) + ", Over replicated tablets: " +str(overeplicated_tablets)+ ", Total tables " + str(table_count))
+
+
+
 
 
     def Print(self):
@@ -275,10 +307,11 @@ class Universe():
         print('===== Universe ===== ' + self.name + ' UUID = ' + self.UUID + " Provider is " + self.providertype \
             + (" Paused " if self.paused else "")) ### name and UUID
         if self.master_leader is not None:
-            print("     Master Leader is " + self.master_leader.name)
+            print("     Master Leader is " + self.master_leader.name + " and Replication Factor is " + str(self.replicationfactor) )
         self.print_gflags(5)### Print the glags for the universe.
         self.print_nodes(5)
         self.print_regions(5)
+
 
 
     def print_gflags(self,Indent=0):
@@ -344,6 +377,14 @@ def discover_universes():
             ml.get_overview()
             ml.get_tservers()
             ml.get_entities()
+            for n in u.tserver_by_uuid.values():
+                system_tablet_count = 0
+                for t in n.tablets:
+                    if t.is_system_tablet:
+                        system_tablet_count +=1
+                print("Node " + n.name + " Has " + str(len(n.tablets)-system_tablet_count) + " Tablets and " + str(n.leadercount) + " Leaders" )
+        u.Print_underreplicated_tablets()
+
         print()
 
     if not found:
