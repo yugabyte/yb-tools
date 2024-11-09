@@ -1,6 +1,6 @@
 #!python3
 # YBA User list/creation/Deletion
-version = "0.04"
+version = "0.05"
 from ast import Dict
 from multiprocessing import Value
 import time
@@ -69,6 +69,21 @@ class YBA_API():
         # avoids no CSRF token error by emptying the cookie jar
         self.session.cookies = requests.cookies.RequestsCookieJar()
         self.raw_response = self.session.post(url, json=data, headers=headers, timeout=timeout, verify=False)
+        if self.raw_response.status_code == 200:
+            if self.debug:
+                print('DEBUG: API Request successful')
+        else:
+            print(self.raw_response.json())
+            self.raw_response.raise_for_status()
+        return self.raw_response.text
+    
+    def Delete(self, url:str, timeout:int=2):
+        if self.debug:
+            print("DEBUG: API Delete:"+url)
+        headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.auth_token}
+        # avoids no CSRF token error by emptying the cookie jar
+        self.session.cookies = requests.cookies.RequestsCookieJar()
+        self.raw_response = self.session.delete(url, headers=headers, timeout=timeout, verify=False)
         if self.raw_response.status_code == 200:
             if self.debug:
                 print('DEBUG: API Request successful')
@@ -165,7 +180,15 @@ class User():
 
 
     def Delete_from_YBA(self):
-        raise ValueError("Delete user  is not implemented")
+        y = self.role.mgt.yba_api
+        if y.debug:
+            print ("DEBUG: Deleting User "+ self.email +" in YBA")
+        
+        response = y.Delete(y.cust_url + "/users/" + self.uuid)
+        if y.debug:
+            pprint(response)
+
+
 #=====================================================================================================
 def parse_arguments():
     parser = argparse.ArgumentParser(
@@ -179,11 +202,10 @@ def parse_arguments():
     parser.add_argument('-a', '--auth_token', required=True, help='YBAnywhere Auth Token')
     action_group = parser.add_mutually_exclusive_group()
     action_group.add_argument('-ls','--list',action='store_true',default=True,help="List users (This is the default action)")
-    action_group.add_argument('-rm','--remove',metavar='USER-Identifier')
-    action_group.add_argument('--mk','--make','--create',metavar='USER-Identifier')
+    action_group.add_argument('-rm','--remove','--delete',metavar='User@email.addr',help="Delete the specified user")
+    action_group.add_argument('-mk','--make','--create',metavar='User@email.addr',help="Add a new user. role & password reqd")
     parser.add_argument('--role',help="Name of role to apply to new user")
-    parser.add_argument('-p','--password',help="Password for new user")
-    parser.add_argument('-e','--email',help="Email for new user")
+    parser.add_argument('-p','--password',help="Password for new user (8 ch, Upcase+num+special)")
     parser.add_argument("-s","--stdin",action='store_true',help="Read JSON stream from stdin")
     args = parser.parse_args()
     if args.debug:
@@ -233,12 +255,30 @@ for u in userlist:
     if args.list:
         usr.Print()
 
-if args.mk: # AKA create/make
-    print("Will create user:"+args.mk + " in role:" + args.role )
+if args.make: # AKA create/make
+    print("Will create user:"+args.make + " in role:" + args.role )
+    if args.role is None:
+        raise ValueError("ERROR: You must specify --role when adding a user")
+    if args.password is None:
+        raise ValueError("ERROR: You must specify --password when adding a user")    
     role = RM.Get_or_create_role_by_name(args.role,allow_create=False)
-    usr=User(uuid=None,email=args.mk,creationDate=datetime.today().isoformat(),role=role,password=args.password)
+    usr=User(uuid=None,email=args.make,creationDate=datetime.today().isoformat(),role=role,password=args.password)
     usr.Create_in_YBA()
     usr.Print()
 
+if args.remove: # AKA Remove/delete
+    print("Attempting to remove user:"+args.remove )
+    found = False
+    for u in userlist:
+        if u["email"] != args.remove:
+            continue
+        found = True
+        role =  RM.Get_or_create_role_by_name(u["role"], allow_create=True)
+        usr=User(uuid=u["uuid"],email=u["email"],creationDate=u["creationDate"],role=role)
+        usr.Delete_from_YBA()
+        break
     
-# Create a user
+    if not found:
+        raise ValueError("ERROR: Could not find user "+args.rm)
+
+sys.exit(0)
