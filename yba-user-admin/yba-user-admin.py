@@ -1,6 +1,6 @@
 #!python3
 # YBA User list/creation/Deletion
-version = "0.06"
+version = "0.07"
 from ast import Dict
 #from multiprocessing import Value
 #import time
@@ -96,7 +96,7 @@ class YBA_API():
 class RoleManagement: # Forward declaration to help with circular reference
     pass
 
-@dataclass ( match_args=False)
+@dataclass
 class Role:
     yba_api: YBA_API
     mgt: RoleManagement 
@@ -105,7 +105,7 @@ class Role:
 
 #=====================================================================================================
 #https://docs.yugabyte.com/preview/yugabyte-platform/administer-yugabyte-platform/anywhere-rbac/#manage-custom-roles
-@dataclass ( match_args=False)
+@dataclass
 class RoleManagement:
     yba_api: YBA_API
     role_by_name: Dict = field(init=False)

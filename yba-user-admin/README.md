@@ -2,14 +2,14 @@
 # YBA User Admin
       \ \   )  __ )     \       |   |                                 |            _)
        \   )   __ \    _ \      |   |   __|   _ \   __|     _` |   _` |  __ `__ \   |  __ \
-          |    |   |  ___ \     |   | \__ \   __)  |       (   |  (   |  |   |   |  |  |   |
-         _|   ____) _)    _\   \___)  ____) \___| _|      \__,_| \__,_| _|  _|  _| _| _|  _|
+          |    |   |  ___ \     |   | \__ \   __)  |      (    |  (   |  |   |   |  |  |   |
+         _|   ____) _/    _\   \___/  ____) \___| _|      \__,_| \__,_| _|  _|  _| _| _|  _|
 
 Command-line to Add / Delete / List user accounts in YBA.
 
 ## Prerequisites
 
-This program uses standardad Python3 libraries, including @dataclass.
+This program uses standard Python3 libraries, including @dataclass.
 
 It accesses the YBA API documented in https://api-docs.yugabyte.com/docs/yugabyte-platform/18e7f5bab7963-list-all-users .
 You will need the following information:
@@ -44,7 +44,7 @@ options:
 
 ## Basic usage (List users)
 
-python3 yba-user-admin.py  **-y** https://\<yba-host\>/ **-a** \<access-token\>
+python3 yba-user-admin.py  **-y** https://\<yba-host\>/ **-a** \<access-token\> [**-ls**]
 
 ## Add (Create) a new user
 
@@ -71,7 +71,8 @@ A typical sequence would be:
 2. External program sends `"LISTUSERS":{}`
 
 3. *yba-user-admin* responds with:
-    ```"USERS":[
+    ```
+    "USERS":[
         {"email":"user1@email1.com","other":"attributes"},
         ...
     ]
