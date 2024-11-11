@@ -68,19 +68,25 @@ A typical sequence would be:
 1. External program starts *yba-user_admin* and sets **-y**, **-a** and **-s**.
    It also pipes **STDIN** and **STDOUT** from *yba-user-admin** to allow *Write* and *Read* streams.
 
-2. External program sends `"LISTUSERS":{}`
+2. External program sends `"LISTUSERS"`
 
 3. *yba-user-admin* responds with:
     ```
-    "USERS":[
+    [
         {"email":"user1@email1.com","other":"attributes"},
         ...
     ]
     ```
 
-4. External program sends `"ADDUSERS":[{"email":...}]
+4. External program sends
+  ```
+     {"ADDUSERS":[
+        {"email":"u1@rrr","role":"Admin","password","P@ssword123"},
+        {"email":"u2@eee"}
+    ]}
+  ```
 
-5.  *yba-user-admin* responds with: `"OK":"5 Users added"` 
+5.  *yba-user-admin* responds with: `["OK":"5 Users added"]` 
 
 6.  ... Similar for **DELETEUSERS**
   
