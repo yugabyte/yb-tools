@@ -90,41 +90,34 @@ A typical sequence would be:
 
 6.  ... Similar for **DELETEUSERS**
   
-## JSON Stream test
+## JSON Stream "LISTUSERS" test
 
 Use this to test the JSON stream function:
+Note the `-s` option is used to read from STDIN.
+Input is expected in JSON format, so the "LISTUSERS" must arrive with the quotes.
+```
+$ echo '"LISTUSERS"' |  python   ~/yb-tools/yba-user-admin/yba-user-admin.py  -y https://10.231.0.56/ -a d6465305-2419-4597-ae16-2c0b712ce209  -s
+[
+{"email":"vanand@yugabyte.com","uuid":"0e0f75ea-7933-4626-a61a-ea9f5add074b","role":"SuperAdmin","created":"2024-02-14T17:36:33Z"}
+{"email":"test@somewhere","uuid":"2f6cc436-1f5b-4fc1-8f1d-9e29c17111fc","role":"ReadOnly","created":"2024-11-08T21:45:27Z"}
+{"email":"test2@somewhere","uuid":"98422c5b-ee82-41f0-aa72-3022fd2eb965","role":"ReadOnly","created":"2024-11-08T21:54:54Z"}
+{"email":"test3@somewhere","uuid":"07b0fd3c-d274-4e41-9436-0a9b1458937f","role":"ReadOnly","created":"2024-11-08T21:56:36Z"}
+]
+```
+
+## JSON Stream "LISTUSERS"  AND "DELETEUSERS" test
+Two JSON commands are sent , and performed in sequence
 
 ```
-echo -e '"LISTUSERS"\n{"ADDUSERS":[\n{"email":"u1@rrr","role":"ReadOnly","password":"P@12345d67"},\n{"email":"u2@eee","role":"ReadOnly","password":"P#12w34567"}]}' \
-   | python   ~/yb-tools/yba-user-admin/yba-user-admin.py  -y https://Your-YBA-HOST/ -a Your-api-token-value -d -s
-```
-Debug output:
-```
-DEBUG: 2024-11-11T17:52:26.094814 Debugging Enabled
-DEBUG: API Get:https://Your-YBA-HOST//api/v1/customers (RAW=False)
-DEBUG: API Get:https://Your-YBA-HOST//api/v1/customers/ac21ccc1-6a1c-4c6a-bf13-acc07d7cfc3f/runtime_config/00000000-0000-0000-0000-000000000000/key/yb.rbac.use_new_authz (RAW=True)
-DEBUG: RoleManagement: use_new_authz=False
-DEBUG:json piece:LISTUSERS [<class 'str'> 11 bytes]
-DEBUG:Processing string command:LISTUSERS
-DEBUG: API Get:https://Your-YBA-HOST//api/v1/customers/ac21ccc1-6a1c-4c6a-bf13-acc07d7cfc3f/users (RAW=False)
-DEBUG: RoleManagement: Creating Role object for SuperAdmin
-DEBUG: RoleManagement: Creating Role object for ReadOnly
-USER vanand@yugabyte.com(0e0f75ea-7933-4626-a61a-ea9f5add074b) Role:SuperAdmin  Created:2024-02-14T17:36:33Z
-USER test@somewhere(2f6cc436-1f5b-4fc1-8f1d-9e29c17111fc) Role:ReadOnly  Created:2024-11-08T21:45:27Z
-USER test2@somewhere(98422c5b-ee82-41f0-aa72-3022fd2eb965) Role:ReadOnly  Created:2024-11-08T21:54:54Z
-USER test3@somewhere(07b0fd3c-d274-4e41-9436-0a9b1458937f) Role:ReadOnly  Created:2024-11-08T21:56:36Z
-DEBUG:json piece:{'ADDUSERS': [{'email': 'u1@rrr', 'role': 'ReadOnly', 'password': 'P@12345d67'}, {'email': 'u2@eee', 'role': 'ReadOnly', 'password': 'P#12w34567'}]} [<class 'dict'> 138 bytes]
-DEBUG:Processing dict command:{'ADDUSERS': [{'email': 'u1@rrr', 'role': 'ReadOnly', 'password': 'P@12345d67'}, {'email': 'u2@eee', 'role': 'ReadOnly', 'password': 'P#12w34567'}]}
-DEBUG: Creating User u1@rrr in YBA
-DEBUG: API Post:https://Your-YBA-HOST//api/v1/customers/ac21ccc1-6a1c-4c6a-bf13-acc07d7cfc3f/users
-DEBUG: API Request successful
-'{"uuid":"d3389290-964d-4429-aa74-37c237e288e5","customerUUID":"ac21ccc1-6a1c-4c6a-bf13-acc07d7cfc3f","email":"u1@rrr","creationDate":"2024-11-12T01:52:28Z","role":"ReadOnly","userType":"local","ldapSpecifiedRole":false,"primary":false,"features":{"universe":{"import":"disabled","create":"disabled"},"config":{"infra":"disabled","backup":"disabled"},"menu":{"config":"disabled"},"health":{"configure":"disabled"},"alert":{"list":{"actions":"disabled"},"configuration":{"actions":"disabled"},"destinations":{"actions":"disabled"},"channels":{"actions":"disabled"}},"universes":{"details":{"overview":{"upgradeSoftware":"hidden","editGFlags":"hidden","editUniverse":"hidden","readReplica":"hidden","manageEncryption":"hidden","restartUniverse":"hidden","pausedUniverse":"disabled","deleteUniverse":"hidden","costs":"hidden","systemdUpgrade":"hidden"}},"tableActions":"disabled","actions":"disabled","backup":"disabled"},"administration":{"highAvailability":"hidden"},"main":{"stats":"hidden"},"profile":{"profileInfo":"disabled"}}}'
-USER u1@rrr(d3389290-964d-4429-aa74-37c237e288e5) Role:ReadOnly  Created:2024-11-12T01:52:28Z
-DEBUG: Creating User u2@eee in YBA
-DEBUG: API Post:https://Your-YBA-HOST//api/v1/customers/ac21ccc1-6a1c-4c6a-bf13-acc07d7cfc3f/users
-DEBUG: API Request successful
-'{"uuid":"e310d795-53be-480e-8b1f-8edbf654576d","customerUUID":"ac21ccc1-6a1c-4c6a-bf13-acc07d7cfc3f","email":"u2@eee","creationDate":"2024-11-12T01:52:29Z","role":"ReadOnly","userType":"local","ldapSpecifiedRole":false,"primary":false,"features":{"universe":{"import":"disabled","create":"disabled"},"config":{"infra":"disabled","backup":"disabled"},"menu":{"config":"disabled"},"health":{"configure":"disabled"},"alert":{"list":{"actions":"disabled"},"configuration":{"actions":"disabled"},"destinations":{"actions":"disabled"},"channels":{"actions":"disabled"}},"universes":{"details":{"overview":{"upgradeSoftware":"hidden","editGFlags":"hidden","editUniverse":"hidden","readReplica":"hidden","manageEncryption":"hidden","restartUniverse":"hidden","pausedUniverse":"disabled","deleteUniverse":"hidden","costs":"hidden","systemdUpgrade":"hidden"}},"tableActions":"disabled","actions":"disabled","backup":"disabled"},"administration":{"highAvailability":"hidden"},"main":{"stats":"hidden"},"profile":{"profileInfo":"disabled"}}}'
-USER u2@eee(e310d795-53be-480e-8b1f-8edbf654576d) Role:ReadOnly  Created:2024-11-12T01:52:29Z
-DEBUG:ACCUMULATED JSON FROM STDIN:=====
-['LISTUSERS', {'ADDUSERS': [{'email': 'u1@rrr', 'role': 'ReadOnly', 'password': 'P@12345d67'}, {'email': 'u2@eee', 'role': 'ReadOnly', 'password': 'P#12w34567'}]}]
+$ echo -e '"LISTUSERS"\n{"DELETEUSERS":[\n{"email":"u1@rrr","role":"ReadOnly","password":"P@12345d67"},\n{"email":"u2@eee","role":"ReadOnly","password":"P#12w34567"}]}' | python   ~/yb-tools/yba-user-admin/yba-user-admin.py  -y https://10.231.0.56/ -a d6465305-2419-4597-ae16-2c0b712ce209 -s
+[
+{"email":"vanand@yugabyte.com","uuid":"0e0f75ea-7933-4626-a61a-ea9f5add074b","role":"SuperAdmin","created":"2024-02-14T17:36:33Z"}
+{"email":"test@somewhere","uuid":"2f6cc436-1f5b-4fc1-8f1d-9e29c17111fc","role":"ReadOnly","created":"2024-11-08T21:45:27Z"}
+{"email":"test2@somewhere","uuid":"98422c5b-ee82-41f0-aa72-3022fd2eb965","role":"ReadOnly","created":"2024-11-08T21:54:54Z"}
+{"email":"test3@somewhere","uuid":"07b0fd3c-d274-4e41-9436-0a9b1458937f","role":"ReadOnly","created":"2024-11-08T21:56:36Z"}
+{"email":"u1@rrr","uuid":"f0d75e9e-8e27-4ac8-a0fb-9b198ac2b248","role":"ReadOnly","created":"2024-11-12T03:23:39Z"}
+{"email":"u2@eee","uuid":"a38c53c5-298c-417c-9d26-b6266d182403","role":"ReadOnly","created":"2024-11-12T03:23:39Z"}
+]
+{"success":true,"Operation":"delete","msg":"2 users deleted"}
+
 ```
