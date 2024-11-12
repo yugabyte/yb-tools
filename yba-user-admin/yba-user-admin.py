@@ -181,7 +181,7 @@ class User():
             "email": self.email,
             "password": self.password,
             "confirmPassword": self.password,
-            "role": role.name,
+            "role": self.role.name,
             "timezone":  "America/New_York" # Fake it out 
         }
         response = y.Post(y.cust_url + "/users", data=payload)
@@ -200,7 +200,91 @@ class User():
         if y.debug:
             pprint(response)
 
+@dataclass
+class Stdin_Processor():
+    yba:YBA_API
 
+    def Process_str_cmd(self,cmd:str):
+        if self.yba.debug:
+            print("DEBUG:Processing string command:"+cmd)
+        if cmd == "LISTUSERS":
+            for u in self.yba.Get_User_List():
+                u.Print();
+            return
+        
+    #=====================================================================================================
+    def Process_dict_part(self,cmd:dict):
+        if self.yba.debug:
+            print("DEBUG:Processing dict command:"+str(cmd))
+        if cmd.get("ADDUSERS") is not None:
+            if not isinstance(cmd["ADDUSERS"],list):
+                raise ValueError("ERROR:ADDUSERS: Could not find user list to add")
+            for u_json in cmd["ADDUSERS"]:
+                if u_json.get("email") is None:
+                    raise ValueError("ERROR: You must specify email when adding a user")
+                if u_json.get("role") is None:
+                    raise ValueError("ERROR: You must specify role when adding a user="+u_json["email"])
+                role = self.yba.RoleManagement.Get_or_create_role_by_name(u_json["role"],allow_create=True)
+                usr=User(uuid=None,email=u_json["email"],creationDate=datetime.today().isoformat(),role=role,password=u_json["password"])
+                usr.Create_in_YBA()
+                usr.Print()
+
+        if cmd.get("DELETEUSERS") is not None:
+            if not isinstance(cmd["DELETEUSERS"],list):
+                raise ValueError("ERROR:DELETEUSERS: Could not find user list to delete")
+            for u_json in cmd["DELETEUSERS"]:
+                if u_json.get("email") is None:
+                    raise ValueError("ERROR: You must specify email when deleting a user")
+                found = False
+                for u in self.yba.Get_User_List():
+                    if u.email != u_json["email"]:
+                        continue
+                    found = True
+                    u.Delete_from_YBA()
+                    break
+                if found:
+                    print('"OK"')
+            
+    #=====================================================================================================
+    def Run(self):
+        """
+            to parse a series of json objects from stdin 
+        """
+        json_found = []  
+        # raw_decode expects byte1 to be part of a JSON, so remove whitespace from left
+        stdin = sys.stdin.read().lstrip()
+        decoder = JSONDecoder()
+
+        while len(stdin) > 0:
+            # parsed_json, number of bytes used
+            parsed_json, consumed = decoder.raw_decode(stdin)
+            # Remove bytes that were consumed in this object ^ 
+            if self.yba.debug:
+                print("DEBUG:json piece:"+ str(parsed_json) + " ["+ str(type(parsed_json)) + " " + str(consumed) + " bytes]")
+            stdin = stdin[consumed:]
+            # Process what we just got ..
+            if isinstance(parsed_json, str):
+                self.Process_str_cmd(parsed_json)
+            elif isinstance(parsed_json, list):
+                for part in parsed_json:
+                    if isinstance(part, str):
+                        self.Process_str_cmd(part)
+                    else:
+                        self.Process_dict_part(part)
+            elif isinstance(parsed_json, dict):
+                self.Process_dict_part(parsed_json)
+            else:
+                raise ValueError("ERROR:Unexpected input type on STDIN:"+str(type(parsed_json))+"="+str(parsed_json))
+            # Save this parsed object
+            json_found.append(parsed_json)
+            # Remove any whitespace before the next JSON object
+            stdin = stdin.lstrip()
+
+        if self.yba.debug:
+            print("DEBUG:ACCUMULATED JSON FROM STDIN:=====")
+            print(json_found)
+
+#=====================================================================================================
 #=====================================================================================================
 def environ_or_required(key) -> Dict:
     """
@@ -235,86 +319,6 @@ def parse_arguments():
     
     return args
 #=====================================================================================================
-def Process_str_cmd(cmd:str,yba:YBA_API):
-    if yba.debug:
-        print("DEBUG:Processing string command:"+cmd)
-    if cmd == "LISTUSERS":
-        for u in yba.Get_User_List():
-            u.Print();
-        return
-    
-#=====================================================================================================
-def Process_dict_part(cmd:dict,yba:YBA_API):
-    if yba.debug:
-        print("DEBUG:Processing dict command:"+str(cmd))
-    if cmd.get("ADDUSERS") is not None:
-        if not isinstance(cmd["ADDUSERS"],list):
-            raise ValueError("ERROR:ADDUSERS: Could not find user list to add")
-        for u_json in cmd["ADDUSERS"]:
-            if u_json.get("email") is None:
-                raise ValueError("ERROR: You must specify email when adding a user")
-            if u_json.get("role") is None:
-                raise ValueError("ERROR: You must specify role when adding a user="+u_json["email"])
-            role = yba.RoleManagement.Get_or_create_role(u_json["role"],allow_create=True)
-            usr=User(uuid=None,email=u_json["email"],creationDate=datetime.today().isoformat(),role=role,password=u_json["password"])
-            usr.Create_in_YBA()
-            usr.Print()
-
-    if cmd.get("DELETEUSERS") is not None:
-        if not isinstance(cmd["DELETEUSERS"],list):
-            raise ValueError("ERROR:DELETEUSERS: Could not find user list to delete")
-        for u_json in cmd["DELETEUSERS"]:
-            if u_json.get("email") is None:
-                raise ValueError("ERROR: You must specify email when deleting a user")
-            found = False
-            for u in yba.Get_User_List():
-                if u.email != u_json["email"]:
-                    continue
-                found = True
-                u.Delete_from_YBA()
-                break
-            if found:
-                print('"OK"')
-        
-#=====================================================================================================
-def Process_JSON_from_stdin(yba:YBA_API=None):
-    """
-        to parse a series of json objects from stdin 
-    """
-    json_found = []  
-    # raw_decode expects byte1 to be part of a JSON, so remove whitespace from left
-    stdin = sys.stdin.read().lstrip()
-    decoder = JSONDecoder()
-
-    while len(stdin) > 0:
-        # parsed_json, number of bytes used
-        parsed_json, consumed = decoder.raw_decode(stdin)
-        # Remove bytes that were consumed in this object ^ 
-        if yba.debug:
-            print("DEBUG:json piece:"+ str(parsed_json) + " ["+ str(type(parsed_json)) + " " + str(consumed) + " bytes]")
-        stdin = stdin[consumed:]
-        # Process what we just got ..
-        if isinstance(parsed_json, str):
-            Process_str_cmd(parsed_json, yba)
-        elif isinstance(parsed_json, list):
-            for part in parsed_json:
-                if isinstance(part, str):
-                    Process_str_cmd(part, yba)
-                else:
-                    Process_dict_part(part,yba)
-        elif isinstance(parsed_json, dict):
-             Process_dict_part(parsed_json,yba)
-        else:
-            raise ValueError("ERROR:Unexpected input type on STDIN:"+str(type(parsed_json))+"="+str(parsed_json))
-        # Save this parsed object
-        json_found.append(parsed_json)
-        # Remove any whitespace before the next JSON object
-        stdin = stdin.lstrip()
-
-    if yba.debug:
-        print("DEBUG:ACCUMULATED JSON FROM STDIN:=====")
-        print(json_found)
-
 #=====================================================================================================
 #  M  A  I  N
 #=====================================================================================================
@@ -323,7 +327,7 @@ args = parse_arguments()
 y = YBA_API(yba_url=args.yba_url, auth_token=args.auth_token, debug=args.debug)
 
 if args.stdin:
-    Process_JSON_from_stdin(yba=y)
+    Stdin_Processor(yba=y).Run()
     sys.exit(0)
 
 if args.make: # AKA create/make
