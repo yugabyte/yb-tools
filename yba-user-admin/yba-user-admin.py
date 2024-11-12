@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # YBA User list/creation/Deletion
-version = "0.07"
+version = "0.08"
 from ast import Dict, parse
 import requests
 import urllib3
@@ -200,8 +200,9 @@ class User():
         if y.debug:
             pprint(response)
 
+#=====================================================================================================
 @dataclass
-class Stdin_Processor():
+class STDIN_Json_Stream_Processor():
     yba:YBA_API
 
     def Process_str_cmd(self,cmd:str):
@@ -327,7 +328,7 @@ args = parse_arguments()
 y = YBA_API(yba_url=args.yba_url, auth_token=args.auth_token, debug=args.debug)
 
 if args.stdin:
-    Stdin_Processor(yba=y).Run()
+    STDIN_Json_Stream_Processor(yba=y).Run()
     sys.exit(0)
 
 if args.make: # AKA create/make
