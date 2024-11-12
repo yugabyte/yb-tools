@@ -167,7 +167,10 @@ class User():
     password: str = None
     #'userType': 'local', 'ldapSpecifiedRole': False, 'primary': True, 'features': 
 
-    def Print(self):
+    def Print(self,json:bool=False):
+        if json:
+            print('{"email":"'+ self.email+'","uuid":"'+str(self.uuid)+'","role":"'+self.role.name + '","created":"'+self.creationDate +'"}')
+            return
         print("USER "+self.email+"("+str(self.uuid)+") Role:"+self.role.name + "  Created:"+self.creationDate  )
 
     def Create_in_YBA(self):
@@ -209,17 +212,20 @@ class STDIN_Json_Stream_Processor():
         if self.yba.debug:
             print("DEBUG:Processing string command:"+cmd)
         if cmd == "LISTUSERS":
+            print ("[")
             for u in self.yba.Get_User_List():
-                u.Print();
+                u.Print(json=True)
+            print ("]")
             return
         
-    #=====================================================================================================
+
     def Process_dict_part(self,cmd:dict):
         if self.yba.debug:
             print("DEBUG:Processing dict command:"+str(cmd))
         if cmd.get("ADDUSERS") is not None:
             if not isinstance(cmd["ADDUSERS"],list):
                 raise ValueError("ERROR:ADDUSERS: Could not find user list to add")
+            print ('[')
             for u_json in cmd["ADDUSERS"]:
                 if u_json.get("email") is None:
                     raise ValueError("ERROR: You must specify email when adding a user")
@@ -228,25 +234,28 @@ class STDIN_Json_Stream_Processor():
                 role = self.yba.RoleManagement.Get_or_create_role_by_name(u_json["role"],allow_create=True)
                 usr=User(uuid=None,email=u_json["email"],creationDate=datetime.today().isoformat(),role=role,password=u_json["password"])
                 usr.Create_in_YBA()
-                usr.Print()
+                usr.Print(json=True)
+            print (']')
 
         if cmd.get("DELETEUSERS") is not None:
             if not isinstance(cmd["DELETEUSERS"],list):
                 raise ValueError("ERROR:DELETEUSERS: Could not find user list to delete")
+            delete_count = 0
             for u_json in cmd["DELETEUSERS"]:
                 if u_json.get("email") is None:
                     raise ValueError("ERROR: You must specify email when deleting a user")
-                found = False
                 for u in self.yba.Get_User_List():
                     if u.email != u_json["email"]:
                         continue
-                    found = True
+                    delete_count += 1
                     u.Delete_from_YBA()
                     break
-                if found:
-                    print('"OK"')
+            if delete_count == 0:
+                print ('{"success":false,"Operation":"delete","msg":"Nothing deleted"}')
+            else:
+                print('{"success":true,"Operation":"delete","msg":"' + str(delete_count)+' users deleted"}')
             
-    #=====================================================================================================
+    #============ R U N   M e t h o d ===
     def Run(self):
         """
             to parse a series of json objects from stdin 
@@ -289,6 +298,7 @@ class STDIN_Json_Stream_Processor():
 #=====================================================================================================
 def environ_or_required(key) -> Dict:
     """
+      Helper for Param parser...
       If ENV var is available, use it
       If not, mark this arg as REQUIRED
     """
@@ -325,7 +335,7 @@ def parse_arguments():
 #=====================================================================================================
 args = parse_arguments() 
 
-y = YBA_API(yba_url=args.yba_url, auth_token=args.auth_token, debug=args.debug)
+y = YBA_API(yba_url=args.yba_url, auth_token=args.auth_token, customer_uuid=args.customer_uuid, debug=args.debug)
 
 if args.stdin:
     STDIN_Json_Stream_Processor(yba=y).Run()
