@@ -1,10 +1,7 @@
-#!python3
+#!/usr/bin/python3
 # YBA User list/creation/Deletion
 version = "0.07"
-from ast import Dict
-#from multiprocessing import Value
-#import time
-#from venv import create
+from ast import Dict, parse
 import requests
 import urllib3
 import json
@@ -21,6 +18,9 @@ from datetime import datetime
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+class RoleManagement: # Forward declaration to help with circular reference
+    pass
+
 @dataclass
 class YBA_API():
     yba_url: str
@@ -29,6 +29,8 @@ class YBA_API():
     raw_response: str = field(default= None)
     debug:bool = False
     session = None
+    RoleManagement:RoleManagement = None
+    UserList = []
 
     def __post_init__(self):
         self.yba_url  = self.yba_url.strip("/")
@@ -40,6 +42,7 @@ class YBA_API():
 
         self.cust_url = self.yba_url + '/api/v1/customers/' + self.customer_uuid
         self.univ_url = self.cust_url + '/universes'
+        self.RoleManagement = RoleManagement(self)
 
 
     def __set_customeruuid(self):
@@ -59,6 +62,14 @@ class YBA_API():
             return self.raw_response.text
         return json.loads(self.raw_response.text)
     
+    def Get_User_List(self):
+        user_json = self.Get(self.cust_url+"/users")
+        self.UserList = [] # Zap it 
+        for u in user_json:
+            role =  self.RoleManagement.Get_or_create_role_by_name(u["role"], allow_create=True)
+            self.UserList.append(User(uuid=u["uuid"],email=u["email"],creationDate=u["creationDate"],role=role)) # User objects
+        return self.UserList
+
     def Post(self, url:str, data, extra_headers=None, timeout:int=2):
         # avoids no CSRF token error by emptying the cookie jar
         # session.cookies = requests.cookies.RequestsCookieJar()
@@ -93,8 +104,6 @@ class YBA_API():
             self.raw_response.raise_for_status()
         return self.raw_response.text
 #=====================================================================================================
-class RoleManagement: # Forward declaration to help with circular reference
-    pass
 
 @dataclass
 class Role:
@@ -111,15 +120,17 @@ class RoleManagement:
     role_by_name: Dict = field(init=False)
     use_new_authz: bool = False
     new_authz_uri:str = "/runtime_config/00000000-0000-0000-0000-000000000000/key/yb.rbac.use_new_authz"
+    role_list = []
 
     def __post_init__(self):
+        self.yba_api.RoleManagement = self
         self.use_new_authz = self.Fine_grained_RBAC()
         if self.yba_api.debug:
             print("DEBUG: RoleManagement: use_new_authz="+str(self.use_new_authz))
         self.role_by_name  = {}
         if self.use_new_authz:
-            y = self.yba_api
-            role_list = y.Get(y.cust_url + "/rbac/role")
+            role_list = self.yba_api.Get(y.cust_url + "/rbac/role")
+            # Populate role_by_name once we know what this looks like 
 
     def Get_or_create_role_by_name(self,name:str,allow_create:bool=True) -> Role:
         if self.role_by_name.get(name) is None:
@@ -133,7 +144,7 @@ class RoleManagement:
 
     def Fine_grained_RBAC(self,set_to:bool = None) -> bool:
         if set_to is None: # get & return current value
-            use_new_authz_text = self.yba_api.Get(y.cust_url
+            use_new_authz_text = self.yba_api.Get(self.yba_api.cust_url
                                                 + self.new_authz_uri
                                                 ,raw=True)
             return use_new_authz_text.upper() == "TRUE"
@@ -224,7 +235,49 @@ def parse_arguments():
     
     return args
 #=====================================================================================================
-def Process_JSON_from_stdin():
+def Process_str_cmd(cmd:str,yba:YBA_API):
+    if yba.debug:
+        print("DEBUG:Processing string command:"+cmd)
+    if cmd == "LISTUSERS":
+        for u in yba.Get_User_List():
+            u.Print();
+        return
+    
+#=====================================================================================================
+def Process_dict_part(cmd:dict,yba:YBA_API):
+    if yba.debug:
+        print("DEBUG:Processing dict command:"+str(cmd))
+    if cmd.get("ADDUSERS") is not None:
+        if not isinstance(cmd["ADDUSERS"],list):
+            raise ValueError("ERROR:ADDUSERS: Could not find user list to add")
+        for u_json in cmd["ADDUSERS"]:
+            if u_json.get("email") is None:
+                raise ValueError("ERROR: You must specify email when adding a user")
+            if u_json.get("role") is None:
+                raise ValueError("ERROR: You must specify role when adding a user="+u_json["email"])
+            role = yba.RoleManagement.Get_or_create_role(u_json["role"],allow_create=True)
+            usr=User(uuid=None,email=u_json["email"],creationDate=datetime.today().isoformat(),role=role,password=u_json["password"])
+            usr.Create_in_YBA()
+            usr.Print()
+
+    if cmd.get("DELETEUSERS") is not None:
+        if not isinstance(cmd["DELETEUSERS"],list):
+            raise ValueError("ERROR:DELETEUSERS: Could not find user list to delete")
+        for u_json in cmd["DELETEUSERS"]:
+            if u_json.get("email") is None:
+                raise ValueError("ERROR: You must specify email when deleting a user")
+            found = False
+            for u in yba.Get_User_List():
+                if u.email != u_json["email"]:
+                    continue
+                found = True
+                u.Delete_from_YBA()
+                break
+            if found:
+                print('"OK"')
+        
+#=====================================================================================================
+def Process_JSON_from_stdin(yba:YBA_API=None):
     """
         to parse a series of json objects from stdin 
     """
@@ -237,14 +290,30 @@ def Process_JSON_from_stdin():
         # parsed_json, number of bytes used
         parsed_json, consumed = decoder.raw_decode(stdin)
         # Remove bytes that were consumed in this object ^ 
-        print("json piece:"+ str(parsed_json) + " ["+ str(consumed) + " bytes]")
+        if yba.debug:
+            print("DEBUG:json piece:"+ str(parsed_json) + " ["+ str(type(parsed_json)) + " " + str(consumed) + " bytes]")
         stdin = stdin[consumed:]
+        # Process what we just got ..
+        if isinstance(parsed_json, str):
+            Process_str_cmd(parsed_json, yba)
+        elif isinstance(parsed_json, list):
+            for part in parsed_json:
+                if isinstance(part, str):
+                    Process_str_cmd(part, yba)
+                else:
+                    Process_dict_part(part,yba)
+        elif isinstance(parsed_json, dict):
+             Process_dict_part(parsed_json,yba)
+        else:
+            raise ValueError("ERROR:Unexpected input type on STDIN:"+str(type(parsed_json))+"="+str(parsed_json))
         # Save this parsed object
         json_found.append(parsed_json)
         # Remove any whitespace before the next JSON object
         stdin = stdin.lstrip()
-    print("ACCUMULATED JSON FROM STDIN:=====")
-    print(json_found)
+
+    if yba.debug:
+        print("DEBUG:ACCUMULATED JSON FROM STDIN:=====")
+        print(json_found)
 
 #=====================================================================================================
 #  M  A  I  N
@@ -252,44 +321,42 @@ def Process_JSON_from_stdin():
 args = parse_arguments() 
 
 y = YBA_API(yba_url=args.yba_url, auth_token=args.auth_token, debug=args.debug)
-RM = RoleManagement(y)
-RM.Get_or_create_role_by_name("ReadOnly", allow_create=True) # Manufacture a role 
 
 if args.stdin:
-    Process_JSON_from_stdin()
+    Process_JSON_from_stdin(yba=y)
     sys.exit(0)
-
-userlist = y.Get(y.cust_url+"/users")
-for u in userlist:
-    role =  RM.Get_or_create_role_by_name(u["role"], allow_create=True)
-    usr=User(uuid=u["uuid"],email=u["email"],creationDate=u["creationDate"],role=role)
-    if args.list:
-        usr.Print()
 
 if args.make: # AKA create/make
     print("Will create user:"+args.make + " in role:" + args.role )
     if args.role is None:
         raise ValueError("ERROR: You must specify --role when adding a user")
     if args.password is None:
-        raise ValueError("ERROR: You must specify --password when adding a user")    
-    role = RM.Get_or_create_role_by_name(args.role,allow_create=False)
+        raise ValueError("ERROR: You must specify --password when adding a user")
+    y.RoleManagement.Get_or_create_role_by_name("ReadOnly", allow_create=True) # Manufacture a role 
+    role = y.RoleManagement.Get_or_create_role_by_name(args.role,allow_create=False)
     usr=User(uuid=None,email=args.make,creationDate=datetime.today().isoformat(),role=role,password=args.password)
     usr.Create_in_YBA()
     usr.Print()
+    sys.exit(0)
 
 if args.remove: # AKA Remove/delete
     print("Attempting to remove user:"+args.remove )
+    userlist = y.Get_User_List()
     found = False
     for u in userlist:
-        if u["email"] != args.remove:
+        if u.email != args.remove:
             continue
         found = True
-        role =  RM.Get_or_create_role_by_name(u["role"], allow_create=True)
-        usr=User(uuid=u["uuid"],email=u["email"],creationDate=u["creationDate"],role=role)
-        usr.Delete_from_YBA()
+        u.Delete_from_YBA()
         break
     
     if not found:
         raise ValueError("ERROR: Could not find user "+args.remove)
+    print("Removed "+ args.remove)
+    sys.exit(0)
+
+# No args, or args.ls
+for u in y.Get_User_List():
+    u.Print();
 
 sys.exit(0)
