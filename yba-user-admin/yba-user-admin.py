@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # YBA User list/creation/Deletion
-version = "0.08"
+version = "0.09"
 from ast import Dict, parse
 import requests
 import urllib3
@@ -29,7 +29,7 @@ class YBA_API():
     raw_response: str = field(default= None)
     debug:bool = False
     session = None
-    RoleManagement:RoleManagement = None
+    roleManagement:RoleManagement = None
     UserList = []
 
     def __post_init__(self):
@@ -42,7 +42,7 @@ class YBA_API():
 
         self.cust_url = self.yba_url + '/api/v1/customers/' + self.customer_uuid
         self.univ_url = self.cust_url + '/universes'
-        self.RoleManagement = RoleManagement(self)
+        self.roleManagement = RoleManagement(self)
 
 
     def __set_customeruuid(self):
@@ -66,7 +66,7 @@ class YBA_API():
         user_json = self.Get(self.cust_url+"/users")
         self.UserList = [] # Zap it 
         for u in user_json:
-            role =  self.RoleManagement.Get_or_create_role_by_name(u["role"], allow_create=True)
+            role =  self.roleManagement.Get_or_create_role_by_name(u["role"], allow_create=True)
             self.UserList.append(User(uuid=u["uuid"],email=u["email"],creationDate=u["creationDate"],role=role)) # User objects
         return self.UserList
 
@@ -123,7 +123,7 @@ class RoleManagement:
     role_list = []
 
     def __post_init__(self):
-        self.yba_api.RoleManagement = self
+        self.yba_api.roleManagement = self
         self.use_new_authz = self.Fine_grained_RBAC()
         if self.yba_api.debug:
             print("DEBUG: RoleManagement: use_new_authz="+str(self.use_new_authz))
@@ -231,7 +231,7 @@ class STDIN_Json_Stream_Processor():
                     raise ValueError("ERROR: You must specify email when adding a user")
                 if u_json.get("role") is None:
                     raise ValueError("ERROR: You must specify role when adding a user="+u_json["email"])
-                role = self.yba.RoleManagement.Get_or_create_role_by_name(u_json["role"],allow_create=True)
+                role = self.yba.roleManagement.Get_or_create_role_by_name(u_json["role"],allow_create=True)
                 usr=User(uuid=None,email=u_json["email"],creationDate=datetime.today().isoformat(),role=role,password=u_json["password"])
                 usr.Create_in_YBA()
                 usr.Print(json=True)
@@ -347,8 +347,8 @@ if args.make: # AKA create/make
         raise ValueError("ERROR: You must specify --role when adding a user")
     if args.password is None:
         raise ValueError("ERROR: You must specify --password when adding a user")
-    y.RoleManagement.Get_or_create_role_by_name("ReadOnly", allow_create=True) # Manufacture a role 
-    role = y.RoleManagement.Get_or_create_role_by_name(args.role,allow_create=False)
+    y.roleManagement.Get_or_create_role_by_name("ReadOnly", allow_create=True) # Manufacture a role 
+    role = y.roleManagement.Get_or_create_role_by_name(args.role,allow_create=False)
     usr=User(uuid=None,email=args.make,creationDate=datetime.today().isoformat(),role=role,password=args.password)
     usr.Create_in_YBA()
     usr.Print()

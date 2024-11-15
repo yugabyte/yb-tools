@@ -62,6 +62,7 @@ You can use **--remove** or **--delete** instead of **--rm**
 
 The script supports commands sent via an external stream, when the **-s** (**--stdin**) option is used.
 In this case, the *yba-user-admin* script will read a **JSON** stream from **STDIN**, and process the commands supplied, and place **JSON** in the output stream **STDOUT**.
+The intended purpose of this feature is to run THIS program as a child-process of a controlling program that feeds data into STDIN, and processes responses from THIS.
 
 A typical sequence would be:
 
@@ -82,7 +83,7 @@ A typical sequence would be:
   ```
      {"ADDUSERS":[
         {"email":"u1@rrr","role":"Admin","password","P@ssword123"},
-        {"email":"u2@eee"}
+        {"email":"u2@eee" ...}
     ]}
   ```
 
