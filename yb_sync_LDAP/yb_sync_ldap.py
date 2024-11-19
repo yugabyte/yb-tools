@@ -33,9 +33,9 @@ from cassandra.auth import PlainTextAuthProvider
 from cassandra.query import dict_factory  # pylint: disable=no-name-in-module
 from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
+import subprocess
 
-
-VERSION = "0.44"
+VERSION = "0.45"
 
 
 
@@ -108,7 +108,39 @@ def generate_random_password():
 class LDAPSyncException(Exception):
     """A YugaByte LDAP sync exception."""
 
+##############################################################################################################
 
+class EXTERNAL_PLUGIN:
+    """ For handling External (YBA) users (list/add/delete) via an external script """
+
+    def __init__(self, args = None, ldapsync_object=None) -> None:
+        logging.debug("DEBUG: EXTERNAL_PLUGIN with command:" + args.externalcommand)
+        self.args = args
+        self.commandline = args.externalcommand
+        self.userdict = {}
+        self.ldapsync_object = ldapsync_object
+        self.process = None
+
+    def Run(self):
+        logging.debug("DEBUG: Starting external process..")
+        self.process = subprocess.Popen(self.commandline, shell=False,
+                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                      text=True)
+        self.userdict = self.__Get_current_users()
+        # Code needed to diff with existing LDAP users
+        # Then send command to add/delete users as needed to sync
+
+    def __Get_current_users(self):
+        try:
+            logging.debug("DEBUG: Getting YBA User List..")
+            outs, errs = self.process.communicate(input='"LISTUSERS"',timeout=10)
+            logging.info("INFO:User list:"+str(outs))
+            logging.info("INFO:User list ERRORS:"+str(errs))
+        except TimeoutExpired:
+            #proc.kill()
+            logging.info("INFO:User list timed out")
+
+##############################################################################################################
 class YBLDAPSync:
     """ The main class """
     def __init__(self):
@@ -121,6 +153,7 @@ class YBLDAPSync:
         self.ysql_session = None
         self.http_type    = 'http'
         self.api_port     = self.args.apiport # Default 9000 (for docker instance)
+        self.external_plugin_object = None
 
     @classmethod
     def cleanup_temporary_certfile(cls, filepath):
@@ -280,6 +313,7 @@ class YBLDAPSync:
         xapi_headers['X-AUTH-YW-API-TOKEN'] = apitoken
         logging.debug("Getting customer list from YBA API {}.".format(yw_url))
         api_result = requests.get(yw_url, headers=xapi_headers, verify=False)
+        api_result.raise_for_status()
         data = json.loads(api_result.text)
         if 'error' in data:
             raise LDAPSyncException("Failed to receive customer list from API: {}".format(data['error']))
@@ -301,6 +335,7 @@ class YBLDAPSync:
         yw_url = YW_API_TOKEN.format(self.http_type,self.host_ipaddr, self.api_port, customeruuid)
         xauth_headers['X-AUTH-TOKEN'] = authtoken
         api_result = requests.put(yw_url, headers=xauth_headers)
+        api_result.raise_for_status()
         data = json.loads(api_result.text)
         if 'error' in data:
             raise LDAPSyncException("Failed to receive apitoken from API: {}".format(data['error']))
@@ -1011,6 +1046,15 @@ class YBLDAPSync:
             requests_log.setLevel(logging.DEBUG)
             requests_log.propagate = True
         logging.debug("DEBUG logging enabled")
+        if self.args.target_api == "EXTERNAL":
+            if self.args.externalcommand is None:
+                raise LDAPSyncException("ERROR: --externalcommand is required with --target_api==EXTERNAL")
+            else:
+                self.external_plugin_object = EXTERNAL_PLUGIN(args=self.args,ldapsync_object=self)
+        else: # CQL or SQL specified .. requires UNIVERSE, and DB info
+            for arg_name in ('universe_name','dbuser','dbpass'):
+                if vars(self.args).get(arg_name) is None:
+                    raise LDAPSyncException("ERROR: "+ arg_name +" is required for YSQL/YCQL")
 
         
     @classmethod
@@ -1037,17 +1081,18 @@ class YBLDAPSync:
                             help="YW API Password")
         parser.add_argument('--ipv6', action='store_false', default=os.getenv("IPV6",False),
                             help="Is system ipv6 based")
-        parser.add_argument('--target_api', default=os.getenv("TARGET_API","YCQL"), metavar="YCQL|YSQL",
-                            choices=['YCQL', 'YSQL'],
+        parser.add_argument('--target_api', default=os.getenv("TARGET_API","YCQL"), metavar="YCQL|YSQL|EXTERNAL",
+                            choices=['YCQL', 'YSQL', 'EXTERNAL'],
                             type=str.upper,
-                            help="Target API: YCQL or YSQL")
-        parser.add_argument('--universe_name', required=True,default=os.getenv("UNIVERSE_NAME"),
+                            help="Target API: YCQL, YSQL or EXTERNAL")
+        parser.add_argument('--externalcommand','--externalcmd', required=False,help="command+params to run to external user sync plugin")
+        parser.add_argument('--universe_name', required=False,default=os.getenv("UNIVERSE_NAME"),
                             help="Universe name")
         parser.add_argument('--dbhost', required=False, default=os.getenv("DBHOST"),
                             help="Database hostname of IP. Uses a random YB node if not specified.")
-        parser.add_argument('--dbuser', required=True,default=os.getenv("DBUSER"),
+        parser.add_argument('--dbuser', required=False,default=os.getenv("DBUSER"),
                             help="Database user to connect as")
-        parser.add_argument('--dbpass', required=True, default=os.getenv("DBPASS"),
+        parser.add_argument('--dbpass', required=False, default=os.getenv("DBPASS"),
                             help="Password for dbuser")
         parser.add_argument('--dbname', default=os.getenv("DBNAME",'yugabyte'),
                             type=str.lower,
@@ -1119,16 +1164,18 @@ class YBLDAPSync:
               customeruuid = self.get_customeruuid(api_token)
               logging.info('Customer UUID: %s',customeruuid)
               
-            universe = self.get_universe_details(api_token,
+            if self.args.universe_name:
+                universe = self.get_universe_details(api_token,
                                                  customeruuid,
                                                  self.args.universe_name)
-            logging.info('Target API: %s', self.args.target_api)
-            logging.info('Node list: %s', universe['node_list'])
-            logging.info('Universe uuid: %s', universe['universeuuid'])
-            universe['db_certificate'] = self.setup_yb_tls(universe,
-                                                           api_token,
-                                                           customeruuid)
-            old_ldap_data = self.load_previous_ldap_data(customeruuid, universe['universeuuid'])
+                logging.info('Target API: %s', self.args.target_api)
+                logging.info('Node list: %s', universe['node_list'])
+                logging.info('Universe uuid: %s', universe['universeuuid'])
+                universe['db_certificate'] = self.setup_yb_tls(universe,
+                                                            api_token,
+                                                            customeruuid)
+                old_ldap_data = self.load_previous_ldap_data(customeruuid, universe['universeuuid'])
+                
             self.ldap_connection = self.yb_init_ldap_conn(self.args.ldapserver,
                                              self.args.ldapuser,
                                              self.args.ldap_password,
@@ -1154,6 +1201,12 @@ class YBLDAPSync:
                 #Cannot apply yet - need to check for DB user existance## self.apply_changes(process_diff, universe)
             # good idea to save the directory to disk now
             self.save_ldap_data(new_ldap_data, customeruuid, universe['universeuuid'])
+
+            if self.external_plugin_object is not None:
+                self.external_plugin_object.Run()
+                logging.info('Run complete with YBA users.')
+                sys.exit(0)
+            
             # query database and get current state, compare and process any lingering change
             logging.info('Querying the database for its state of users/groups')
             (db_role_dict,owned_counts,db_nologin_role) = self.query_db_state(universe)
