@@ -35,7 +35,7 @@ from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 import subprocess
 
-VERSION = "0.45"
+VERSION = "0.46"
 
 
 
@@ -120,25 +120,40 @@ class EXTERNAL_PLUGIN:
         self.userdict = {}
         self.ldapsync_object = ldapsync_object
         self.process = None
+        self.external_user_dict = {} # Index by user-id(email) to get atts
+        self.change_list = None
 
-    def Run(self):
-        logging.debug("DEBUG: Starting external process..")
-        self.process = subprocess.Popen(self.commandline, shell=False,
+    def Run(self, ldap_data):
+        logging.debug("Starting external process..")
+        self.process = subprocess.Popen(self.commandline, shell=True,
                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                       text=True)
-        self.userdict = self.__Get_current_users()
+        self.__Get_current_users() # Populates self.external_user_dict 
+
         # Code needed to diff with existing LDAP users
+        self.change_list = self.__Get_Change_List(ldap_data)
         # Then send command to add/delete users as needed to sync
 
+    @classmethod
     def __Get_current_users(self):
         try:
-            logging.debug("DEBUG: Getting YBA User List..")
-            outs, errs = self.process.communicate(input='"LISTUSERS"',timeout=10)
-            logging.info("INFO:User list:"+str(outs))
-            logging.info("INFO:User list ERRORS:"+str(errs))
+            logging.debug("Getting External plugin User List..")
+            user_json_str, errs = self.process.communicate(input='"LISTUSERS"',timeout=10)
+            logging.info("User list:"+str(user_json_str) + "; ERRORS:"+str(errs))
+            user_list = json.loads(user_json_str)
+            for usr in user_list:
+                self.external_user_dict[usr["email"]] = usr
+
+
         except TimeoutExpired:
             #proc.kill()
-            logging.info("INFO:User list timed out")
+            logging.info("External User list timed out")
+
+    @classmethod
+    def __Get_Change_List(self,ldap_data):
+        logging.debug("Getting External plugin Change List..")
+        self.change_list = {"ADDUSERS":{},"DELETEUSERS":{}}
+
 
 ##############################################################################################################
 class YBLDAPSync:
@@ -1175,6 +1190,9 @@ class YBLDAPSync:
                                                             api_token,
                                                             customeruuid)
                 old_ldap_data = self.load_previous_ldap_data(customeruuid, universe['universeuuid'])
+            else:
+                old_ldap_data = {}
+                universe      = {"universeuuid":"None"}
                 
             self.ldap_connection = self.yb_init_ldap_conn(self.args.ldapserver,
                                              self.args.ldapuser,
@@ -1203,8 +1221,8 @@ class YBLDAPSync:
             self.save_ldap_data(new_ldap_data, customeruuid, universe['universeuuid'])
 
             if self.external_plugin_object is not None:
-                self.external_plugin_object.Run()
-                logging.info('Run complete with YBA users.')
+                self.external_plugin_object.Run(new_ldap_data)
+                logging.info('Run complete with External plugin.')
                 sys.exit(0)
             
             # query database and get current state, compare and process any lingering change
