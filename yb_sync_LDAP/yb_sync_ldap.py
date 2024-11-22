@@ -117,14 +117,13 @@ class EXTERNAL_PLUGIN:
         logging.debug("DEBUG: EXTERNAL_PLUGIN with command:" + args.externalcommand)
         self.args = args
         self.commandline = args.externalcommand
-        self.userdict = {}
         self.ldapsync_object = ldapsync_object
         self.process = None
         self.external_user_dict = {} # Index by user-id(email) to get atts
         self.change_list = None
 
     def Run(self, ldap_data):
-        logging.debug("Starting external process..")
+        logging.debug("Starting external process:" + self.commandline)
         self.process = subprocess.Popen(self.commandline, shell=True,
                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                       text=True)
@@ -134,25 +133,36 @@ class EXTERNAL_PLUGIN:
         self.change_list = self.__Get_Change_List(ldap_data)
         # Then send command to add/delete users as needed to sync
 
-    @classmethod
+    #@classmethod
     def __Get_current_users(self):
+        logging.debug("Getting External plugin User List..")
         try:
-            logging.debug("Getting External plugin User List..")
-            user_json_str, errs = self.process.communicate(input='"LISTUSERS"',timeout=10)
-            logging.info("User list:"+str(user_json_str) + "; ERRORS:"+str(errs))
+            user_json_str, errs = self.process.communicate(input='["LISTUSERS"]',timeout=10)
+            logging.debug("User list:"+str(user_json_str)[0:120] + "...; ERRORS:"+str(errs))
+            if errs is not None:
+                raise ValueError("External process communication error:"+str(errs))
             user_list = json.loads(user_json_str)
+            if not isinstance(user_list,list):
+                raise ValueError("LIST of users expected from external process, but got " + str(type(user_list)))
             for usr in user_list:
+                if not isinstance(usr,dict):
+                    raise ValueError("DICT of user info expected from external process, but got " + str(type(usr))+"="+str(usr))
+                if usr.get("email") is None:
+                    raise ValueError("user attribute 'email' not found in external process user line:" +str(usr))
                 self.external_user_dict[usr["email"]] = usr
-
-
-        except TimeoutExpired:
+        except subprocess.TimeoutExpired:
             #proc.kill()
             logging.info("External User list timed out")
+            raise
 
-    @classmethod
-    def __Get_Change_List(self,ldap_data):
+        logging.debug("Got "+str(len(self.external_user_dict))+" users from external process")
+
+    #@classmethod
+    def __Get_Change_List(self,ldap_data:dict):
         logging.debug("Getting External plugin Change List..")
         self.change_list = {"ADDUSERS":{},"DELETEUSERS":{}}
+        print("LDAP Users:" + str(ldap_data.keys()))
+        print("External Users:" + str(self.external_user_dict.keys()))
 
 
 ##############################################################################################################
