@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # YBA User list/creation/Deletion
-version = "0.09"
+version = "0.10"
 from ast import Dict, parse
 import requests
 import urllib3
@@ -167,11 +167,14 @@ class User():
     password: str = None
     #'userType': 'local', 'ldapSpecifiedRole': False, 'primary': True, 'features': 
 
-    def Print(self,json:bool=False):
+    def Print(self,json:bool=False,leading_comma:bool=False):
         if json:
-            print('{"email":"'+ self.email+'","uuid":"'+str(self.uuid)+'","role":"'+self.role.name + '","created":"'+self.creationDate +'"}')
+            print( (',' if leading_comma else ' ')
+                    +'{"email":"'+ self.email+'","uuid":"'
+                    +str(self.uuid)+'","role":"'+self.role.name + '","created":"'+self.creationDate +'"}')
             return
         print("USER "+self.email+"("+str(self.uuid)+") Role:"+self.role.name + "  Created:"+self.creationDate  )
+
 
     def Create_in_YBA(self):
         y = self.role.mgt.yba_api
@@ -213,10 +216,14 @@ class STDIN_Json_Stream_Processor():
             print("DEBUG:Processing string command:"+cmd)
         if cmd == "LISTUSERS":
             print ("[")
+            count = 0
             for u in self.yba.Get_User_List():
-                u.Print(json=True)
+                u.Print(json=True,leading_comma=( count > 0))
+                count +=1
             print ("]")
             return
+
+
         
 
     def Process_dict_part(self,cmd:dict):
