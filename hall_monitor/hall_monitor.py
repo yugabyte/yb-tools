@@ -1,6 +1,6 @@
 #!python3
 # This program is going to get Gflags for an universe.
-version = "0.08"
+version = "0.09"
 import requests
 import urllib3
 import json
@@ -179,17 +179,24 @@ class MasterLeader(Node): #Inherited from Node
 
         #Handle Tablets (Table, Node)
         count = 0
+        unknown_tservers = {}
         for tablet in self.entity_json['tablets']:
             #print("tablet:" + table['table_name'] + " " + table['table_id'])
             replica_nodes=[]
             my_table = self.universe.table_by_id[tablet['table_id']] # Table object
             if tablet.get('replicas') is not None:
                 for r in tablet.get('replicas'):
-                    replica_nodes.append(self.universe.tserver_by_uuid[r["server_uuid"]])
+                    if self.universe.tserver_by_uuid.get(r['server_uuid']) is None:
+                        if unknown_tservers.get(r['server_uuid']) is None:
+                            unknown_tservers[r['server_uuid']] = 0
+                        unknown_tservers[r['server_uuid']] += 1
+                    else:
+                        replica_nodes.append(self.universe.tserver_by_uuid[r["server_uuid"]])
             leader = None  # Node object that is this tablet's leader
             if tablet.get('leader') is not None:
-                leader = self.universe.tserver_by_uuid[tablet.get('leader')]
-                leader.leadercount += 1
+                leader = self.universe.tserver_by_uuid.get(tablet.get('leader'))
+                if leader is not None:
+                    leader.leadercount += 1
 
             t = Tablet(tablet['tablet_id'], my_table, tablet["state"],
                        replica_nodes, leader) # this needs to be worked further
@@ -201,6 +208,9 @@ class MasterLeader(Node): #Inherited from Node
             count += 1
             if count < 6:
                 t.Print()
+
+        for t,count in unknown_tservers.items():
+            print("WARNING: Unknown Tserver with UUID: " + t + " has " + str(count) + " Tablet replicas")
 ######################################################################################################################
 
 class Zone():
