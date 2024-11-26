@@ -37,7 +37,7 @@
 #   * Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
 #         ./yugatool -m $MASTERS $TLS_CONFIG tablet_info $TABLET_UUID > $TABLET_UUID.txt 
 ##########################################################################
-our $VERSION = "0.44";
+our $VERSION = "0.46";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -580,7 +580,8 @@ sub Parse_Tablet_line{
         die "ERROR: Line $. failed to match tablet regex";		
 	}
 	my %save_val=%+; # Save collected regex named capture hash (before it gets clobbered by next regex)
-    if ($save_val{namespace} eq "RUNNING"  or  $save_val{namespace} eq "NOT_STARTED"){
+    if ($save_val{namespace} eq "RUNNING"  or  $save_val{namespace} eq "NOT_STARTED"
+	    or $save_val{namespace} eq "BOOTSTRAPPING"){
 	   # We have mis-interpreted this line because NAMESPACE wa missing - re-interpret without namespace
        $line =~m/^\s(?<tablet_uuid>(\w{32}))\s{3}
 					(?<tablename>([\w\-]+))\s+
