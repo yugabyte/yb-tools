@@ -68,7 +68,7 @@ For details on how to retrieve the minimal set of parameters:
 >> 
 >> Some more reference about this here: <https://docs.yugabyte.com/stable/yugabyte-platform/anywhere-automation/>
 
-**`--YBA_HOST =<value>`**
+**`--YBA_HOST=<value>`**
 >> -   This would be the same URL used to access your Yugabyte Anywhere Host in your browser.
 
 **`--CUST_UUID=<value>`**
