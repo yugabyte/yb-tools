@@ -37,7 +37,7 @@
 #   * Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
 #         ./yugatool -m $MASTERS $TLS_CONFIG tablet_info $TABLET_UUID > $TABLET_UUID.txt 
 ##########################################################################
-our $VERSION = "0.44";
+our $VERSION = "0.47";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -213,7 +213,9 @@ CREATE VIEW UNSAFE_Leader_create AS
     SELECT  '\$HOME/tserver/bin/yb-ts-cli --server_address='|| ip ||':'||port 
         || ' unsafe_config_change ' || t.tablet_uuid
 		|| ' ' || node_uuid
-		|| ' -certs_dir_name \$TLSDIR;sleep 30;' AS cmd_to_run
+		|| ' -certs_dir_name \$TLSDIR;sleep 10;#'
+		|| trd.replicas || ' replica(s)'
+		AS cmd_to_run
 	 from tablet t,cluster ,tablet_replica_detail trd
 	 WHERE  cluster.type='TSERVER' AND cluster.uuid=node_uuid
 	       AND  t.tablet_uuid=trd.tablet_uuid  AND t.status != 'TABLET_DATA_TOMBSTONED'
@@ -580,7 +582,8 @@ sub Parse_Tablet_line{
         die "ERROR: Line $. failed to match tablet regex";		
 	}
 	my %save_val=%+; # Save collected regex named capture hash (before it gets clobbered by next regex)
-    if ($save_val{namespace} eq "RUNNING"  or  $save_val{namespace} eq "NOT_STARTED"){
+    if ($save_val{namespace} eq "RUNNING"  or  $save_val{namespace} eq "NOT_STARTED"
+	    or $save_val{namespace} eq "BOOTSTRAPPING"){
 	   # We have mis-interpreted this line because NAMESPACE wa missing - re-interpret without namespace
        $line =~m/^\s(?<tablet_uuid>(\w{32}))\s{3}
 					(?<tablename>([\w\-]+))\s+

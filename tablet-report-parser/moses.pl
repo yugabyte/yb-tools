@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.36";
+our $VERSION = "0.37";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, \x1b[1;33;100mmoses.pl\x1b[0m  Version $VERSION
                ========
@@ -849,8 +849,10 @@ sub Create_Views{
   CREATE VIEW UNSAFE_Leader_create AS
         SELECT  '\$HOME/tserver/bin/yb-ts-cli --server_address='|| private_ip ||':'||tserverrpcport 
         || ' unsafe_config_change ' || t.tablet_uuid
-    || ' ' || node_uuid
-    || ' -certs_dir_name \$TLSDIR;sleep 30;' AS cmd_to_run
+        || ' ' || node_uuid
+        || ' -certs_dir_name \$TLSDIR;sleep 10;# '
+        || trd.replicas || ' replica(s)'
+        AS cmd_to_run
    from tablet t,node ,tablet_replica_detail trd
    WHERE  node.isTserver  AND nodeuuid=node_uuid
          AND  t.tablet_uuid=trd.tablet_uuid  
