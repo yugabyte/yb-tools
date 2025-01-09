@@ -226,9 +226,3 @@ event             node_summary_cql  summary_cql       ycql
 keyspaces         q_detail          tables
 sqlite>
 ```
-
-## Internal Slides/Demo/recording
-https://drive.google.com/file/d/19e3FMmFYIgH8SoTITFzNf7G04ycm0pdL/view?usp=sharing
-(mp4 recording, 37 minutes)
-
-https://docs.google.com/presentation/d/1iTsYXOuAf0xzo8GPP0Ciy5DaPw6s60TITl83Oim2ops/edit#slide=id.p
