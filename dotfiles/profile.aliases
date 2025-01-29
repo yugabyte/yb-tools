@@ -1,0 +1,12 @@
+alias lh='ls -lh'
+alias ll='ls -l'
+alias lnv='lnav11'
+alias sql='sqlite3 -header -column *.sqlite'
+alias get_ybm_coredump='sudo -E -u gunicorn /home/gunicorn/.get_ybm_coredump.sh'
+alias getlogs='sudo -u gunicorn /home/gunicorn/.getlogs/.getlogs.sh'
+alias grep='grep --color=auto'
+alias -='cd -'
+alias ...=../..
+alias ....=../../..
+alias .....=../../../..
+alias ......=../../../../..

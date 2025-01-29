@@ -1,0 +1,129 @@
+cat .bash_functions
+# change ticket
+ct() {
+    if [[ $# -eq 0 ]] ; then
+        echo 'ct <ticket-number>'
+    else
+        cd /cases/$1
+fi
+}
+
+# troubleshoot transaction conflicts
+function get_transaction_conflict_rca() {
+    if [ $# -ne 2 ]; then
+        echo "Usage: get_transaction_conflict_rca <higher_priority_transaction_uuid> <lower_priority_transaction_uuid>"
+        return 1
+    fi
+    higher_priority_transaction_uuid=$1
+    lower_priority_transaction_uuid=$2
+
+    not_found_error="Make sure you have provided \n - the correct transaction UUID \n - have enabled the required logs \n - have unzipped the logs. This function requires the logs to be in plain text format."
+    
+    # Get higher priority transaction details
+    echo -n "Finding session ID of higher priority transaction... "
+    higher_priority_session_id=$(grep "$higher_priority_transaction_uuid" -r |grep 'Session id' |grep -i 'session id [0-9]\+' -o |head -n 1)
+    if [ -z "$higher_priority_session_id" ]; then
+        echo -e "Higher priority transaction not found\n$not_found_error"
+        return 1
+    fi
+    echo "found : $higher_priority_session_id"
+    echo -n "Finding backend PID of higher priority transaction... "
+    higher_priority_backend_pid=$(grep "$higher_priority_session_id" -r |grep -i 'backend pid: [0-9]\+' -o |sed 's/backend pid: //g' |head -n 1)
+    if [ -z "$higher_priority_backend_pid" ]; then
+        echo -e "Higher priority backend PID not found\n$not_found_error"
+        return 1
+    fi
+    echo "found backend PID: $higher_priority_backend_pid"
+
+    # Get lower priority transaction details
+    echo -n "Finding session ID of lower priority transaction... "
+    lower_priority_session_id=$(grep "$lower_priority_transaction_uuid" -r |grep 'Session id' |grep -i 'session id [0-9]\+' -o |head -n 1)
+    if [ -z "$lower_priority_session_id" ]; then
+        echo -e "Lower priority transaction not found\n$not_found_error"
+        return 1
+    fi
+    echo "found : $lower_priority_session_id"
+    echo -n "Finding backend PID of lower priority transaction... "
+    lower_priority_backend_pid=$(grep "$lower_priority_session_id" -r |grep -i 'backend pid: [0-9]\+' -o |sed 's/backend pid: //g' |head -n 1)
+    if [ -z "$lower_priority_backend_pid" ]; then
+        echo -e "Lower priority backend PID not found\n$not_found_error"
+        return 1
+    fi
+    echo "found backend PID: $lower_priority_backend_pid"
+    
+    # Get higher priority transaction history
+    datetime=$(date +"%Y-%m-%d_%H%M%S")
+    grep "$higher_priority_backend_pid" -r > /tmp/higher_priority_transaction_history_$datetime.log
+    # Get lower priority transaction history
+    grep "$lower_priority_backend_pid" -r > /tmp/lower_priority_transaction_history_$datetime.log
+    mv /tmp/higher_priority_transaction_history_$datetime.log .
+    mv /tmp/lower_priority_transaction_history_$datetime.log .
+    echo "Transaction history saved to higher_priority_transaction_history_$datetime.log and lower_priority_transaction_history_$datetime.log"
+}
+
+# Get the leader change time
+function get_master_leader_change_time() {
+    # Add help message
+    if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]; then
+        echo "Run this function in the directory which contains the node directories"
+    else
+        find . -name "*master*INFO*" | while read -r file;
+          do
+            node=$(echo $file | cut -d'/' -f2)
+            for time in $(zgrep "This master's current role is: LEADER" $file | cut -d' ' -f1,2| sed 's/ /-/g');
+              do
+                echo "$node $time" > /tmp/master_leader_change_time
+              done
+            done
+        sort -k2 /tmp/master_leader_change_time | tee master_leader_change_time
+        echo "Leader change time saved in master_leader_change_time file"
+        rm /tmp/master_leader_change_time
+    fi
+}
+
+
+# Get the tablet leader change time
+function get_tablet_leader_change_time() {
+    # Add help message
+    if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]; then
+        echo "Run this function in the directory which contains the node directories"
+        echo "USAGE: get_tablet_leader_change_time <tablet-id>"
+    elif [[ $# -eq 0 ]]; then
+        echo "Please provide the tablet id"
+    else
+        tablet_id=$1
+        find . -name "*tserver*INFO*" | while read -r file;
+          do
+            node=$(echo $file | cut -d'/' -f2)
+            for time in $(zgrep "T $tablet_id .*Updating active role from FOLLOWER to LEADER" $file | cut -d' ' -f1,2| sed 's/ /-/g');
+              do
+                echo "$node $time $file" >> /tmp/tablet_leader_change_time
+              done
+            done
+        sort -k2 /tmp/tablet_leader_change_time | tee tablet_leader_change_time
+        echo "Leader change time saved in tablet_leader_change_time file"
+        rm /tmp/tablet_leader_change_time
+    fi
+}
+
+# Get count of pattern per minute
+get_count_per_minute() {
+    # Add help message
+    if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]; then
+        echo "USAGE: Use this function to get the count of a pattern per minute against the standard output"
+        echo "Example: grep -r 'pattern' . | get_count_per_minute"
+    else
+        awk '{
+            match($0, /[WIFE]([0-9]{4}) ([0-9]{2}:[0-9]{2})/, ts);
+            if (ts[1] != "" && ts[2] != "") {
+                timestamp = ts[1] " " ts[2];
+                count[timestamp]++;
+            }
+        }
+        END {
+            for (time in count) {
+                print time, count[time];
+            }
+        }' | sort
+    fi
+}
