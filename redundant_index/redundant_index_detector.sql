@@ -4,6 +4,33 @@
  * For example, if we have an index keyed on (a,b,c,d),
  * and also an index keyed on (a,b,c) INCLUDE (d),
  * the second can make the first redundant.
+ *
+ * =========================================
+ *  USAGE
+ * =========================================
+ *
+ * Run this script on any PostgreSQL-compatible database.
+ * The output will be a table with the following columns:
+ * +------------------------+--------------------------------------------------+
+ * | Column                 | Description                                      |
+ * +------------------------+--------------------------------------------------+
+ * | Redundant index name   | Name of the index that could be safely dropped   |
+ * | Existing index name    | Name of the index that makes it redundant        |
+ * | Redundant definition   | Full CREATE INDEX definition of redundant index  |
+ * | Existing definition    | Full CREATE INDEX definition of existing index   |
+ * +------------------------+--------------------------------------------------+
+ *
+ * Example usage with psql/ysqlsh (recommend turning on extended display mode using \x):
+ *
+ * yugabyte=# \x
+ * Expanded display is on.
+ * yugabyte=# \i redundant_index_detector.sql
+ * -[ RECORD 1 ]----------------+------------------------------------------------------------------------------------------
+ * Redundant index name         | idx_expr_def2
+ * Existing index name          | idx_expr_def1
+ * Redundant definition         | CREATE INDEX idx_expr_def2 ON test_schema.expr_collations_23 USING lsm (lower(col1) HASH)
+ * Existing definition          | CREATE INDEX idx_expr_def1 ON test_schema.expr_collations_23 USING lsm (lower(col1) HASH)
+ *
  */
 
 /*
@@ -162,9 +189,7 @@ SELECT DISTINCT ON (redundant.schema_name, redundant.table_name, redundant.index
     redundant.index_name                  AS "Redundant index name",
     existing.index_name                   AS "Existing index name", 
     pg_get_indexdef(redundant.indexrelid) AS "Redundant definition",
-    pg_get_indexdef(existing.indexrelid)  AS "Existing definition",
-    redundant.indnullsnotdistinct         AS "Redundant NULLS NOT DISTINCT",
-    existing.indnullsnotdistinct         AS "Existing NULLS NOT DISTINCT"
+    pg_get_indexdef(existing.indexrelid)  AS "Existing definition"
 
 /*
  * Only consider non-constraint indexes for dropping.
