@@ -138,7 +138,6 @@ get_node_info() {
     for d in $(ls -d yb*); do
         for type in master tserver; do
             log_file="$d/$type/logs/*INFO*"
-            echo "Checking $log_file"
             if grep -q 'Node information.*' $log_file 2>/dev/null; then
                 node_info=$(grep -Eoh 'Node information.*' $log_file | head -n 1)
                 hostname=$(echo $node_info | sed "s/.*hostname: '//g" | sed "s/', rpc_ip:.*//g")
