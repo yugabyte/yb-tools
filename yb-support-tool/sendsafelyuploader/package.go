@@ -40,21 +40,21 @@ type PackageInfo struct {
 	SSResponse
 }
 
-type packageOption func(*Package)
+type PackageOption func(*Package)
 
-func WithChunkSize(s int64) packageOption {
+func WithChunkSize(s int64) PackageOption {
 	return func(p *Package) {
 		p.ChunkSize = s
 	}
 }
 
-func WithConcurrency(c int) packageOption {
+func WithConcurrency(c int) PackageOption {
 	return func(p *Package) {
 		p.Concurrency = c
 	}
 }
 
-func WithRetries(r uint) packageOption {
+func WithRetries(r uint) PackageOption {
 	return func(p *Package) {
 		p.Retries = r
 	}
@@ -65,7 +65,7 @@ func (p *Package) calculateNumberOfParts(fileSize int64) int64 {
 
 }
 
-func (u *Uploader) CreateDropzonePackage(options ...packageOption) (*Package, error) {
+func (u *Uploader) CreateDropzonePackage(options ...PackageOption) (*Package, error) {
 
 	endpoint := "/drop-zone/v2.0/package/"
 
@@ -386,8 +386,8 @@ func (p *Package) finalizeHostedDropzone(dzInfo HostedDropzoneInfo) error {
 	finalDZData.Set("digest", dzInfo.Digest)
 	finalDZData.Set("secureLink", p.URL)
 
-	for _, url := range dzInfo.IntegrationURLs {
-		req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer([]byte(finalDZData.Encode())))
+	for _, integrationURL := range dzInfo.IntegrationURLs {
+		req, err := http.NewRequest(http.MethodPost, integrationURL, bytes.NewBuffer([]byte(finalDZData.Encode())))
 		if err != nil {
 			return err
 		}
