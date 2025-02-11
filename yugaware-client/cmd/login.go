@@ -58,7 +58,7 @@ func LoginCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 		Use:   "login --email <email> [--password <password>]",
 		Short: "Login to a Yugaware server",
 		Long:  `Login to a Yugaware server`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			err := ctx.WithCmd(cmd).WithOptions(options).Setup()
 			if err != nil {
 				return err

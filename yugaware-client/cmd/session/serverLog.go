@@ -32,7 +32,7 @@ func ServerLogCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "server_log",
 		Short: "Display the the most recent --lines=<number> from the YW server",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			err := ctx.WithCmd(cmd).WithOptions(options).Setup()
 			if err != nil {
 				return err

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"net/http"
 	"net/url"
@@ -267,7 +266,7 @@ func (p *Package) uploadFilePart(part *bytes.Buffer, url string) error {
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			respBody, err := ioutil.ReadAll(resp.Body)
+			respBody, err := io.ReadAll(resp.Body)
 			if err != nil {
 				return fmt.Errorf("Unable to upload file: Bad HTTP Status Code: %d; Unable to read response body", resp.StatusCode)
 			}
@@ -403,7 +402,7 @@ func (p *Package) finalizeHostedDropzone(dzInfo HostedDropzoneInfo) error {
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			respBody, err := ioutil.ReadAll(resp.Body)
+			respBody, err := io.ReadAll(resp.Body)
 			if err != nil {
 				return fmt.Errorf("Unable to upload file: Bad HTTP Status Code: %d; Unable to read response body", resp.StatusCode)
 			}
