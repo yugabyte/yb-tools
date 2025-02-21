@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.37";
+our $VERSION = "1.38";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -1210,14 +1210,15 @@ sub new{
 	for(qw|API_TOKEN  CUST_UUID UNIV_UUID|){
         (my $value=$opt{$_})=~tr/-'"//d; # Extract and zap dashes,quotes
 		my $len = length($value);
-		next if $len == 32; # Expecting these to be exactly 32 bytes 
-        warn "WARNING: Expecting 32 valid bytes in Option $_=$opt{$_} but found $len bytes. \n";
+    next if $len == 32  or  $len >= 64; # Expecting these to be exactly 32 or 64 bytes 
+    warn "WARNING: Expecting 32/64 valid bytes in Option $_=$opt{$_} but found $len bytes. \n";
 		sleep 2;
     }	
 	my $self =bless {map {$_ => $opt{$_}} qw|HTTPCONNECT UNIV_UUID API_TOKEN YBA_HOST CUST_UUID| }, $class;
 	my $http_prefix = $opt{YBA_HOST} =~m/^http/i ? "" : "HTTP://";
-    $self->{BASE_URL_API_CUSTOMER} = "${http_prefix}$opt{YBA_HOST}/api/customers/$opt{CUST_UUID}/universes/$opt{UNIV_UUID}";
-	$self->{BASE_URL_UNIVERSE}     = "${http_prefix}$opt{YBA_HOST}/universes/$opt{UNIV_UUID}";
+  $self->{YBA_HOST}=~s|/$||; # Zap trailing slash, if any 
+  $self->{BASE_URL_API_V1} = "$self->{YBA_HOST}/api/v1";
+	$self->{BASE_URL_UNIVERSE}     = "$self->{YBA_HOST}/universes/$opt{UNIV_UUID}";
 	$http_prefix ||= substr($opt{YBA_HOST},0,5); # HTTP: or HTTPS
 	if ($self->{HTTPCONNECT} eq "curl"){
 		  $self->{curl_base_cmd} = join " ", $opt{CURL}, 
@@ -1226,23 +1227,46 @@ sub new{
 		  if ($opt{DEBUG}){
 			 print "--DEBUG:CURL base CMD: $self->{curl_base_cmd}\n";
 		  }
-		  return $self;
+		  #return $self;
+  }else{
+      if ($http_prefix =~/^https/i){
+      my ($ok, $why) = HTTP::Tiny->can_ssl();
+        if (not $ok){
+            print "ERROR: HTTPS requested , but perl modules are insufficient:\n$why\n";
+        print "You can avoid this error, if you use the (less efficient) '--HTTPCONNECT=curl' option\n";
+        die "ERROR: HTTP::Tiny module dependencies not satisfied for HTTPS.";
+        }		   
     }
-    if ($http_prefix =~/^https/i){
-	   my ($ok, $why) = HTTP::Tiny->can_ssl();
-       if (not $ok){
-          print "ERROR: HTTPS requested , but perl modules are insufficient:\n$why\n";
-		  print "You can avoid this error, if you use the (less efficient) '--HTTPCONNECT=curl' option\n";
-		  die "ERROR: HTTP::Tiny module dependencies not satisfied for HTTPS.";
-       }		   
-	}
-	$self->{HT} = HTTP::Tiny->new( default_headers => {
+	  $self->{HT} = HTTP::Tiny->new( default_headers => {
                          'X-AUTH-YW-API-TOKEN' => $opt{API_TOKEN},
 						 'Content-Type'      => 'application/json',
 						 # 'max_size'        => 5*1024*1024, # 5MB 
 	                  });
+  }
 
-    return $self;
+  eval { $self->{YBA_JSON} = $self->Get("/customers","BASE_URL_API_V1") };
+  if ($@  or  (ref $self->{YBA_JSON} eq "HASH" and $self->{YBA_JSON}{error})){
+     die "ERROR:Unable to `get` YBA API customer info - Bad API_TOKEN?:$@"; 
+  }
+  ## All is well - we got the info in $opt{YBA_JSON}
+  if (scalar(@{ $self->{YBA_JSON} }) == 1){
+     $opt{CUST_UUID} = $self->{CUST_UUID} = $self->{YBA_JSON}[0]{uuid}; # Simple - single cust.
+  }elsif (not $opt{CUST_UUID}){
+      warn "WARNING: --CUST_UUID is not specified, and multiple customers exist .. selecting First(".$self->{YBA_JSON}[0]{name}.").\n";
+      $opt{CUST_UUID} = $self->{CUST_UUID} = $self->{YBA_JSON}[0]{uuid};
+  }else{
+     for my $c(@{ $self->{YBA_JSON} }){
+       $opt{DEBUG} and print "--DEBUG: CUSTOMER:$c->{uuid} = '$c->{name}'.\n";
+        next unless $c->{uuid} eq $opt{CUST_UUID} ;
+        $opt{CUST_UUID} = $c->{uuid};
+        last;
+     }
+     die "ERROR: Customer '$opt{CUST_UUID}' was not found (Run with --debug to list)" unless $opt{CUST_UUID}; 
+  }
+
+  $self->{BASE_URL_API_CUSTOMER} = "$self->{YBA_HOST}/api/customers/$opt{CUST_UUID}/universes/$opt{UNIV_UUID}";
+
+  return $self;
 }
 
 sub Get{
