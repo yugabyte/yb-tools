@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.23"
+Version = "2.24"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -126,9 +126,9 @@ v 2.19 - 2.20
     Health check will check for active alerts - and give WARNING if any. Error out if not "root" user.
 v 2.21
     Properly handle the case where there is no 'private_ip' (Decomissioned node)
-v 2.23
+v 2.23 - 2.24
     Maint Window will now explicitly include suppressHealthCheckNotificationsConfig; Retry DB node actions;
-    Enable prometheus HTTP auth (--promuser XX --prompass YY)
+    Enable prometheus HTTP auth (--promuser XX --prompass YY) which can be in the ENV or .rc file.
 '''
 
 import argparse
@@ -1650,7 +1650,7 @@ def Get_Environment_info():
                 continue
             value = parts[1].replace("'", "").replace('"', '').replace('\n', '').replace('\r', '')
             for name in env_dict.keys():
-                if name in parts[0]:
+                if name in parts[0]  or  name.lower() in parts[0]:
                     env_dict[name] = value
                     break
 
@@ -1804,10 +1804,10 @@ def main():
     for name in ("promuser","prompass"):
         if vars(args).get(name) is not None:
             continue
-        if env_dict.get(name) is None:
+        if env_dict.get(name.upper()) is None:
             continue
         #The setattr(object, name, value) function allows you to set an attribute of an object by its name, which can be a string variable.
-        setattr(args, name, env_dict.get(name))
+        setattr(args, name, env_dict.get(name.upper()))
 
     # ---- Mainline code -------
     YBA_API   = YBA_API_CLASS(env_dict,args) # Instantiated , but not Initialized yet
