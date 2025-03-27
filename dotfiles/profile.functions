@@ -151,3 +151,49 @@ get_node_info() {
     column -t -s '|' $tempfile | tee node_info.txt
     rm $tempfile
 }
+
+# Run lnav command
+function run_lnav() {
+    local script_path="/home/support/yogesh/scripts/run_lnav_command.py"
+    local from_time=""
+    local to_time=""
+    local duration=""
+    local context_time=""
+    local after_time=""
+    local before_time=""
+    local types=""
+    local nodes=""
+    local rebuild=""
+    local debug=""
+    local help=""
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -t|--from_time) from_time="$2"; shift 2;;
+            -T|--to_time) to_time="$2"; shift 2;;
+            -d|--duration) duration="$2"; shift 2;;
+            -c|--context_time) context_time="$2"; shift 2;;
+            -A|--after_time) after_time="$2"; shift 2;;
+            -B|--before_time) before_time="$2"; shift 2;;
+            --types) types="$2"; shift 2;;
+            --nodes) nodes="$2"; shift 2;;
+            --rebuild) rebuild="--rebuild"; shift;;
+            --debug) debug="--debug"; shift;;
+            -h|--help) help="-h"; shift;;
+            *) echo "Unknown option: $1"; return 1;;
+        esac
+    done
+    
+    python3 $script_path \
+        ${from_time:+-t "$from_time"} \
+        ${to_time:+-T "$to_time"} \
+        ${duration:+-d "$duration"} \
+        ${context_time:+-c "$context_time"} \
+        ${after_time:+-A "$after_time"} \
+        ${before_time:+-B "$before_time"} \
+        ${types:+--types "$types"} \
+        ${nodes:+--nodes "$nodes"} \
+        $rebuild \
+        $debug \
+        $help
+}
