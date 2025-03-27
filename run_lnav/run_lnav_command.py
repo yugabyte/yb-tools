@@ -15,7 +15,18 @@ import time
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.RawTextHelpFormatter,
-    description=colorama.Fore.CYAN + "Run LNAV Command Script" + colorama.Style.RESET_ALL
+    description=colorama.Fore.CYAN + "Run LNAV Command Script" + colorama.Style.RESET_ALL + """
+    
+Sample Commands:
+1. Filter logs by time range:
+   python run_lnav_command.py -t "0923 14:00" -T "0923 15:00"
+2. Filter logs by nodes:
+   python run_lnav_command.py --nodes n1,n2,n3
+3. Filter logs by log types:
+   python run_lnav_command.py --types pg,ts
+4. Combine filters:
+   python run_lnav_command.py -t "0923 14:00" -T "0923 15:00" --nodes n1,n2 --types pg,ms
+"""
 )
 parser.add_argument(
     "-t", "--from_time", metavar="MMDD HH:MM", dest="start_time",
