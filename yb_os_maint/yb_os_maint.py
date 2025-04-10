@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.24"
+Version = "2.25"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -129,10 +129,13 @@ v 2.21
 v 2.23 - 2.24
     Maint Window will now explicitly include suppressHealthCheckNotificationsConfig; Retry DB node actions;
     Enable prometheus HTTP auth (--promuser XX --prompass YY) which can be in the ENV or .rc file.
+v 2.25
+    Universe health check : New: verify each tserver's masters list matches Universe's.
 '''
 
 import argparse
 from logging import fatal
+import re
 from re import T
 from uuid import UUID
 import requests
@@ -562,6 +565,34 @@ class Universe_class:
                 self.universeDetails['clusters'][0]['userIntent']['replicationFactor'],
                 num_masters), True)
             errcount+=1
+
+        # Check if each tserver has master-list matching universe's master list
+        log('  Checking tserver master addresses for (' + master_list + ')')
+        for tserver in self.nodeDetailsSet:
+            if not tserver["isTserver"]:
+                continue
+            if not tserver["state"] == "Live":
+                continue
+            gflag_uri = tserver["cloudInfo"]['private_ip'] + ":" + str(tserver['tserverHttpPort']) + "/varz?raw"
+            try:  # try  http and https endpoints
+                gflag_resp = requests.get('https://' + gflag_uri,verify=False)
+            except:
+                gflag_resp = requests.get('http://' + gflag_uri)
+            if gflag_resp is None or gflag_resp.status_code != HTTPStatus.OK:
+                log("   Warning: Could not get gflags from tserver: "+ gflag_uri 
+                    + " : HTTP code=" + ("N/A" if gflag_resp is None else str(gflag_resp.status_code)))
+                continue
+            tserver_master_addrs = re.search(r"--tserver_master_addrs=(.+?)\n",gflag_resp.text).group(1)
+            if tserver_master_addrs is None  or  len(tserver_master_addrs) < 8:
+                log("   Error: Could not get tserver master addresses for tserver " + tserver["nodeName"] )
+                errcount+=1
+                continue
+            if sorted(tserver_master_addrs.split(",")) == sorted(master_list.split(",")):
+                continue # Check Passed .. all is well
+            else:
+                errcount+=1
+                log("   Error: tserver "+ tserver["nodeName"] + " master list='" + tserver_master_addrs
+                    + "' does not match Universe master list=" + master_list)
 
         # Check master lag
         if totalTablets > 0:
