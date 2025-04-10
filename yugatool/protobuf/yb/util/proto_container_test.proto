@@ -38,6 +38,8 @@ message ProtoContainerTestPB {
   required string name = 1;
   required int32 value = 2;
   optional string note = 3;
+  repeated string str_list = 4;
+  repeated int32 int_list = 5;
 }
 
 message TestStringRequiredPB {
@@ -48,8 +50,16 @@ message TestStringRepeatedPB {
   repeated string text = 1;
 }
 
+message TestStringOptionalPB {
+  optional string text = 1;
+}
+
 enum TestPBEnum {
   FOO = 1;
   BAR = 2;
   BAZ = 3;
+}
+
+message UnsignedIntSetTestPB {
+  repeated uint32 set = 1;
 }

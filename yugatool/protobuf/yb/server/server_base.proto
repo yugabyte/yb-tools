@@ -35,7 +35,7 @@ package yb.server;
 
 option java_package = "org.yb.server";
 
-import "yb/common/common.proto";
+import "yb/common/common_net.proto";
 import "yb/common/wire_protocol.proto";
 import "yb/util/version_info.proto";
 
@@ -77,6 +77,8 @@ message SetFlagResponsePB {
 
     // The flag is not safe to change at runtime without the 'force' flag.
     NOT_SAFE = 4;
+
+    PG_SET_FAILED = 5;
   }
 
   required Code result = 1;
@@ -140,6 +142,28 @@ message PingRequestPB {
 message PingResponsePB {
 }
 
+message ReloadCertificatesRequestPB {
+}
+
+message ReloadCertificatesResponsePB {
+}
+
+message GetAutoFlagsConfigVersionRequestPB {
+}
+
+message GetAutoFlagsConfigVersionResponsePB {
+  required uint32 config_version = 1;
+}
+
+message ValidateFlagValueRequestPB {
+  required string flag_name = 1;
+  required string flag_value = 2;
+}
+
+message ValidateFlagValueResponsePB {
+  // RPC will fail on errors.
+}
+
 service GenericService {
   rpc SetFlag(SetFlagRequestPB)
     returns (SetFlagResponsePB);
@@ -147,8 +171,14 @@ service GenericService {
   rpc GetFlag(GetFlagRequestPB)
     returns (GetFlagResponsePB);
 
+  rpc ValidateFlagValue(ValidateFlagValueRequestPB)
+      returns (ValidateFlagValueResponsePB);
+
   rpc RefreshFlags(RefreshFlagsRequestPB)
     returns (RefreshFlagsResponsePB);
+
+  rpc GetAutoFlagsConfigVersion(GetAutoFlagsConfigVersionRequestPB)
+    returns (GetAutoFlagsConfigVersionResponsePB);
 
   rpc FlushCoverage(FlushCoverageRequestPB)
     returns (FlushCoverageResponsePB);
@@ -160,4 +190,6 @@ service GenericService {
     returns (GetStatusResponsePB);
 
   rpc Ping(PingRequestPB) returns (PingResponsePB);
+
+  rpc ReloadCertificates(ReloadCertificatesRequestPB) returns (ReloadCertificatesResponsePB);
 }

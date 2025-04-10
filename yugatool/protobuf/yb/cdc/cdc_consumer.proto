@@ -36,10 +36,20 @@ package yb.cdc;
 option java_package = "org.yb.cdc";
 
 import "yb/common/common.proto";
+import "yb/common/common_net.proto";
 
 message ProducerTabletListPB {
-  // List of tablet ids for a given producer table.
+  // List of tablet ids, start and end keys for a given producer table.
   repeated string tablets = 1;
+  repeated bytes start_key = 2;
+  repeated bytes end_key = 3;
+}
+
+message SchemaVersionsPB {
+  uint32 current_producer_schema_version = 1;
+  uint32 current_consumer_schema_version = 2;
+  uint32 old_producer_schema_version = 3;
+  uint32 old_consumer_schema_version = 4;
 }
 
 message StreamEntryPB {
@@ -47,18 +57,45 @@ message StreamEntryPB {
   map<string, ProducerTabletListPB> consumer_producer_tablet_map = 1;
   string consumer_table_id = 2;
   string producer_table_id = 3;
-  bool same_num_producer_consumer_tablets = 4;
+  bool local_tserver_optimized = 4;
+  // ProducerSchemaPB producer_schema
+  reserved 5;
+
+  // Producer consumer schema versions
+  SchemaVersionsPB schema_versions = 6;
+
+  // Mapping of colocation_id to producer/consumer schema versions
+  map<uint32, SchemaVersionsPB> colocated_schema_versions = 7;
+
+  bool is_ddl_queue_table = 8;
 }
 
 message ProducerEntryPB {
   // Map from stream id to metadata for that stream.
   map<string, StreamEntryPB> stream_map = 1;
   repeated HostPortPB master_addrs = 2;
-  repeated HostPortPB tserver_addrs = 3;
+  // Reserved for depreacted tserver_addrs. See issue #11989.
+  reserved 3;
   bool disable_stream = 4; // [default = false] implicit in proto3
+  uint32 compatible_auto_flag_config_version = 5; // [default = 0] implicit in proto3
+  uint32 validated_auto_flags_config_version = 6; // [default = 0] implicit in proto3
+  // Whether automatic ddl mode is enabled for all streams in this replication group.
+  bool automatic_ddl_mode = 7;
+}
+
+// NOTE: Deprecated
+enum XClusterRole {
+  ACTIVE = 0;
+  STANDBY = 1;
 }
 
 message ConsumerRegistryPB {
-  // Map from producer universe uuid to metadata for that producer.
+  // Map from ReplicationGroupId to metadata for that ReplicationGroup.
   map<string, ProducerEntryPB> producer_map = 1;
+  // Reserved for deprecated enable_replicate_transaction_status_table field.
+  reserved 2;
+  // Cannot remove the field, since we need to support rollbacks.
+  XClusterRole DEPRECATED_role = 3;
+  // Cannot remove the field, since we need to support rollbacks.
+  bool DEPRECATED_transactional = 4;
 }

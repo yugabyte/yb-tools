@@ -13,9 +13,9 @@
 
 syntax = "proto3";
 
-package yb;
+package yb.encryption;
 
-option java_package = "org.yb";
+option java_package = "org.yb.encryption";
 
 message EncryptionParamsPB {
   bytes data_key = 1;

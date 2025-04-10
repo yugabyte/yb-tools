@@ -17,6 +17,8 @@ package yb;
 option java_package = "org.yb";
 
 import "yb/common/common.proto";
+import "yb/common/common_net.proto";
+import "yb/common/common_types.proto";
 
 // A column value, optionally with subscripts, e.g. m['x'] or l[2]['x']
 message QLColumnValuePB {
@@ -46,6 +48,21 @@ message QLColumnValuePB {
 // very beginning of the next tablet. (TODO: we need to return the clean snapshot time in this case
 // also).
 //
+// RowCounter message.
+// - These state variables are exchanged between users and CQL server when query result is paged.
+// - DocDB does not use these.
+message QLSelectRowCounterPB {
+  // The following counters represent LIMIT and OFFSET clause in SELECT and their status.
+  //   SELECT ... FROM table LIMIT xxx OFFSET yyy;
+  // - When a field value == -1, that field is not used.
+  // - When a field value >= 0, it is valid.
+  // - Example: If "select_limit == 0", users are querying zero rows.
+  optional int64 select_limit = 1 [default = -1];
+  optional int64 select_offset = 2 [default = -1];
+  optional int64 read_count = 3 [default = 0];
+  optional int64 skip_count = 4 [default = 0];
+}
+
 message QLPagingStatePB {
   // Table UUID to verify the same table still exists when continuing in the next fetch.
   optional bytes table_id = 1;
@@ -74,6 +91,34 @@ message QLPagingStatePB {
 
   // Used read time.
   optional ReadHybridTimePB read_time = 8;
+
+  // SELECT row counters.
+  // NOTE:
+  // - The select-row-counter is always applied to the entire SELECT statement.
+  // - The rest of the counters might be applied to just one batch. When indexed query returns
+  //   data in batches, and these counters would be for just one specific batch.
+  //
+  // Example on nested query.
+  //   SELECT <data> FROM <table> WHERE <keys> IN (SELECT <keys> FROM <index> WHERE hash IN <set>)
+  //   - The <row_counter> is used for query "SELECT <data>".
+  //   - The rest of the counters are for nested query "SELECT <keys>".
+  optional QLSelectRowCounterPB row_counter = 9;
+
+  // Schema version:
+  // - A query is prepared for a specific schema version.
+  // - A paging state of a query execution is for a specific schema version.
+  // - When schema version changes, we can either continue or raise error for the execution.
+  //   This is controlled by the g-flag 'cql_check_table_schema_in_paging_state'. The flag is
+  //   'true' by default. It means: raise error in the case to prevent data reinterpretation
+  //   on the driver side.
+  //
+  // Example:
+  // - Prepare queryX = "SELECT a, b FROM t"
+  // - Execute queryX - get page1.
+  // - Alter t column c; -> This alter shouldn't affect the query on columns a & b.
+  // - Execute queryX (continue) -> Should this be an error? Yes, raise error if
+  //                                '--cql_check_table_schema_in_paging_state=true'.
+  optional uint32 schema_version = 10 [default = 0];
 }
 
 //-------------------------------------- Column request --------------------------------------
@@ -153,6 +198,8 @@ message QLWriteRequestPB {
   // Does this request correspond to backfilling an index table?
   optional bool is_backfill = 19 [default = false];
   optional bool is_compatible_with_previous_version = 20 [ default = false ];
+
+  optional AshMetadataPB ash_metadata = 21;
 }
 
 //-------------------------------------- Read request ----------------------------------------
@@ -207,6 +254,10 @@ message QLReadRequestPB {
   // Reading distinct columns?
   optional bool distinct = 12 [default = false];
 
+  // Current only used on SELECT DISTINCT scan. If the value is greater than 0, use the specified
+  // prefix length to scan the table.
+  optional uint64 prefix_length = 23 [default = 0];
+
   // Limit number of rows to return. For QL SELECT, this limit is the smaller of the page size (max
   // (max number of rows to return per fetch) & the LIMIT clause if present in the SELECT statement.
   optional uint64 limit = 8;
@@ -242,6 +293,8 @@ message QLReadRequestPB {
   // Flag for reading aggregate values.
   optional bool is_aggregate = 19 [default = false];
   optional bool is_compatible_with_previous_version = 22 [ default = false ];
+
+  optional AshMetadataPB ash_metadata = 24;
 }
 
 //------------------------------ Response (for both read and write) -----------------------------

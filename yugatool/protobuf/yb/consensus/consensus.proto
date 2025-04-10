@@ -36,87 +36,19 @@ package yb.consensus;
 
 option java_package = "org.yb.consensus";
 
-import "yb/common/common.proto";
+import "yb/common/common_net.proto";
+import "yb/common/opid.proto";
 import "yb/common/wire_protocol.proto";
-import "yb/common/consensus_metadata.proto";
-import "yb/util/opid.proto";
+import "yb/consensus/consensus_types.proto";
+import "yb/consensus/metadata.proto";
+import "yb/rpc/lightweight_message.proto";
+import "yb/tablet/operations.proto";
 import "yb/tserver/backup.proto";
-import "yb/tserver/tserver_admin.proto";
-import "yb/tserver/tserver.proto";
-
-// Consensus-specific errors use this protobuf
-message ConsensusErrorPB {
-  // The codes for consensus responses. These are set in the status when
-  // some consensus internal error occurs and require special handling
-  // by the caller. A generic error code is purposefully absent since
-  // generic errors should use tserver.TabletServerErrorPB.
-  enum Code {
-    UNKNOWN = 0;
-
-    // Invalid term.
-    // Sent by peers in response to leader RPCs whenever the term
-    // of one of the messages sent in a batch is lower than the
-    // the term the peer is expecting.
-    INVALID_TERM = 2;
-
-    // For leader election.
-    // The last OpId logged by the candidate is older than the last OpId logged
-    // by the local peer.
-    LAST_OPID_TOO_OLD = 3;
-
-    // For leader election.
-    // The local replica has already voted for another candidate in this term.
-    ALREADY_VOTED = 4;
-
-    // The replica does not recognize the caller's request as coming from a
-    // member of the configuration.
-    NOT_IN_QUORUM = 5;
-
-    // The responder's last entry didn't match the caller's preceding entry.
-    PRECEDING_ENTRY_DIDNT_MATCH = 6;
-
-    // The local replica is either a leader, or has heard from a valid leader
-    // more recently than the election timeout, so believes the leader to be alive.
-    LEADER_IS_ALIVE = 7;
-
-    // The local replica is in the middle of servicing either another vote
-    // or an update from a valid leader.
-    CONSENSUS_BUSY = 8;
-
-    // The local replica was unable to prepare a single transaction.
-    CANNOT_PREPARE = 9;
-
-    // Split operation has been added to this Raft group log.
-    TABLET_SPLIT = 10;
-  }
-
-  // The error code.
-  required Code code = 1;
-
-  // The Status object for the error. This will include a textual
-  // message that may be more useful to present in log messages, etc,
-  // though its error code is less specific.
-  required AppStatusPB status = 2;
-}
+import "yb/tserver/tserver_types.proto";
 
 // ===========================================================================
 //  External Consensus Messages
 // ===========================================================================
-
-// The types of operations that need a commit message, i.e. those that require
-// at least one round of the consensus algorithm.
-enum OperationType {
-  UNKNOWN_OP = 0;
-  NO_OP = 1;
-  WRITE_OP = 3;
-  CHANGE_METADATA_OP = 4;
-  CHANGE_CONFIG_OP = 5;
-  UPDATE_TRANSACTION_OP = 6;
-  SNAPSHOT_OP = 7;
-  TRUNCATE_OP = 8;
-  HISTORY_CUTOFF_OP = 9;
-  SPLIT_OP = 10;
-}
 
 // The transaction driver type: indicates whether a transaction is
 // being executed on a leader or a replica.
@@ -137,13 +69,6 @@ message ChangeConfigRecordPB {
 
   // The new configuration to set the configuration to.
   required RaftConfigPB new_config = 3;
-}
-
-enum ChangeConfigType {
-  UNKNOWN_CHANGE = 0;
-  ADD_SERVER = 1;
-  REMOVE_SERVER = 2;
-  CHANGE_ROLE = 3;
 }
 
 // A configuration change request for the tablet with 'tablet_id'.
@@ -193,7 +118,16 @@ message ChangeConfigResponsePB {
 
 // Required by HistoryCutoffOperation.
 message HistoryCutoffPB {
-  optional fixed64 history_cutoff = 1;
+  option (yb.rpc.lightweight_message).force_arena = true;
+  // History cutoff of all the tables of this tablet.
+  // On the master, this field is used for the sys catalog table.
+  // For cotables i.e. ysql system tables, the cotables_cutoff_ht field
+  // is used. On tservers, this field is used everywhere i.e. for both
+  // colocated and non-colocated tables. In such cases, the
+  // cotables_cutoff_ht is invalid.
+  optional fixed64 primary_cutoff_ht = 1;
+  // Set only on the master for cotables.
+  optional fixed64 cotables_cutoff_ht = 2;
 }
 
 // A Replicate message, sent to replicas by leader to indicate this operation must be stored in the
@@ -210,14 +144,23 @@ message ReplicateMsg {
   optional int64 monotonic_counter = 9;
 
   required OperationType op_type = 4;
-  optional tserver.WriteRequestPB write_request = 5;
-  optional tserver.ChangeMetadataRequestPB change_metadata_request = 6;
-  optional tserver.TransactionStatePB transaction_state = 10;
-  optional tserver.TabletSnapshotOpRequestPB snapshot_request = 11;
-  optional tserver.TruncateRequestPB truncate_request = 12;
-  optional tserver.SplitTabletRequestPB split_request = 14;
-  optional ChangeConfigRecordPB change_config_record = 7;
-  optional HistoryCutoffPB history_cutoff = 13;
+  optional tablet.WritePB write = 5 [(yb.rpc.lightweight_field).pointer = true];
+  optional tablet.ChangeMetadataRequestPB change_metadata_request = 6
+      [(yb.rpc.lightweight_field).pointer = true];
+  optional tablet.TransactionStatePB transaction_state = 10
+      [(yb.rpc.lightweight_field).pointer = true];
+  optional tserver.TabletSnapshotOpRequestPB snapshot_request = 11
+      [(yb.rpc.lightweight_field).pointer = true];
+  optional tablet.TruncatePB truncate = 12 [(yb.rpc.lightweight_field).pointer = true];
+  optional tablet.SplitTabletRequestPB split_request = 14
+      [(yb.rpc.lightweight_field).pointer = true];
+  optional ChangeConfigRecordPB change_config_record = 7
+      [(yb.rpc.lightweight_field).pointer = true];
+  optional HistoryCutoffPB history_cutoff = 13 [(yb.rpc.lightweight_field).pointer = true];
+  optional AutoFlagsConfigPB auto_flags_config = 15
+      [(yb.rpc.lightweight_field).pointer = true];
+  optional tablet.CloneTabletRequestPB clone_tablet = 16
+      [(yb.rpc.lightweight_field).pointer = true];
 
   // The Raft operation ID known to the leader to be committed at the time this message was sent.
   // This is used during tablet bootstrap for RocksDB-backed tables.
@@ -409,6 +352,9 @@ message ConsensusRequestPB {
 
   // Hybrid time on the leader when this request was generated.
   optional fixed64 propagated_hybrid_time = 11;
+
+  // If enabled, a trace will be collected for this RPC and returned in the response.
+  optional bool trace_requested = 12;
 }
 
 message ConsensusResponsePB {
@@ -432,6 +378,17 @@ message ConsensusResponsePB {
 
   // Hybrid time on the follower when this request was processed.
   optional fixed64 propagated_hybrid_time = 6;
+
+  // The trace for the RPC as a string, returned only if requested.
+  optional string trace_buffer = 7;
+}
+
+message MultiRaftConsensusRequestPB {
+  repeated ConsensusRequestPB consensus_request = 1;
+}
+
+message MultiRaftConsensusResponsePB {
+  repeated ConsensusResponsePB consensus_response = 1;
 }
 
 // A message reflecting the status of an in-flight transaction.
@@ -532,18 +489,6 @@ message LeaderStepDownResponsePB {
   optional int64 time_since_election_failure_ms = 2;
 }
 
-enum LeaderLeaseStatus {
-  HAS_LEASE = 0;
-  OLD_LEADER_MAY_HAVE_LEASE = 1;
-  NO_MAJORITY_REPLICATED_LEASE = 2;
-}
-
-enum OpIdType {
-  UNKNOWN_OPID_TYPE = 0;
-  RECEIVED_OPID = 1;
-  COMMITTED_OPID = 2;
-}
-
 message GetLastOpIdRequestPB {
   // UUID of server this request is addressed to.
   optional bytes dest_uuid = 2;
@@ -553,6 +498,8 @@ message GetLastOpIdRequestPB {
 
   // Whether to return the last-received or last-committed OpId.
   optional OpIdType opid_type = 3 [ default = RECEIVED_OPID ];
+
+  optional OperationType op_type = 4;
 }
 
 message GetLastOpIdResponsePB {
@@ -589,26 +536,99 @@ message StartRemoteBootstrapRequestPB {
 
   required bytes tablet_id = 1;
 
+  optional bytes split_parent_tablet_id = 8;
+
   // Identification for the host we are bootstrapping from.
-  // TODO: Consider renaming these to bootstrap_source_*.
-  required bytes bootstrap_peer_uuid = 2;
-  repeated HostPortPB source_private_addr = 3;
-  repeated HostPortPB source_broadcast_addr = 6;
-  optional CloudInfoPB source_cloud_info = 7;
+  required bytes bootstrap_source_peer_uuid = 2;
+  repeated HostPortPB bootstrap_source_private_addr = 3;
+  repeated HostPortPB bootstrap_source_broadcast_addr = 6;
+  optional CloudInfoPB bootstrap_source_cloud_info = 7;
 
   // The caller's term. In the case that the target of this request has a
   // TOMBSTONED replica with a term higher than this one, the request will fail.
   optional int64 caller_term = 4 [ default = -1 ];
+
+  // When the remote bootstrap request is served by a closest follower to the
+  // new peer, the new peer needs to update the leader on progessing the log
+  // anchor.
+  optional bool is_served_by_tablet_leader = 9 [ default = true ];
+  optional bytes tablet_leader_peer_uuid = 10;
+  repeated HostPortPB tablet_leader_private_addr = 11;
+  repeated HostPortPB tablet_leader_broadcast_addr = 12;
+  optional CloudInfoPB tablet_leader_cloud_info = 13;
+
+  // If this tablet was created by cloning, the sequence number of the operation that created it and
+  // the clone source tablet's id. This is used to reject RBS requests if the source tablet is
+  // present on the destination and has not applied the clone yet.
+  optional uint32 clone_source_seq_no = 14;
+  optional string clone_source_tablet_id = 15;
 }
 
 message StartRemoteBootstrapResponsePB {
   optional tserver.TabletServerErrorPB error = 1;
 }
 
+// An unsafe change configuration request for the tablet with 'tablet_id'.
+message UnsafeChangeConfigRequestPB {
+  // UUID of server this request is addressed to.
+  optional bytes dest_uuid = 1;
+  required bytes tablet_id = 2;
+
+  // Sender identification, it could be a static string as well.
+  required bytes caller_id = 3;
+
+  // The raft config sent to destination server.
+  // Only the 'permanent_uuid' of each peer in the config is
+  // required (address-related information is ignored by the server).
+  // The peers specified in the 'new_config' are required to be a
+  // subset of (or equal to) the peers in the committed config on the
+  // destination replica.
+  required RaftConfigPB new_config = 4;
+}
+
+// The unsafe change configuration response. 'error' field is set if operation failed.
+message UnsafeChangeConfigResponsePB {
+  optional tserver.TabletServerErrorPB error = 1;
+}
+
+message ChangeAutoFlagsConfigOpResponsePB {
+  optional tserver.TabletServerErrorPB error = 1;
+}
+
+// Retryable requests.
+message ReplicatedRetryableRequestRangePB {
+  optional int64 first_id = 1;
+  optional int64 last_id = 2;
+  optional OpIdPB min_op_id = 3;
+  optional uint64 min_time = 4;
+  optional uint64 max_time = 5;
+}
+
+message ClientReplicatedRetryableRequestRangesPB {
+  optional fixed64 client_id1 = 1;
+  optional fixed64 client_id2 = 2;
+  repeated ReplicatedRetryableRequestRangePB range = 3;
+}
+
+message TabletBootstrapStatePB {
+  optional OpIdPB last_op_id = 1;
+  repeated ClientReplicatedRetryableRequestRangesPB client_requests = 2;
+
+  reserved 3;
+
+  optional fixed64 min_replay_txn_start_ht = 4;
+}
+
 // A Raft implementation.
 service ConsensusService {
   // Analogous to AppendEntries in Raft, but only used for followers.
-  rpc UpdateConsensus(ConsensusRequestPB) returns (ConsensusResponsePB);
+  rpc UpdateConsensus(ConsensusRequestPB) returns (ConsensusResponsePB) {
+    option (yb.rpc.lightweight_method).sides = BOTH;
+  };
+
+  // Similar to UpdateConsensus but takes a batch of ConsensusRequestPB
+  // and returns a batch of ConsensusResponsePB.
+  rpc MultiRaftUpdateConsensus(MultiRaftConsensusRequestPB) returns (MultiRaftConsensusResponsePB);
 
   // RequestVote() from Raft.
   rpc RequestConsensusVote(VoteRequestPB) returns (VoteResponsePB);
@@ -618,6 +638,9 @@ service ConsensusService {
   // an operation to change the role of a server between VOTER and PRE_VOTER.
   // An OK response means the operation was successful.
   rpc ChangeConfig(ChangeConfigRequestPB) returns (ChangeConfigResponsePB);
+
+  // Implements unsafe config change operation for manual recovery use cases.
+  rpc UnsafeChangeConfig(UnsafeChangeConfigRequestPB) returns (UnsafeChangeConfigResponsePB);
 
   rpc GetNodeInstance(GetNodeInstanceRequestPB) returns (GetNodeInstanceResponsePB);
 

@@ -36,9 +36,9 @@ package yb.log;
 option java_package = "org.yb.log";
 
 import "yb/common/common.proto";
-import "yb/common/consensus_metadata.proto";
+import "yb/common/opid.proto";
 import "yb/consensus/consensus.proto";
-import "yb/util/opid.proto";
+import "yb/rpc/lightweight_message.proto";
 
 // ===========================================================================
 //  Log Entries - Log specific messages + single node messages
@@ -48,15 +48,22 @@ import "yb/util/opid.proto";
 enum LogEntryTypePB {
   UNKNOWN = 0;
   REPLICATE = 1;
-  // Marker entry for dummy log messages. These will never end up in the log, just serve the purpose
-  // of making sure that all entries up to the FLUSH_MARKER entry are flushed.
+
+  // Marker entries are for dummy log messages. These will never end up in the log.
+
+  // Roll over active log segment before writing the next entry if active segment is not empty.
+  SYNC_ROLLOVER_MARKER = 998;
+  // Serve the purpose of making sure that all entries up to the FLUSH_MARKER entry are flushed.
   FLUSH_MARKER = 999;
+  // Async roll over active log segment, and halve the cur_max_segment_size of the next segment
+  // if it's greater than initial_max_segment_size.
+  ASYNC_ROLLOVER_AT_FLUSH_MARKER = 1000;
 };
 
 // An entry in the WAL/state machine log.
 message LogEntryPB {
   required LogEntryTypePB type = 1;
-  optional consensus.ReplicateMsg replicate = 2;
+  optional consensus.ReplicateMsg replicate = 2 [(yb.rpc.lightweight_field).pointer = true];
 }
 
 // A batch of entries in the WAL.
@@ -78,14 +85,24 @@ message LogSegmentHeaderPB {
   required uint32 minor_version = 2;
 
   // The ID of the tablet this WAL segment stores entries for.
-  required bytes tablet_id = 5;
+  required bytes unused_tablet_id = 5;
 
   // The tablet-specific sequence number of this WAL segment.
-  required uint64 sequence_number = 6;
+  required int64 sequence_number = 6;
 
   // Schema used when appending entries to this log, and its version.
-  required SchemaPB schema = 7;
-  optional uint32 schema_version = 8;
+  required SchemaPB DEPRECATED_schema = 7;
+  optional uint32 DEPRECATED_schema_version = 8;
+}
+
+// A header for a log index block that are stored inside WAL segment file.
+message LogIndexBlockHeaderPB {
+  required int64 start_op_index = 1;
+  required int32 num_entries = 2;
+  required int64 size = 3;
+  required bool is_last_block = 4;
+  // CRC32C over log index block of size `size` that follows the serialized header.
+  required fixed32 crc32c = 5;
 }
 
 // A footer for a log segment.
@@ -113,4 +130,18 @@ message LogSegmentFooterPB {
   // during bootstrap, so this field will be reset to the time of the bootstrap in each log segment
   // on a newly-restarted server, rather than copied over from the old log segments.
   optional int64 close_timestamp_micros = 4;
+
+  // Offset of the first index block. Absence means there is no log index stored in this log
+  // segment.
+  optional int64 index_start_offset = 5;
+  // Minimum start time of running transactions right before closing of the log segment. It can be
+  // either of the following values:
+  // 1. Minimum start HT of running txns (if any)
+  // 2. Tablet leader safe time
+  // 3. HybridTime::kInitial if both the previous values were HybridTime::kInvalid or not
+  // fetched successfully.
+  optional uint64 min_start_time_running_txns = 6;
+
+  // Log HT of the last appended WAL Op in the segment.
+  optional uint64 last_wal_op_log_ht = 7;
 }
