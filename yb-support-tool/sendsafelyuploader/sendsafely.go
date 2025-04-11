@@ -3,7 +3,7 @@ package sendsafelyuploader
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 )
 
@@ -63,7 +63,7 @@ func (u *Uploader) sendRequest(method, endpoint string, body []byte, reqOptions 
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, err := ioutil.ReadAll(resp.Body)
+		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("Invalid HTTP Status Code: %d; Unable to read response body", resp.StatusCode)
 		}
@@ -71,6 +71,6 @@ func (u *Uploader) sendRequest(method, endpoint string, body []byte, reqOptions 
 	}
 	defer resp.Body.Close()
 
-	return ioutil.ReadAll(resp.Body)
+	return io.ReadAll(resp.Body)
 
 }
