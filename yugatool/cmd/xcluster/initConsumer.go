@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -109,7 +109,7 @@ func runInitConsumer(ctx *cmdutil.YugatoolContext, options *InitConsumerOptions)
 
 			initCDCCommand.WriteString(" add_table ")
 		}
-		batch := tablesArr[tablesArrIdx:min(tablesArrIdx+options.BatchSize, len(tablesArr))]
+		batch := tablesArr[tablesArrIdx:ytMin(tablesArrIdx+options.BatchSize, len(tablesArr))]
 
 		for i, table := range batch {
 			if table.TableType.Number() == common.TableType_YQL_TABLE_TYPE.Number() {
@@ -156,7 +156,7 @@ func runInitConsumer(ctx *cmdutil.YugatoolContext, options *InitConsumerOptions)
 	return nil
 }
 
-func min(a, b int) int {
+func ytMin(a, b int) int {
 	if a <= b {
 		return a
 	}
