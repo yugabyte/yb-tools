@@ -2,7 +2,7 @@ module github.com/yugabyte/yb-tools
 
 go 1.23.0
 
-toolchain go1.23.6
+toolchain go1.23.8
 
 require (
 	github.com/ProtonMail/go-crypto v0.0.0-20230417170513-8ee5748c52b5
