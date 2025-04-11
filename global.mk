@@ -63,4 +63,4 @@ ${GOBIN}/protoc-gen-go:
 
 oapi-codegen: ${GOBIN}/oapi-codegen
 ${GOBIN}/oapi-codegen:
-	go install -modfile=${TOP_BUILDDIR}/go.mod github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
+	go install -modfile=${TOP_BUILDDIR}/go.mod github.com/deepmap/oapi-codegen/cmd/oapi-codegen
