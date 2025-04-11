@@ -52,10 +52,12 @@ func NewAbortTaskParamsWithHTTPClient(client *http.Client) *AbortTaskParams {
 	}
 }
 
-/* AbortTaskParams contains all the parameters to send to the API endpoint
-   for the abort task operation.
+/*
+AbortTaskParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the abort task operation.
+
+	Typically these are written to a http.Request.
 */
 type AbortTaskParams struct {
 

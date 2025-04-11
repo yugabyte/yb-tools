@@ -53,10 +53,12 @@ func NewGetListOfRegionReleasesParamsWithHTTPClient(client *http.Client) *GetLis
 	}
 }
 
-/* GetListOfRegionReleasesParams contains all the parameters to send to the API endpoint
-   for the get list of region releases operation.
+/*
+GetListOfRegionReleasesParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get list of region releases operation.
+
+	Typically these are written to a http.Request.
 */
 type GetListOfRegionReleasesParams struct {
 

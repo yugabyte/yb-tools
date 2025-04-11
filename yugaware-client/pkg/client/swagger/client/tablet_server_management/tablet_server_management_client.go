@@ -36,7 +36,7 @@ type ClientService interface {
 }
 
 /*
-  ListTabletServers lists all tablet servers
+ListTabletServers lists all tablet servers
 */
 func (a *Client) ListTabletServers(params *ListTabletServersParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListTabletServersOK, error) {
 	// TODO: Validate the params before sending

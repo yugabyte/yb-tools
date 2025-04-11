@@ -37,7 +37,8 @@ func NewListTabletServersOK() *ListTabletServersOK {
 	return &ListTabletServersOK{}
 }
 
-/* ListTabletServersOK describes a response with status code 200, with default header values.
+/*
+	ListTabletServersOK describes a response with status code 200, with default header values.
 
 successful operation
 */

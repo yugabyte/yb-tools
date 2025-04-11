@@ -39,7 +39,8 @@ func NewListScopesOK() *ListScopesOK {
 	return &ListScopesOK{}
 }
 
-/* ListScopesOK describes a response with status code 200, with default header values.
+/*
+	ListScopesOK describes a response with status code 200, with default header values.
 
 successful operation
 */

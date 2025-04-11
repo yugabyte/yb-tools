@@ -52,7 +52,7 @@ type ClientService interface {
 }
 
 /*
-  CreateKMSConfig creates a k m s configuration
+CreateKMSConfig creates a k m s configuration
 */
 func (a *Client) CreateKMSConfig(params *CreateKMSConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateKMSConfigOK, error) {
 	// TODO: Validate the params before sending
@@ -91,7 +91,7 @@ func (a *Client) CreateKMSConfig(params *CreateKMSConfigParams, authInfo runtime
 }
 
 /*
-  DeleteKMSConfig deletes a k m s configuration
+DeleteKMSConfig deletes a k m s configuration
 */
 func (a *Client) DeleteKMSConfig(params *DeleteKMSConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteKMSConfigOK, error) {
 	// TODO: Validate the params before sending
@@ -130,7 +130,7 @@ func (a *Client) DeleteKMSConfig(params *DeleteKMSConfigParams, authInfo runtime
 }
 
 /*
-  EditKMSConfig edits a k m s configuration
+EditKMSConfig edits a k m s configuration
 */
 func (a *Client) EditKMSConfig(params *EditKMSConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*EditKMSConfigOK, error) {
 	// TODO: Validate the params before sending
@@ -169,7 +169,7 @@ func (a *Client) EditKMSConfig(params *EditKMSConfigParams, authInfo runtime.Cli
 }
 
 /*
-  GetCurrentKeyRef gets a universe s key reference
+GetCurrentKeyRef gets a universe s key reference
 */
 func (a *Client) GetCurrentKeyRef(params *GetCurrentKeyRefParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetCurrentKeyRefOK, error) {
 	// TODO: Validate the params before sending
@@ -208,7 +208,7 @@ func (a *Client) GetCurrentKeyRef(params *GetCurrentKeyRefParams, authInfo runti
 }
 
 /*
-  GetKMSConfig gets details of a k m s configuration
+GetKMSConfig gets details of a k m s configuration
 */
 func (a *Client) GetKMSConfig(params *GetKMSConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetKMSConfigOK, error) {
 	// TODO: Validate the params before sending
@@ -247,7 +247,7 @@ func (a *Client) GetKMSConfig(params *GetKMSConfigParams, authInfo runtime.Clien
 }
 
 /*
-  GetKeyRefHistory gets a universe s key reference history
+GetKeyRefHistory gets a universe s key reference history
 */
 func (a *Client) GetKeyRefHistory(params *GetKeyRefHistoryParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetKeyRefHistoryOK, error) {
 	// TODO: Validate the params before sending
@@ -286,7 +286,7 @@ func (a *Client) GetKeyRefHistory(params *GetKeyRefHistoryParams, authInfo runti
 }
 
 /*
-  ListKMSConfigs lists k m s configurations
+ListKMSConfigs lists k m s configurations
 */
 func (a *Client) ListKMSConfigs(params *ListKMSConfigsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListKMSConfigsOK, error) {
 	// TODO: Validate the params before sending
@@ -325,7 +325,7 @@ func (a *Client) ListKMSConfigs(params *ListKMSConfigsParams, authInfo runtime.C
 }
 
 /*
-  RemoveKeyRefHistory removes a universe s key reference history
+RemoveKeyRefHistory removes a universe s key reference history
 */
 func (a *Client) RemoveKeyRefHistory(params *RemoveKeyRefHistoryParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*RemoveKeyRefHistoryOK, error) {
 	// TODO: Validate the params before sending
@@ -364,7 +364,7 @@ func (a *Client) RemoveKeyRefHistory(params *RemoveKeyRefHistoryParams, authInfo
 }
 
 /*
-  RetrieveKey retrives a universe s k m s key
+RetrieveKey retrives a universe s k m s key
 */
 func (a *Client) RetrieveKey(params *RetrieveKeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*RetrieveKeyOK, error) {
 	// TODO: Validate the params before sending

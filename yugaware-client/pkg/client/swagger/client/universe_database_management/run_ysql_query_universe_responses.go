@@ -37,7 +37,8 @@ func NewRunYsqlQueryUniverseOK() *RunYsqlQueryUniverseOK {
 	return &RunYsqlQueryUniverseOK{}
 }
 
-/* RunYsqlQueryUniverseOK describes a response with status code 200, with default header values.
+/*
+	RunYsqlQueryUniverseOK describes a response with status code 200, with default header values.
 
 successful operation
 */

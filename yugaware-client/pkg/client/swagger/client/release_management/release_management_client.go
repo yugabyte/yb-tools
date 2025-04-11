@@ -46,7 +46,7 @@ type ClientService interface {
 }
 
 /*
-  CreateRelease creates a release
+CreateRelease creates a release
 */
 func (a *Client) CreateRelease(params *CreateReleaseParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateReleaseOK, error) {
 	// TODO: Validate the params before sending
@@ -85,7 +85,7 @@ func (a *Client) CreateRelease(params *CreateReleaseParams, authInfo runtime.Cli
 }
 
 /*
-  DeleteRelease deletes a release
+DeleteRelease deletes a release
 */
 func (a *Client) DeleteRelease(params *DeleteReleaseParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteReleaseOK, error) {
 	// TODO: Validate the params before sending
@@ -124,7 +124,7 @@ func (a *Client) DeleteRelease(params *DeleteReleaseParams, authInfo runtime.Cli
 }
 
 /*
-  GetListOfRegionReleases lists all releases valid in region
+GetListOfRegionReleases lists all releases valid in region
 */
 func (a *Client) GetListOfRegionReleases(params *GetListOfRegionReleasesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetListOfRegionReleasesOK, error) {
 	// TODO: Validate the params before sending
@@ -163,7 +163,7 @@ func (a *Client) GetListOfRegionReleases(params *GetListOfRegionReleasesParams, 
 }
 
 /*
-  GetListOfReleases lists all releases
+GetListOfReleases lists all releases
 */
 func (a *Client) GetListOfReleases(params *GetListOfReleasesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetListOfReleasesOK, error) {
 	// TODO: Validate the params before sending
@@ -202,7 +202,7 @@ func (a *Client) GetListOfReleases(params *GetListOfReleasesParams, authInfo run
 }
 
 /*
-  Refresh refreshes a release
+Refresh refreshes a release
 */
 func (a *Client) Refresh(params *RefreshParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*RefreshOK, error) {
 	// TODO: Validate the params before sending
@@ -241,7 +241,7 @@ func (a *Client) Refresh(params *RefreshParams, authInfo runtime.ClientAuthInfoW
 }
 
 /*
-  UpdateRelease updates a release
+UpdateRelease updates a release
 */
 func (a *Client) UpdateRelease(params *UpdateReleaseParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpdateReleaseOK, error) {
 	// TODO: Validate the params before sending

@@ -39,7 +39,8 @@ func NewListBackupsV2OK() *ListBackupsV2OK {
 	return &ListBackupsV2OK{}
 }
 
-/* ListBackupsV2OK describes a response with status code 200, with default header values.
+/*
+	ListBackupsV2OK describes a response with status code 200, with default header values.
 
 successful operation
 */

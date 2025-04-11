@@ -52,10 +52,12 @@ func NewUpdateReleaseParamsWithHTTPClient(client *http.Client) *UpdateReleasePar
 	}
 }
 
-/* UpdateReleaseParams contains all the parameters to send to the API endpoint
-   for the update release operation.
+/*
+UpdateReleaseParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the update release operation.
+
+	Typically these are written to a http.Request.
 */
 type UpdateReleaseParams struct {
 

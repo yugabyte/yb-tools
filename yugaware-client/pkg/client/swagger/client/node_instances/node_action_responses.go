@@ -39,7 +39,8 @@ func NewNodeActionOK() *NodeActionOK {
 	return &NodeActionOK{}
 }
 
-/* NodeActionOK describes a response with status code 200, with default header values.
+/*
+	NodeActionOK describes a response with status code 200, with default header values.
 
 successful operation
 */

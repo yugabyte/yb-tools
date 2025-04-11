@@ -39,7 +39,8 @@ func NewUpdateReleaseOK() *UpdateReleaseOK {
 	return &UpdateReleaseOK{}
 }
 
-/* UpdateReleaseOK describes a response with status code 200, with default header values.
+/*
+	UpdateReleaseOK describes a response with status code 200, with default header values.
 
 successful operation
 */

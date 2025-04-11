@@ -45,7 +45,8 @@ func NewGetListOfCertificateOK() *GetListOfCertificateOK {
 	return &GetListOfCertificateOK{}
 }
 
-/* GetListOfCertificateOK describes a response with status code 200, with default header values.
+/*
+	GetListOfCertificateOK describes a response with status code 200, with default header values.
 
 successful operation
 */
@@ -75,7 +76,8 @@ func NewGetListOfCertificateInternalServerError() *GetListOfCertificateInternalS
 	return &GetListOfCertificateInternalServerError{}
 }
 
-/* GetListOfCertificateInternalServerError describes a response with status code 500, with default header values.
+/*
+	GetListOfCertificateInternalServerError describes a response with status code 500, with default header values.
 
 If there was a server or database issue when listing the regions
 */

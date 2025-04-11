@@ -60,7 +60,7 @@ type ClientService interface {
 }
 
 /*
-  ListOfBackups lists a customer s backups
+ListOfBackups lists a customer s backups
 */
 func (a *Client) ListOfBackups(params *ListOfBackupsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListOfBackupsOK, error) {
 	// TODO: Validate the params before sending
@@ -99,7 +99,7 @@ func (a *Client) ListOfBackups(params *ListOfBackupsParams, authInfo runtime.Cli
 }
 
 /*
-  CreateMultiTableBackup creates a multi table backup
+CreateMultiTableBackup creates a multi table backup
 */
 func (a *Client) CreateMultiTableBackup(params *CreateMultiTableBackupParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateMultiTableBackupOK, error) {
 	// TODO: Validate the params before sending
@@ -138,7 +138,7 @@ func (a *Client) CreateMultiTableBackup(params *CreateMultiTableBackupParams, au
 }
 
 /*
-  Createbackup creates a backup
+Createbackup creates a backup
 */
 func (a *Client) Createbackup(params *CreatebackupParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreatebackupOK, error) {
 	// TODO: Validate the params before sending
@@ -177,7 +177,7 @@ func (a *Client) Createbackup(params *CreatebackupParams, authInfo runtime.Clien
 }
 
 /*
-  CreatebackupSchedule creates backup schedule
+CreatebackupSchedule creates backup schedule
 */
 func (a *Client) CreatebackupSchedule(params *CreatebackupScheduleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreatebackupScheduleOK, error) {
 	// TODO: Validate the params before sending
@@ -216,7 +216,7 @@ func (a *Client) CreatebackupSchedule(params *CreatebackupScheduleParams, authIn
 }
 
 /*
-  DeleteBackups deletes backups
+DeleteBackups deletes backups
 */
 func (a *Client) DeleteBackups(params *DeleteBackupsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteBackupsOK, error) {
 	// TODO: Validate the params before sending
@@ -255,7 +255,7 @@ func (a *Client) DeleteBackups(params *DeleteBackupsParams, authInfo runtime.Cli
 }
 
 /*
-  DeleteBackupsv2 deletes backups v2
+DeleteBackupsv2 deletes backups v2
 */
 func (a *Client) DeleteBackupsv2(params *DeleteBackupsv2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteBackupsv2OK, error) {
 	// TODO: Validate the params before sending
@@ -294,9 +294,9 @@ func (a *Client) DeleteBackupsv2(params *DeleteBackupsv2Params, authInfo runtime
 }
 
 /*
-  EditBackupV2 edits a backup v2
+EditBackupV2 edits a backup v2
 
-  Edit a backup
+Edit a backup
 */
 func (a *Client) EditBackupV2(params *EditBackupV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*EditBackupV2OK, error) {
 	// TODO: Validate the params before sending
@@ -335,7 +335,7 @@ func (a *Client) EditBackupV2(params *EditBackupV2Params, authInfo runtime.Clien
 }
 
 /*
-  FetchBackupsByTaskUUID lists a task s backups
+FetchBackupsByTaskUUID lists a task s backups
 */
 func (a *Client) FetchBackupsByTaskUUID(params *FetchBackupsByTaskUUIDParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*FetchBackupsByTaskUUIDOK, error) {
 	// TODO: Validate the params before sending
@@ -374,7 +374,7 @@ func (a *Client) FetchBackupsByTaskUUID(params *FetchBackupsByTaskUUIDParams, au
 }
 
 /*
-  GetBackupV2 gets backup v2
+GetBackupV2 gets backup v2
 */
 func (a *Client) GetBackupV2(params *GetBackupV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetBackupV2OK, error) {
 	// TODO: Validate the params before sending
@@ -413,7 +413,7 @@ func (a *Client) GetBackupV2(params *GetBackupV2Params, authInfo runtime.ClientA
 }
 
 /*
-  ListBackupsV2 lists backups paginated v2
+ListBackupsV2 lists backups paginated v2
 */
 func (a *Client) ListBackupsV2(params *ListBackupsV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListBackupsV2OK, error) {
 	// TODO: Validate the params before sending
@@ -452,7 +452,7 @@ func (a *Client) ListBackupsV2(params *ListBackupsV2Params, authInfo runtime.Cli
 }
 
 /*
-  Restore restores from a backup
+Restore restores from a backup
 */
 func (a *Client) Restore(params *RestoreParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*RestoreOK, error) {
 	// TODO: Validate the params before sending
@@ -491,7 +491,7 @@ func (a *Client) Restore(params *RestoreParams, authInfo runtime.ClientAuthInfoW
 }
 
 /*
-  RestoreBackupV2 restores from a backup v2
+RestoreBackupV2 restores from a backup v2
 */
 func (a *Client) RestoreBackupV2(params *RestoreBackupV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*RestoreBackupV2OK, error) {
 	// TODO: Validate the params before sending
@@ -530,9 +530,9 @@ func (a *Client) RestoreBackupV2(params *RestoreBackupV2Params, authInfo runtime
 }
 
 /*
-  StopBackup stops a backup
+StopBackup stops a backup
 
-  Stop an in-progress backup
+Stop an in-progress backup
 */
 func (a *Client) StopBackup(params *StopBackupParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*StopBackupOK, error) {
 	// TODO: Validate the params before sending

@@ -39,7 +39,8 @@ func NewEditProviderOK() *EditProviderOK {
 	return &EditProviderOK{}
 }
 
-/* EditProviderOK describes a response with status code 200, with default header values.
+/*
+	EditProviderOK describes a response with status code 200, with default header values.
 
 successful operation
 */

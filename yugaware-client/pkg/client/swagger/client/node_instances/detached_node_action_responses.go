@@ -39,7 +39,8 @@ func NewDetachedNodeActionOK() *DetachedNodeActionOK {
 	return &DetachedNodeActionOK{}
 }
 
-/* DetachedNodeActionOK describes a response with status code 200, with default header values.
+/*
+	DetachedNodeActionOK describes a response with status code 200, with default header values.
 
 successful operation
 */

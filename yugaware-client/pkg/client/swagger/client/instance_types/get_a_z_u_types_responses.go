@@ -37,7 +37,8 @@ func NewGetAZUTypesOK() *GetAZUTypesOK {
 	return &GetAZUTypesOK{}
 }
 
-/* GetAZUTypesOK describes a response with status code 200, with default header values.
+/*
+	GetAZUTypesOK describes a response with status code 200, with default header values.
 
 successful operation
 */

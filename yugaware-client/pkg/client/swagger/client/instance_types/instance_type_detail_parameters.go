@@ -52,10 +52,12 @@ func NewInstanceTypeDetailParamsWithHTTPClient(client *http.Client) *InstanceTyp
 	}
 }
 
-/* InstanceTypeDetailParams contains all the parameters to send to the API endpoint
-   for the instance type detail operation.
+/*
+InstanceTypeDetailParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the instance type detail operation.
+
+	Typically these are written to a http.Request.
 */
 type InstanceTypeDetailParams struct {
 

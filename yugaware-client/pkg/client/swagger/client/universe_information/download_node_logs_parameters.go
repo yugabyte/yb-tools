@@ -52,10 +52,12 @@ func NewDownloadNodeLogsParamsWithHTTPClient(client *http.Client) *DownloadNodeL
 	}
 }
 
-/* DownloadNodeLogsParams contains all the parameters to send to the API endpoint
-   for the download node logs operation.
+/*
+DownloadNodeLogsParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the download node logs operation.
+
+	Typically these are written to a http.Request.
 */
 type DownloadNodeLogsParams struct {
 

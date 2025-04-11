@@ -52,10 +52,12 @@ func NewGetUserFromTaskParamsWithHTTPClient(client *http.Client) *GetUserFromTas
 	}
 }
 
-/* GetUserFromTaskParams contains all the parameters to send to the API endpoint
-   for the get user from task operation.
+/*
+GetUserFromTaskParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get user from task operation.
+
+	Typically these are written to a http.Request.
 */
 type GetUserFromTaskParams struct {
 

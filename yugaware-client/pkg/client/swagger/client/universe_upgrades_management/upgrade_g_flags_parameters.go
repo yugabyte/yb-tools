@@ -54,10 +54,12 @@ func NewUpgradeGFlagsParamsWithHTTPClient(client *http.Client) *UpgradeGFlagsPar
 	}
 }
 
-/* UpgradeGFlagsParams contains all the parameters to send to the API endpoint
-   for the upgrade g flags operation.
+/*
+UpgradeGFlagsParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the upgrade g flags operation.
+
+	Typically these are written to a http.Request.
 */
 type UpgradeGFlagsParams struct {
 

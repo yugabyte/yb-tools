@@ -46,7 +46,7 @@ type ClientService interface {
 }
 
 /*
-  DeleteKey deletes a configuration key
+DeleteKey deletes a configuration key
 */
 func (a *Client) DeleteKey(params *DeleteKeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteKeyOK, error) {
 	// TODO: Validate the params before sending
@@ -85,9 +85,9 @@ func (a *Client) DeleteKey(params *DeleteKeyParams, authInfo runtime.ClientAuthI
 }
 
 /*
-  GetConfig lists configuration entries for a scope
+GetConfig lists configuration entries for a scope
 
-  Lists all runtime config entries for a given scope for current customer.
+Lists all runtime config entries for a given scope for current customer.
 */
 func (a *Client) GetConfig(params *GetConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetConfigOK, error) {
 	// TODO: Validate the params before sending
@@ -126,7 +126,7 @@ func (a *Client) GetConfig(params *GetConfigParams, authInfo runtime.ClientAuthI
 }
 
 /*
-  GetConfigurationKey gets a configuration key
+GetConfigurationKey gets a configuration key
 */
 func (a *Client) GetConfigurationKey(params *GetConfigurationKeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetConfigurationKeyOK, error) {
 	// TODO: Validate the params before sending
@@ -165,9 +165,9 @@ func (a *Client) GetConfigurationKey(params *GetConfigurationKeyParams, authInfo
 }
 
 /*
-  ListKeys lists mutable keys
+ListKeys lists mutable keys
 
-  List all the mutable runtime config keys
+List all the mutable runtime config keys
 */
 func (a *Client) ListKeys(params *ListKeysParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListKeysOK, error) {
 	// TODO: Validate the params before sending
@@ -206,9 +206,9 @@ func (a *Client) ListKeys(params *ListKeysParams, authInfo runtime.ClientAuthInf
 }
 
 /*
-  ListScopes lists configuration scopes
+ListScopes lists configuration scopes
 
-  Lists all (including empty scopes) runtime config scopes for current customer. List includes the Global scope that spans multiple customers, scope for customer specific overrides for current customer and one scope each for each universe and provider.
+Lists all (including empty scopes) runtime config scopes for current customer. List includes the Global scope that spans multiple customers, scope for customer specific overrides for current customer and one scope each for each universe and provider.
 */
 func (a *Client) ListScopes(params *ListScopesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListScopesOK, error) {
 	// TODO: Validate the params before sending
@@ -247,7 +247,7 @@ func (a *Client) ListScopes(params *ListScopesParams, authInfo runtime.ClientAut
 }
 
 /*
-  SetKey updates a configuration key
+SetKey updates a configuration key
 */
 func (a *Client) SetKey(params *SetKeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*SetKeyOK, error) {
 	// TODO: Validate the params before sending

@@ -39,7 +39,8 @@ func NewListUniversesOK() *ListUniversesOK {
 	return &ListUniversesOK{}
 }
 
-/* ListUniversesOK describes a response with status code 200, with default header values.
+/*
+	ListUniversesOK describes a response with status code 200, with default header values.
 
 successful operation
 */

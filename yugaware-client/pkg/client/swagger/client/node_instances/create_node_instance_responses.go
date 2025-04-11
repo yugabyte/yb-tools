@@ -39,7 +39,8 @@ func NewCreateNodeInstanceOK() *CreateNodeInstanceOK {
 	return &CreateNodeInstanceOK{}
 }
 
-/* CreateNodeInstanceOK describes a response with status code 200, with default header values.
+/*
+	CreateNodeInstanceOK describes a response with status code 200, with default header values.
 
 successful operation
 */

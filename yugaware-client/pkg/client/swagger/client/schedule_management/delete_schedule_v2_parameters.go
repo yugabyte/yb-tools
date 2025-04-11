@@ -52,10 +52,12 @@ func NewDeleteScheduleV2ParamsWithHTTPClient(client *http.Client) *DeleteSchedul
 	}
 }
 
-/* DeleteScheduleV2Params contains all the parameters to send to the API endpoint
-   for the delete schedule v2 operation.
+/*
+DeleteScheduleV2Params contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the delete schedule v2 operation.
+
+	Typically these are written to a http.Request.
 */
 type DeleteScheduleV2Params struct {
 

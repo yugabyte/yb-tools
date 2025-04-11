@@ -52,10 +52,12 @@ func NewGetMasterLeaderIPParamsWithHTTPClient(client *http.Client) *GetMasterLea
 	}
 }
 
-/* GetMasterLeaderIPParams contains all the parameters to send to the API endpoint
-   for the get master leader IP operation.
+/*
+GetMasterLeaderIPParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get master leader IP operation.
+
+	Typically these are written to a http.Request.
 */
 type GetMasterLeaderIPParams struct {
 

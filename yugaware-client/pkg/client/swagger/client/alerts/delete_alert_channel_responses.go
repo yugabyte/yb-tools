@@ -39,7 +39,8 @@ func NewDeleteAlertChannelOK() *DeleteAlertChannelOK {
 	return &DeleteAlertChannelOK{}
 }
 
-/* DeleteAlertChannelOK describes a response with status code 200, with default header values.
+/*
+	DeleteAlertChannelOK describes a response with status code 200, with default header values.
 
 successful operation
 */

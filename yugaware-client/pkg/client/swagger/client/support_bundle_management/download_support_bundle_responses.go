@@ -37,7 +37,8 @@ func NewDownloadSupportBundleOK() *DownloadSupportBundleOK {
 	return &DownloadSupportBundleOK{}
 }
 
-/* DownloadSupportBundleOK describes a response with status code 200, with default header values.
+/*
+	DownloadSupportBundleOK describes a response with status code 200, with default header values.
 
 successful operation
 */

@@ -54,7 +54,7 @@ type ClientService interface {
 }
 
 /*
-  AlterTable alters a yugabyte d b table
+AlterTable alters a yugabyte d b table
 */
 func (a *Client) AlterTable(params *AlterTableParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*AlterTableOK, error) {
 	// TODO: Validate the params before sending
@@ -93,9 +93,9 @@ func (a *Client) AlterTable(params *AlterTableParams, authInfo runtime.ClientAut
 }
 
 /*
-  BulkImportData bulks import data
+BulkImportData bulks import data
 
-  Bulk import data into the specified table. This is currently AWS-only.
+Bulk import data into the specified table. This is currently AWS-only.
 */
 func (a *Client) BulkImportData(params *BulkImportDataParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*BulkImportDataOK, error) {
 	// TODO: Validate the params before sending
@@ -134,7 +134,7 @@ func (a *Client) BulkImportData(params *BulkImportDataParams, authInfo runtime.C
 }
 
 /*
-  CreateSingleTableBackup creates a single table backup
+CreateSingleTableBackup creates a single table backup
 */
 func (a *Client) CreateSingleTableBackup(params *CreateSingleTableBackupParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateSingleTableBackupOK, error) {
 	// TODO: Validate the params before sending
@@ -173,7 +173,7 @@ func (a *Client) CreateSingleTableBackup(params *CreateSingleTableBackupParams, 
 }
 
 /*
-  CreateTable creates a yugabyte d b table
+CreateTable creates a yugabyte d b table
 */
 func (a *Client) CreateTable(params *CreateTableParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateTableOK, error) {
 	// TODO: Validate the params before sending
@@ -212,7 +212,7 @@ func (a *Client) CreateTable(params *CreateTableParams, authInfo runtime.ClientA
 }
 
 /*
-  CreateTableSpaces creates table spaces
+CreateTableSpaces creates table spaces
 */
 func (a *Client) CreateTableSpaces(params *CreateTableSpacesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateTableSpacesOK, error) {
 	// TODO: Validate the params before sending
@@ -251,7 +251,7 @@ func (a *Client) CreateTableSpaces(params *CreateTableSpacesParams, authInfo run
 }
 
 /*
-  DescribeTable describes a table
+DescribeTable describes a table
 */
 func (a *Client) DescribeTable(params *DescribeTableParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DescribeTableOK, error) {
 	// TODO: Validate the params before sending
@@ -290,7 +290,7 @@ func (a *Client) DescribeTable(params *DescribeTableParams, authInfo runtime.Cli
 }
 
 /*
-  DropTable drops a yugabyte d b table
+DropTable drops a yugabyte d b table
 */
 func (a *Client) DropTable(params *DropTableParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DropTableOK, error) {
 	// TODO: Validate the params before sending
@@ -329,9 +329,9 @@ func (a *Client) DropTable(params *DropTableParams, authInfo runtime.ClientAuthI
 }
 
 /*
-  GetAllTableSpaces lists all tablespaces
+GetAllTableSpaces lists all tablespaces
 
-  Get a list of all tablespaces of a given universe
+Get a list of all tablespaces of a given universe
 */
 func (a *Client) GetAllTableSpaces(params *GetAllTableSpacesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetAllTableSpacesOK, error) {
 	// TODO: Validate the params before sending
@@ -370,9 +370,9 @@ func (a *Client) GetAllTableSpaces(params *GetAllTableSpacesParams, authInfo run
 }
 
 /*
-  GetAllTables lists all tables
+GetAllTables lists all tables
 
-  Get a list of all tables in the specified universe
+Get a list of all tables in the specified universe
 */
 func (a *Client) GetAllTables(params *GetAllTablesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetAllTablesOK, error) {
 	// TODO: Validate the params before sending
@@ -411,9 +411,9 @@ func (a *Client) GetAllTables(params *GetAllTablesParams, authInfo runtime.Clien
 }
 
 /*
-  GetYQLDataTypes lists column types
+GetYQLDataTypes lists column types
 
-  Get a list of all defined column types.
+Get a list of all defined column types.
 */
 func (a *Client) GetYQLDataTypes(params *GetYQLDataTypesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetYQLDataTypesOK, error) {
 	// TODO: Validate the params before sending

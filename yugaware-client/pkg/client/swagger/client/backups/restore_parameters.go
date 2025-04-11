@@ -54,10 +54,12 @@ func NewRestoreParamsWithHTTPClient(client *http.Client) *RestoreParams {
 	}
 }
 
-/* RestoreParams contains all the parameters to send to the API endpoint
-   for the restore operation.
+/*
+RestoreParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the restore operation.
+
+	Typically these are written to a http.Request.
 */
 type RestoreParams struct {
 

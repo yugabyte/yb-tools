@@ -52,10 +52,12 @@ func NewGetYQLDataTypesParamsWithHTTPClient(client *http.Client) *GetYQLDataType
 	}
 }
 
-/* GetYQLDataTypesParams contains all the parameters to send to the API endpoint
-   for the get y q l data types operation.
+/*
+GetYQLDataTypesParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get y q l data types operation.
+
+	Typically these are written to a http.Request.
 */
 type GetYQLDataTypesParams struct {
 	timeout    time.Duration

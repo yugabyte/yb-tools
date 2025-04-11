@@ -52,10 +52,12 @@ func NewRemoveKeyRefHistoryParamsWithHTTPClient(client *http.Client) *RemoveKeyR
 	}
 }
 
-/* RemoveKeyRefHistoryParams contains all the parameters to send to the API endpoint
-   for the remove key ref history operation.
+/*
+RemoveKeyRefHistoryParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the remove key ref history operation.
+
+	Typically these are written to a http.Request.
 */
 type RemoveKeyRefHistoryParams struct {
 

@@ -52,10 +52,12 @@ func NewListOfCustomersParamsWithHTTPClient(client *http.Client) *ListOfCustomer
 	}
 }
 
-/* ListOfCustomersParams contains all the parameters to send to the API endpoint
-   for the list of customers operation.
+/*
+ListOfCustomersParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the list of customers operation.
+
+	Typically these are written to a http.Request.
 */
 type ListOfCustomersParams struct {
 	timeout    time.Duration

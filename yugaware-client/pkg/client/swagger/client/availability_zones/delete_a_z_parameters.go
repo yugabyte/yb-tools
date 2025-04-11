@@ -52,10 +52,12 @@ func NewDeleteAZParamsWithHTTPClient(client *http.Client) *DeleteAZParams {
 	}
 }
 
-/* DeleteAZParams contains all the parameters to send to the API endpoint
-   for the delete a z operation.
+/*
+DeleteAZParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the delete a z operation.
+
+	Typically these are written to a http.Request.
 */
 type DeleteAZParams struct {
 

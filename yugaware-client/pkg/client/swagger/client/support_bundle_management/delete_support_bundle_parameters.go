@@ -52,10 +52,12 @@ func NewDeleteSupportBundleParamsWithHTTPClient(client *http.Client) *DeleteSupp
 	}
 }
 
-/* DeleteSupportBundleParams contains all the parameters to send to the API endpoint
-   for the delete support bundle operation.
+/*
+DeleteSupportBundleParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the delete support bundle operation.
+
+	Typically these are written to a http.Request.
 */
 type DeleteSupportBundleParams struct {
 

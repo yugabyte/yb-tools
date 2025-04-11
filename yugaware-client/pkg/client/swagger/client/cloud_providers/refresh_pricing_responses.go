@@ -39,7 +39,8 @@ func NewRefreshPricingOK() *RefreshPricingOK {
 	return &RefreshPricingOK{}
 }
 
-/* RefreshPricingOK describes a response with status code 200, with default header values.
+/*
+	RefreshPricingOK describes a response with status code 200, with default header values.
 
 successful operation
 */

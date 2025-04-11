@@ -52,10 +52,12 @@ func NewGetMaintenanceWindowParamsWithHTTPClient(client *http.Client) *GetMainte
 	}
 }
 
-/* GetMaintenanceWindowParams contains all the parameters to send to the API endpoint
-   for the get maintenance window operation.
+/*
+GetMaintenanceWindowParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get maintenance window operation.
+
+	Typically these are written to a http.Request.
 */
 type GetMaintenanceWindowParams struct {
 

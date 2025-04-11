@@ -39,7 +39,8 @@ func NewListOfAZOK() *ListOfAZOK {
 	return &ListOfAZOK{}
 }
 
-/* ListOfAZOK describes a response with status code 200, with default header values.
+/*
+	ListOfAZOK describes a response with status code 200, with default header values.
 
 successful operation
 */

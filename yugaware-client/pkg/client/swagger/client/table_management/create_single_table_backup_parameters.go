@@ -54,10 +54,12 @@ func NewCreateSingleTableBackupParamsWithHTTPClient(client *http.Client) *Create
 	}
 }
 
-/* CreateSingleTableBackupParams contains all the parameters to send to the API endpoint
-   for the create single table backup operation.
+/*
+CreateSingleTableBackupParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the create single table backup operation.
+
+	Typically these are written to a http.Request.
 */
 type CreateSingleTableBackupParams struct {
 

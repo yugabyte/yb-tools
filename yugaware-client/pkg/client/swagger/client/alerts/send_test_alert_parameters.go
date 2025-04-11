@@ -52,10 +52,12 @@ func NewSendTestAlertParamsWithHTTPClient(client *http.Client) *SendTestAlertPar
 	}
 }
 
-/* SendTestAlertParams contains all the parameters to send to the API endpoint
-   for the send test alert operation.
+/*
+SendTestAlertParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the send test alert operation.
+
+	Typically these are written to a http.Request.
 */
 type SendTestAlertParams struct {
 

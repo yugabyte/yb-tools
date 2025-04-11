@@ -52,10 +52,12 @@ func NewListKeysParamsWithHTTPClient(client *http.Client) *ListKeysParams {
 	}
 }
 
-/* ListKeysParams contains all the parameters to send to the API endpoint
-   for the list keys operation.
+/*
+ListKeysParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the list keys operation.
+
+	Typically these are written to a http.Request.
 */
 type ListKeysParams struct {
 	timeout    time.Duration

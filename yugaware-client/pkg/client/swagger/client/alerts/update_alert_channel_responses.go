@@ -39,7 +39,8 @@ func NewUpdateAlertChannelOK() *UpdateAlertChannelOK {
 	return &UpdateAlertChannelOK{}
 }
 
-/* UpdateAlertChannelOK describes a response with status code 200, with default header values.
+/*
+	UpdateAlertChannelOK describes a response with status code 200, with default header values.
 
 successful operation
 */

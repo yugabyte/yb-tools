@@ -52,10 +52,12 @@ func NewListActiveParamsWithHTTPClient(client *http.Client) *ListActiveParams {
 	}
 }
 
-/* ListActiveParams contains all the parameters to send to the API endpoint
-   for the list active operation.
+/*
+ListActiveParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the list active operation.
+
+	Typically these are written to a http.Request.
 */
 type ListActiveParams struct {
 

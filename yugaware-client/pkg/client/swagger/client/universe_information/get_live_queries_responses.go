@@ -37,7 +37,8 @@ func NewGetLiveQueriesOK() *GetLiveQueriesOK {
 	return &GetLiveQueriesOK{}
 }
 
-/* GetLiveQueriesOK describes a response with status code 200, with default header values.
+/*
+	GetLiveQueriesOK describes a response with status code 200, with default header values.
 
 successful operation
 */

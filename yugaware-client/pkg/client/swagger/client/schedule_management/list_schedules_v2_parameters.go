@@ -54,10 +54,12 @@ func NewListSchedulesV2ParamsWithHTTPClient(client *http.Client) *ListSchedulesV
 	}
 }
 
-/* ListSchedulesV2Params contains all the parameters to send to the API endpoint
-   for the list schedules v2 operation.
+/*
+ListSchedulesV2Params contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the list schedules v2 operation.
+
+	Typically these are written to a http.Request.
 */
 type ListSchedulesV2Params struct {
 

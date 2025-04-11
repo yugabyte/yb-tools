@@ -39,7 +39,8 @@ func NewListAlertConfigurationsOK() *ListAlertConfigurationsOK {
 	return &ListAlertConfigurationsOK{}
 }
 
-/* ListAlertConfigurationsOK describes a response with status code 200, with default header values.
+/*
+	ListAlertConfigurationsOK describes a response with status code 200, with default header values.
 
 successful operation
 */

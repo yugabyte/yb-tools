@@ -52,10 +52,12 @@ func NewCustomerCountParamsWithHTTPClient(client *http.Client) *CustomerCountPar
 	}
 }
 
-/* CustomerCountParams contains all the parameters to send to the API endpoint
-   for the customer count operation.
+/*
+CustomerCountParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the customer count operation.
+
+	Typically these are written to a http.Request.
 */
 type CustomerCountParams struct {
 	timeout    time.Duration

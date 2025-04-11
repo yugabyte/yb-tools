@@ -39,7 +39,7 @@ func RegisterCmd(ctx *cmdutil.YWClientContext) *cobra.Command {
 		Use:   "register --environment <environment> --full-name <full name> --email <email> [--password <password>]",
 		Short: "Register a Yugaware server",
 		Long:  `Register a Yugaware server`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			err := ctx.WithCmd(cmd).WithOptions(options).SetupNoClient()
 			if err != nil {
 				return err

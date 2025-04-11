@@ -39,7 +39,8 @@ func NewDeleteCustomerConfigV2OK() *DeleteCustomerConfigV2OK {
 	return &DeleteCustomerConfigV2OK{}
 }
 
-/* DeleteCustomerConfigV2OK describes a response with status code 200, with default header values.
+/*
+	DeleteCustomerConfigV2OK describes a response with status code 200, with default header values.
 
 successful operation
 */

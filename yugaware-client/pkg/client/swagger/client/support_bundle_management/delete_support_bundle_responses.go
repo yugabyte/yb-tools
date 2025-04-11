@@ -39,7 +39,8 @@ func NewDeleteSupportBundleOK() *DeleteSupportBundleOK {
 	return &DeleteSupportBundleOK{}
 }
 
-/* DeleteSupportBundleOK describes a response with status code 200, with default header values.
+/*
+	DeleteSupportBundleOK describes a response with status code 200, with default header values.
 
 successful operation
 */

@@ -39,7 +39,8 @@ func NewRestoreBackupV2OK() *RestoreBackupV2OK {
 	return &RestoreBackupV2OK{}
 }
 
-/* RestoreBackupV2OK describes a response with status code 200, with default header values.
+/*
+	RestoreBackupV2OK describes a response with status code 200, with default header values.
 
 successful operation
 */

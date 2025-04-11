@@ -39,7 +39,8 @@ func NewBulkImportDataOK() *BulkImportDataOK {
 	return &BulkImportDataOK{}
 }
 
-/* BulkImportDataOK describes a response with status code 200, with default header values.
+/*
+	BulkImportDataOK describes a response with status code 200, with default header values.
 
 successful operation
 */

@@ -52,10 +52,12 @@ func NewSyncXClusterConfigParamsWithHTTPClient(client *http.Client) *SyncXCluste
 	}
 }
 
-/* SyncXClusterConfigParams contains all the parameters to send to the API endpoint
-   for the sync x cluster config operation.
+/*
+SyncXClusterConfigParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the sync x cluster config operation.
+
+	Typically these are written to a http.Request.
 */
 type SyncXClusterConfigParams struct {
 

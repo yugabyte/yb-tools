@@ -52,10 +52,12 @@ func NewListSupportBundleParamsWithHTTPClient(client *http.Client) *ListSupportB
 	}
 }
 
-/* ListSupportBundleParams contains all the parameters to send to the API endpoint
-   for the list support bundle operation.
+/*
+ListSupportBundleParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the list support bundle operation.
+
+	Typically these are written to a http.Request.
 */
 type ListSupportBundleParams struct {
 

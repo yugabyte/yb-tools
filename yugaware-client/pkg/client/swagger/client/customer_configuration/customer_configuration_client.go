@@ -48,7 +48,7 @@ type ClientService interface {
 }
 
 /*
-  CreateCustomerConfig creates a customer configuration
+CreateCustomerConfig creates a customer configuration
 */
 func (a *Client) CreateCustomerConfig(params *CreateCustomerConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateCustomerConfigOK, error) {
 	// TODO: Validate the params before sending
@@ -87,7 +87,7 @@ func (a *Client) CreateCustomerConfig(params *CreateCustomerConfigParams, authIn
 }
 
 /*
-  DeleteCustomerConfig deletes a customer configuration
+DeleteCustomerConfig deletes a customer configuration
 */
 func (a *Client) DeleteCustomerConfig(params *DeleteCustomerConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteCustomerConfigOK, error) {
 	// TODO: Validate the params before sending
@@ -126,7 +126,7 @@ func (a *Client) DeleteCustomerConfig(params *DeleteCustomerConfigParams, authIn
 }
 
 /*
-  DeleteCustomerConfigV2 deletes a customer configuration v2
+DeleteCustomerConfigV2 deletes a customer configuration v2
 */
 func (a *Client) DeleteCustomerConfigV2(params *DeleteCustomerConfigV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteCustomerConfigV2OK, error) {
 	// TODO: Validate the params before sending
@@ -165,7 +165,7 @@ func (a *Client) DeleteCustomerConfigV2(params *DeleteCustomerConfigV2Params, au
 }
 
 /*
-  EditCustomerConfig updates a customer configuration
+EditCustomerConfig updates a customer configuration
 */
 func (a *Client) EditCustomerConfig(params *EditCustomerConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*EditCustomerConfigOK, error) {
 	// TODO: Validate the params before sending
@@ -204,9 +204,9 @@ func (a *Client) EditCustomerConfig(params *EditCustomerConfigParams, authInfo r
 }
 
 /*
-  EditCustomerConfigV2 updates a customer configuration v2
+EditCustomerConfigV2 updates a customer configuration v2
 
-  Changes from upstream: This method is called 'editCustomerConfig' in the upstream swagger.json
+Changes from upstream: This method is called 'editCustomerConfig' in the upstream swagger.json
 */
 func (a *Client) EditCustomerConfigV2(params *EditCustomerConfigV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*EditCustomerConfigV2OK, error) {
 	// TODO: Validate the params before sending
@@ -245,9 +245,9 @@ func (a *Client) EditCustomerConfigV2(params *EditCustomerConfigV2Params, authIn
 }
 
 /*
-  GenerateAPIToken generates an API token for the current user
+GenerateAPIToken generates an API token for the current user
 
-  UNOFFICIAL API ADDITION - Requires a DUMMY body to work around issue https://yugabyte.atlassian.net/browse/PLAT-2076
+UNOFFICIAL API ADDITION - Requires a DUMMY body to work around issue https://yugabyte.atlassian.net/browse/PLAT-2076
 */
 func (a *Client) GenerateAPIToken(params *GenerateAPITokenParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GenerateAPITokenOK, error) {
 	// TODO: Validate the params before sending
@@ -286,7 +286,7 @@ func (a *Client) GenerateAPIToken(params *GenerateAPITokenParams, authInfo runti
 }
 
 /*
-  GetListOfCustomerConfig lists all customer configurations
+GetListOfCustomerConfig lists all customer configurations
 */
 func (a *Client) GetListOfCustomerConfig(params *GetListOfCustomerConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetListOfCustomerConfigOK, error) {
 	// TODO: Validate the params before sending

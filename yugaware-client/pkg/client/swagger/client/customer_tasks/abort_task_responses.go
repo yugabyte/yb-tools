@@ -39,7 +39,8 @@ func NewAbortTaskOK() *AbortTaskOK {
 	return &AbortTaskOK{}
 }
 
-/* AbortTaskOK describes a response with status code 200, with default header values.
+/*
+	AbortTaskOK describes a response with status code 200, with default header values.
 
 successful operation
 */

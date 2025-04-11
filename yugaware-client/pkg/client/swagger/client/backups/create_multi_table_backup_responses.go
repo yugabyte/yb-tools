@@ -45,7 +45,8 @@ func NewCreateMultiTableBackupOK() *CreateMultiTableBackupOK {
 	return &CreateMultiTableBackupOK{}
 }
 
-/* CreateMultiTableBackupOK describes a response with status code 200, with default header values.
+/*
+	CreateMultiTableBackupOK describes a response with status code 200, with default header values.
 
 If requested schedule backup. Changes from upstream: This API call actually returns a task, not a Schedule
 */
@@ -77,7 +78,8 @@ func NewCreateMultiTableBackupBadRequest() *CreateMultiTableBackupBadRequest {
 	return &CreateMultiTableBackupBadRequest{}
 }
 
-/* CreateMultiTableBackupBadRequest describes a response with status code 400, with default header values.
+/*
+	CreateMultiTableBackupBadRequest describes a response with status code 400, with default header values.
 
 When request fails validations. Changes from upstream: Return code 400 is not in swagger spec
 */

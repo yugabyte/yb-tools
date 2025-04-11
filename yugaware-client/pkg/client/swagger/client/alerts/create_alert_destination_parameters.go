@@ -54,10 +54,12 @@ func NewCreateAlertDestinationParamsWithHTTPClient(client *http.Client) *CreateA
 	}
 }
 
-/* CreateAlertDestinationParams contains all the parameters to send to the API endpoint
-   for the create alert destination operation.
+/*
+CreateAlertDestinationParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the create alert destination operation.
+
+	Typically these are written to a http.Request.
 */
 type CreateAlertDestinationParams struct {
 

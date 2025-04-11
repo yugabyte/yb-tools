@@ -39,7 +39,8 @@ func NewGetListOfProvidersOK() *GetListOfProvidersOK {
 	return &GetListOfProvidersOK{}
 }
 
-/* GetListOfProvidersOK describes a response with status code 200, with default header values.
+/*
+	GetListOfProvidersOK describes a response with status code 200, with default header values.
 
 successful operation
 */

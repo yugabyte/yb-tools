@@ -52,10 +52,12 @@ func NewDeleteXClusterConfigParamsWithHTTPClient(client *http.Client) *DeleteXCl
 	}
 }
 
-/* DeleteXClusterConfigParams contains all the parameters to send to the API endpoint
-   for the delete x cluster config operation.
+/*
+DeleteXClusterConfigParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the delete x cluster config operation.
+
+	Typically these are written to a http.Request.
 */
 type DeleteXClusterConfigParams struct {
 

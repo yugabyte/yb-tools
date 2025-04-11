@@ -84,7 +84,7 @@ type ClientService interface {
 }
 
 /*
-  Acknowledge acknowledges an alert
+Acknowledge acknowledges an alert
 */
 func (a *Client) Acknowledge(params *AcknowledgeParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*AcknowledgeOK, error) {
 	// TODO: Validate the params before sending
@@ -123,7 +123,7 @@ func (a *Client) Acknowledge(params *AcknowledgeParams, authInfo runtime.ClientA
 }
 
 /*
-  AcknowledgeByFilter acknowledges all alerts
+AcknowledgeByFilter acknowledges all alerts
 */
 func (a *Client) AcknowledgeByFilter(params *AcknowledgeByFilterParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*AcknowledgeByFilterOK, error) {
 	// TODO: Validate the params before sending
@@ -162,7 +162,7 @@ func (a *Client) AcknowledgeByFilter(params *AcknowledgeByFilterParams, authInfo
 }
 
 /*
-  CountAlerts counts alerts
+CountAlerts counts alerts
 */
 func (a *Client) CountAlerts(params *CountAlertsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CountAlertsOK, error) {
 	// TODO: Validate the params before sending
@@ -201,7 +201,7 @@ func (a *Client) CountAlerts(params *CountAlertsParams, authInfo runtime.ClientA
 }
 
 /*
-  CreateAlertChannel creates an alert channel
+CreateAlertChannel creates an alert channel
 */
 func (a *Client) CreateAlertChannel(params *CreateAlertChannelParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateAlertChannelOK, error) {
 	// TODO: Validate the params before sending
@@ -240,7 +240,7 @@ func (a *Client) CreateAlertChannel(params *CreateAlertChannelParams, authInfo r
 }
 
 /*
-  CreateAlertConfiguration creates an alert configuration
+CreateAlertConfiguration creates an alert configuration
 */
 func (a *Client) CreateAlertConfiguration(params *CreateAlertConfigurationParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateAlertConfigurationOK, error) {
 	// TODO: Validate the params before sending
@@ -279,7 +279,7 @@ func (a *Client) CreateAlertConfiguration(params *CreateAlertConfigurationParams
 }
 
 /*
-  CreateAlertDestination creates an alert destination
+CreateAlertDestination creates an alert destination
 */
 func (a *Client) CreateAlertDestination(params *CreateAlertDestinationParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateAlertDestinationOK, error) {
 	// TODO: Validate the params before sending
@@ -318,7 +318,7 @@ func (a *Client) CreateAlertDestination(params *CreateAlertDestinationParams, au
 }
 
 /*
-  DeleteAlertChannel deletes an alert channel
+DeleteAlertChannel deletes an alert channel
 */
 func (a *Client) DeleteAlertChannel(params *DeleteAlertChannelParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteAlertChannelOK, error) {
 	// TODO: Validate the params before sending
@@ -357,7 +357,7 @@ func (a *Client) DeleteAlertChannel(params *DeleteAlertChannelParams, authInfo r
 }
 
 /*
-  DeleteAlertConfiguration deletes an alert configuration
+DeleteAlertConfiguration deletes an alert configuration
 */
 func (a *Client) DeleteAlertConfiguration(params *DeleteAlertConfigurationParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteAlertConfigurationOK, error) {
 	// TODO: Validate the params before sending
@@ -396,7 +396,7 @@ func (a *Client) DeleteAlertConfiguration(params *DeleteAlertConfigurationParams
 }
 
 /*
-  DeleteAlertDestination deletes an alert destination
+DeleteAlertDestination deletes an alert destination
 */
 func (a *Client) DeleteAlertDestination(params *DeleteAlertDestinationParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteAlertDestinationOK, error) {
 	// TODO: Validate the params before sending
@@ -435,7 +435,7 @@ func (a *Client) DeleteAlertDestination(params *DeleteAlertDestinationParams, au
 }
 
 /*
-  Get gets details of an alert
+Get gets details of an alert
 */
 func (a *Client) Get(params *GetParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetOK, error) {
 	// TODO: Validate the params before sending
@@ -474,7 +474,7 @@ func (a *Client) Get(params *GetParams, authInfo runtime.ClientAuthInfoWriter, o
 }
 
 /*
-  GetAlertChannel gets an alert channel
+GetAlertChannel gets an alert channel
 */
 func (a *Client) GetAlertChannel(params *GetAlertChannelParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetAlertChannelOK, error) {
 	// TODO: Validate the params before sending
@@ -513,7 +513,7 @@ func (a *Client) GetAlertChannel(params *GetAlertChannelParams, authInfo runtime
 }
 
 /*
-  GetAlertConfiguration gets an alert configuration
+GetAlertConfiguration gets an alert configuration
 */
 func (a *Client) GetAlertConfiguration(params *GetAlertConfigurationParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetAlertConfigurationOK, error) {
 	// TODO: Validate the params before sending
@@ -552,7 +552,7 @@ func (a *Client) GetAlertConfiguration(params *GetAlertConfigurationParams, auth
 }
 
 /*
-  GetAlertDestination gets an alert destination
+GetAlertDestination gets an alert destination
 */
 func (a *Client) GetAlertDestination(params *GetAlertDestinationParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetAlertDestinationOK, error) {
 	// TODO: Validate the params before sending
@@ -591,7 +591,7 @@ func (a *Client) GetAlertDestination(params *GetAlertDestinationParams, authInfo
 }
 
 /*
-  ListActive lists active alerts
+ListActive lists active alerts
 */
 func (a *Client) ListActive(params *ListActiveParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListActiveOK, error) {
 	// TODO: Validate the params before sending
@@ -630,7 +630,7 @@ func (a *Client) ListActive(params *ListActiveParams, authInfo runtime.ClientAut
 }
 
 /*
-  ListAlertChannels lists all alert channels
+ListAlertChannels lists all alert channels
 */
 func (a *Client) ListAlertChannels(params *ListAlertChannelsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListAlertChannelsOK, error) {
 	// TODO: Validate the params before sending
@@ -669,7 +669,7 @@ func (a *Client) ListAlertChannels(params *ListAlertChannelsParams, authInfo run
 }
 
 /*
-  ListAlertConfigurations gets filtered list of alert configurations
+ListAlertConfigurations gets filtered list of alert configurations
 */
 func (a *Client) ListAlertConfigurations(params *ListAlertConfigurationsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListAlertConfigurationsOK, error) {
 	// TODO: Validate the params before sending
@@ -708,7 +708,7 @@ func (a *Client) ListAlertConfigurations(params *ListAlertConfigurationsParams, 
 }
 
 /*
-  ListAlertDestinations lists alert destinations
+ListAlertDestinations lists alert destinations
 */
 func (a *Client) ListAlertDestinations(params *ListAlertDestinationsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListAlertDestinationsOK, error) {
 	// TODO: Validate the params before sending
@@ -747,7 +747,7 @@ func (a *Client) ListAlertDestinations(params *ListAlertDestinationsParams, auth
 }
 
 /*
-  ListAlertTemplates gets filtered list of alert configuration templates
+ListAlertTemplates gets filtered list of alert configuration templates
 */
 func (a *Client) ListAlertTemplates(params *ListAlertTemplatesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListAlertTemplatesOK, error) {
 	// TODO: Validate the params before sending
@@ -786,7 +786,7 @@ func (a *Client) ListAlertTemplates(params *ListAlertTemplatesParams, authInfo r
 }
 
 /*
-  ListOfAlerts lists all alerts
+ListOfAlerts lists all alerts
 */
 func (a *Client) ListOfAlerts(params *ListOfAlertsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListOfAlertsOK, error) {
 	// TODO: Validate the params before sending
@@ -825,7 +825,7 @@ func (a *Client) ListOfAlerts(params *ListOfAlertsParams, authInfo runtime.Clien
 }
 
 /*
-  PageAlertConfigurations lists all alert configurations paginated
+PageAlertConfigurations lists all alert configurations paginated
 */
 func (a *Client) PageAlertConfigurations(params *PageAlertConfigurationsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*PageAlertConfigurationsOK, error) {
 	// TODO: Validate the params before sending
@@ -864,7 +864,7 @@ func (a *Client) PageAlertConfigurations(params *PageAlertConfigurationsParams, 
 }
 
 /*
-  PageAlerts lists alerts paginated
+PageAlerts lists alerts paginated
 */
 func (a *Client) PageAlerts(params *PageAlertsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*PageAlertsOK, error) {
 	// TODO: Validate the params before sending
@@ -903,7 +903,7 @@ func (a *Client) PageAlerts(params *PageAlertsParams, authInfo runtime.ClientAut
 }
 
 /*
-  SendTestAlert sends test alert for alert configuration
+SendTestAlert sends test alert for alert configuration
 */
 func (a *Client) SendTestAlert(params *SendTestAlertParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*SendTestAlertOK, error) {
 	// TODO: Validate the params before sending
@@ -942,7 +942,7 @@ func (a *Client) SendTestAlert(params *SendTestAlertParams, authInfo runtime.Cli
 }
 
 /*
-  UpdateAlertChannel updates an alert channel
+UpdateAlertChannel updates an alert channel
 */
 func (a *Client) UpdateAlertChannel(params *UpdateAlertChannelParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpdateAlertChannelOK, error) {
 	// TODO: Validate the params before sending
@@ -981,7 +981,7 @@ func (a *Client) UpdateAlertChannel(params *UpdateAlertChannelParams, authInfo r
 }
 
 /*
-  UpdateAlertConfiguration updates an alert configuration
+UpdateAlertConfiguration updates an alert configuration
 */
 func (a *Client) UpdateAlertConfiguration(params *UpdateAlertConfigurationParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpdateAlertConfigurationOK, error) {
 	// TODO: Validate the params before sending
@@ -1020,7 +1020,7 @@ func (a *Client) UpdateAlertConfiguration(params *UpdateAlertConfigurationParams
 }
 
 /*
-  UpdateAlertDestination updates an alert destination
+UpdateAlertDestination updates an alert destination
 */
 func (a *Client) UpdateAlertDestination(params *UpdateAlertDestinationParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpdateAlertDestinationOK, error) {
 	// TODO: Validate the params before sending

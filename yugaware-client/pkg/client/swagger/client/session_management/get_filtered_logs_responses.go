@@ -39,7 +39,8 @@ func NewGetFilteredLogsOK() *GetFilteredLogsOK {
 	return &GetFilteredLogsOK{}
 }
 
-/* GetFilteredLogsOK describes a response with status code 200, with default header values.
+/*
+	GetFilteredLogsOK describes a response with status code 200, with default header values.
 
 successful operation. Changes from upstream: the return value for this field changed in 855eeb0b6b. This change was reverted to the v2.8.1 version of this call, and thus this API call is not compatible with v2.11.0+
 */

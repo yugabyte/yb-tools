@@ -39,7 +39,8 @@ func NewCreateAccesskeyOK() *CreateAccesskeyOK {
 	return &CreateAccesskeyOK{}
 }
 
-/* CreateAccesskeyOK describes a response with status code 200, with default header values.
+/*
+	CreateAccesskeyOK describes a response with status code 200, with default header values.
 
 successful operation
 */

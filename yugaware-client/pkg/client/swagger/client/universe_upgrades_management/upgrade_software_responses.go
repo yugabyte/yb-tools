@@ -39,7 +39,8 @@ func NewUpgradeSoftwareOK() *UpgradeSoftwareOK {
 	return &UpgradeSoftwareOK{}
 }
 
-/* UpgradeSoftwareOK describes a response with status code 200, with default header values.
+/*
+	UpgradeSoftwareOK describes a response with status code 200, with default header values.
 
 successful operation
 */

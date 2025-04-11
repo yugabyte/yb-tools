@@ -48,7 +48,7 @@ type ClientService interface {
 }
 
 /*
-  UpdateUserProfile updates a user s profile
+UpdateUserProfile updates a user s profile
 */
 func (a *Client) UpdateUserProfile(params *UpdateUserProfileParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpdateUserProfileOK, error) {
 	// TODO: Validate the params before sending
@@ -87,7 +87,7 @@ func (a *Client) UpdateUserProfile(params *UpdateUserProfileParams, authInfo run
 }
 
 /*
-  CreateUser creates a user
+CreateUser creates a user
 */
 func (a *Client) CreateUser(params *CreateUserParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateUserOK, error) {
 	// TODO: Validate the params before sending
@@ -126,9 +126,9 @@ func (a *Client) CreateUser(params *CreateUserParams, authInfo runtime.ClientAut
 }
 
 /*
-  DeleteUser deletes a user
+DeleteUser deletes a user
 
-  Deletes the specified user. Note that you can't delete a customer's primary user.
+Deletes the specified user. Note that you can't delete a customer's primary user.
 */
 func (a *Client) DeleteUser(params *DeleteUserParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteUserOK, error) {
 	// TODO: Validate the params before sending
@@ -167,7 +167,7 @@ func (a *Client) DeleteUser(params *DeleteUserParams, authInfo runtime.ClientAut
 }
 
 /*
-  GetUserDetails gets a user s details
+GetUserDetails gets a user s details
 */
 func (a *Client) GetUserDetails(params *GetUserDetailsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetUserDetailsOK, error) {
 	// TODO: Validate the params before sending
@@ -206,7 +206,7 @@ func (a *Client) GetUserDetails(params *GetUserDetailsParams, authInfo runtime.C
 }
 
 /*
-  ListUsers lists all users
+ListUsers lists all users
 */
 func (a *Client) ListUsers(params *ListUsersParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListUsersOK, error) {
 	// TODO: Validate the params before sending
@@ -245,7 +245,7 @@ func (a *Client) ListUsers(params *ListUsersParams, authInfo runtime.ClientAuthI
 }
 
 /*
-  UpdateUserPassword changes a user s password
+UpdateUserPassword changes a user s password
 */
 func (a *Client) UpdateUserPassword(params *UpdateUserPasswordParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpdateUserPasswordOK, error) {
 	// TODO: Validate the params before sending
@@ -284,7 +284,7 @@ func (a *Client) UpdateUserPassword(params *UpdateUserPasswordParams, authInfo r
 }
 
 /*
-  UpdateUserRole changes a user s role
+UpdateUserRole changes a user s role
 */
 func (a *Client) UpdateUserRole(params *UpdateUserRoleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpdateUserRoleOK, error) {
 	// TODO: Validate the params before sending

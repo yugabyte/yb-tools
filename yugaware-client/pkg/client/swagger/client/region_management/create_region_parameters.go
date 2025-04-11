@@ -54,10 +54,12 @@ func NewCreateRegionParamsWithHTTPClient(client *http.Client) *CreateRegionParam
 	}
 }
 
-/* CreateRegionParams contains all the parameters to send to the API endpoint
-   for the create region operation.
+/*
+CreateRegionParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the create region operation.
+
+	Typically these are written to a http.Request.
 */
 type CreateRegionParams struct {
 

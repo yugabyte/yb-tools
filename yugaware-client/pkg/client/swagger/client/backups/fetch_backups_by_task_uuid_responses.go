@@ -45,7 +45,8 @@ func NewFetchBackupsByTaskUUIDOK() *FetchBackupsByTaskUUIDOK {
 	return &FetchBackupsByTaskUUIDOK{}
 }
 
-/* FetchBackupsByTaskUUIDOK describes a response with status code 200, with default header values.
+/*
+	FetchBackupsByTaskUUIDOK describes a response with status code 200, with default header values.
 
 successful operation
 */
@@ -75,7 +76,8 @@ func NewFetchBackupsByTaskUUIDInternalServerError() *FetchBackupsByTaskUUIDInter
 	return &FetchBackupsByTaskUUIDInternalServerError{}
 }
 
-/* FetchBackupsByTaskUUIDInternalServerError describes a response with status code 500, with default header values.
+/*
+	FetchBackupsByTaskUUIDInternalServerError describes a response with status code 500, with default header values.
 
 If there was a server or database issue when listing the backups
 */

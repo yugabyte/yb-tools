@@ -52,10 +52,12 @@ func NewStopBackupParamsWithHTTPClient(client *http.Client) *StopBackupParams {
 	}
 }
 
-/* StopBackupParams contains all the parameters to send to the API endpoint
-   for the stop backup operation.
+/*
+StopBackupParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the stop backup operation.
+
+	Typically these are written to a http.Request.
 */
 type StopBackupParams struct {
 

@@ -52,10 +52,12 @@ func NewGrafanaDashboardParamsWithHTTPClient(client *http.Client) *GrafanaDashbo
 	}
 }
 
-/* GrafanaDashboardParams contains all the parameters to send to the API endpoint
-   for the grafana dashboard operation.
+/*
+GrafanaDashboardParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the grafana dashboard operation.
+
+	Typically these are written to a http.Request.
 */
 type GrafanaDashboardParams struct {
 	timeout    time.Duration

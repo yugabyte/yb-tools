@@ -168,16 +168,16 @@ func (PgsqlResponsePB_RequestStatus) EnumDescriptor() ([]byte, []int) {
 	return file_yb_common_pgsql_protocol_proto_rawDescGZIP(), []int{12, 0}
 }
 
-//--------------------------------------------------------------------------------------------------
+// --------------------------------------------------------------------------------------------------
 // Expressions.
-//--------------------------------------------------------------------------------------------------
+// --------------------------------------------------------------------------------------------------
 // Builtin call expression. There are 3 different calls.
-// - Builtin operators such as '>', '<', '=', ...
-//   These operators can be executed anywhere.
-// - Builtin functions such as Now().
-//   These functions can be executed anywhere.
-// - Server builtin functions.
-//   Only tablet servers can execute these functions.
+//   - Builtin operators such as '>', '<', '=', ...
+//     These operators can be executed anywhere.
+//   - Builtin functions such as Now().
+//     These functions can be executed anywhere.
+//   - Server builtin functions.
+//     Only tablet servers can execute these functions.
 //
 // TODO(neil) Regular builtin operators. This message can be executed anywhere.
 // - This is more efficient than builtin call as it avoids most overheads of calling builtin lib.
@@ -295,11 +295,11 @@ func (x *PgsqlConditionPB) GetOperands() []*PgsqlExpressionPB {
 }
 
 // An expression in a WHERE condition.
-// - Bind values would be given by client and grouped into a repeated field that can be accessed
-//   by their indexes.
-// - Alias values would be computed by server and grouped into repeated field that can be accessed
-//   by their indexes.
-// - Code generator write indexes as ref. Executor deref indexes to get actual values.
+//   - Bind values would be given by client and grouped into a repeated field that can be accessed
+//     by their indexes.
+//   - Alias values would be computed by server and grouped into repeated field that can be accessed
+//     by their indexes.
+//   - Code generator write indexes as ref. Executor deref indexes to get actual values.
 type PgsqlExpressionPB struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -467,7 +467,8 @@ func (*PgsqlExpressionPB_Condition) isPgsqlExpressionPB_Expr() {}
 // This message defines an argument in a batch request from PgGate to DocDB. Instead of sending
 // many requests of different arguments, a batch request would send one request that contains
 // an array of independent arguments. DocDB will iterate the array to execute.
-//     DML_request(arg) [n] ---> DML_request ( PgsqlBatchArgument args[n] )
+//
+//	DML_request(arg) [n] ---> DML_request ( PgsqlBatchArgument args[n] )
 type PgsqlBatchArgumentPB struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -564,9 +565,9 @@ func (x *PgsqlBatchArgumentPB) GetRangeColumnValues() []*PgsqlExpressionPB {
 	return nil
 }
 
-//--------------------------------------------------------------------------------------------------
+// --------------------------------------------------------------------------------------------------
 // Column messages.
-//--------------------------------------------------------------------------------------------------
+// --------------------------------------------------------------------------------------------------
 // ColumnRefs is a list of columns to be read by DocDB before a PGSQL request can be executed.
 type PgsqlColumnRefsPB struct {
 	state         protoimpl.MessageState
@@ -617,7 +618,8 @@ func (x *PgsqlColumnRefsPB) GetIds() []int32 {
 
 // ColumnValue is a value to be assigned to a table column by DocDB while executing a PGSQL request.
 // Currently, this is used for SET clause.
-//   SET column-of-given-id = expr
+//
+//	SET column-of-given-id = expr
 type PgsqlColumnValuePB struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -1100,7 +1102,6 @@ func (x *PgsqlWriteRequestPB) GetIsDeletePersistNeeded() bool {
 // next tablet's partition. "next_row_key" is empty in this case which means we will start from the
 // very beginning of the next tablet. (TODO: we need to return the clean snapshot time in this case
 // also).
-//
 type PgsqlPagingStatePB struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

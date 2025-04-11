@@ -52,10 +52,12 @@ func NewListSchedulesParamsWithHTTPClient(client *http.Client) *ListSchedulesPar
 	}
 }
 
-/* ListSchedulesParams contains all the parameters to send to the API endpoint
-   for the list schedules operation.
+/*
+ListSchedulesParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the list schedules operation.
+
+	Typically these are written to a http.Request.
 */
 type ListSchedulesParams struct {
 

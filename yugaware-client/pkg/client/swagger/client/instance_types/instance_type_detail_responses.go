@@ -39,7 +39,8 @@ func NewInstanceTypeDetailOK() *InstanceTypeDetailOK {
 	return &InstanceTypeDetailOK{}
 }
 
-/* InstanceTypeDetailOK describes a response with status code 200, with default header values.
+/*
+	InstanceTypeDetailOK describes a response with status code 200, with default header values.
 
 successful operation
 */

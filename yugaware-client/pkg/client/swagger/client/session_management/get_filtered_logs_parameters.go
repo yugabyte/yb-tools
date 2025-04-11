@@ -53,10 +53,12 @@ func NewGetFilteredLogsParamsWithHTTPClient(client *http.Client) *GetFilteredLog
 	}
 }
 
-/* GetFilteredLogsParams contains all the parameters to send to the API endpoint
-   for the get filtered logs operation.
+/*
+GetFilteredLogsParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get filtered logs operation.
+
+	Typically these are written to a http.Request.
 */
 type GetFilteredLogsParams struct {
 

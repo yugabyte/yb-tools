@@ -42,7 +42,7 @@ type ClientService interface {
 }
 
 /*
-  CreateRegion creates a new region
+CreateRegion creates a new region
 */
 func (a *Client) CreateRegion(params *CreateRegionParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateRegionOK, error) {
 	// TODO: Validate the params before sending
@@ -81,7 +81,7 @@ func (a *Client) CreateRegion(params *CreateRegionParams, authInfo runtime.Clien
 }
 
 /*
-  DeleteRegion deletes a region
+DeleteRegion deletes a region
 */
 func (a *Client) DeleteRegion(params *DeleteRegionParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteRegionOK, error) {
 	// TODO: Validate the params before sending
@@ -120,7 +120,7 @@ func (a *Client) DeleteRegion(params *DeleteRegionParams, authInfo runtime.Clien
 }
 
 /*
-  GetRegion lists a provider s regions
+GetRegion lists a provider s regions
 */
 func (a *Client) GetRegion(params *GetRegionParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetRegionOK, error) {
 	// TODO: Validate the params before sending
@@ -159,7 +159,7 @@ func (a *Client) GetRegion(params *GetRegionParams, authInfo runtime.ClientAuthI
 }
 
 /*
-  ListAllRegions lists regions for all providers
+ListAllRegions lists regions for all providers
 */
 func (a *Client) ListAllRegions(params *ListAllRegionsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListAllRegionsOK, error) {
 	// TODO: Validate the params before sending

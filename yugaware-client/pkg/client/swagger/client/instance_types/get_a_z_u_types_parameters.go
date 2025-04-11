@@ -52,10 +52,12 @@ func NewGetAZUTypesParamsWithHTTPClient(client *http.Client) *GetAZUTypesParams 
 	}
 }
 
-/* GetAZUTypesParams contains all the parameters to send to the API endpoint
-   for the get a z u types operation.
+/*
+GetAZUTypesParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get a z u types operation.
+
+	Typically these are written to a http.Request.
 */
 type GetAZUTypesParams struct {
 	timeout    time.Duration

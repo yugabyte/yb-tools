@@ -52,10 +52,12 @@ func NewGetKeyRefHistoryParamsWithHTTPClient(client *http.Client) *GetKeyRefHist
 	}
 }
 
-/* GetKeyRefHistoryParams contains all the parameters to send to the API endpoint
-   for the get key ref history operation.
+/*
+GetKeyRefHistoryParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get key ref history operation.
+
+	Typically these are written to a http.Request.
 */
 type GetKeyRefHistoryParams struct {
 

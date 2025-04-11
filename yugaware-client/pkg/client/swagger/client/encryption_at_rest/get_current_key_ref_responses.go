@@ -37,7 +37,8 @@ func NewGetCurrentKeyRefOK() *GetCurrentKeyRefOK {
 	return &GetCurrentKeyRefOK{}
 }
 
-/* GetCurrentKeyRefOK describes a response with status code 200, with default header values.
+/*
+	GetCurrentKeyRefOK describes a response with status code 200, with default header values.
 
 successful operation
 */

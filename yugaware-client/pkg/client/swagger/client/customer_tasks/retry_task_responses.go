@@ -39,7 +39,8 @@ func NewRetryTaskOK() *RetryTaskOK {
 	return &RetryTaskOK{}
 }
 
-/* RetryTaskOK describes a response with status code 200, with default header values.
+/*
+	RetryTaskOK describes a response with status code 200, with default header values.
 
 successful operation
 */

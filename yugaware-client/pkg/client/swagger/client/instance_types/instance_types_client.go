@@ -48,7 +48,7 @@ type ClientService interface {
 }
 
 /*
-  CreateInstanceType creates an instance type
+CreateInstanceType creates an instance type
 */
 func (a *Client) CreateInstanceType(params *CreateInstanceTypeParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateInstanceTypeOK, error) {
 	// TODO: Validate the params before sending
@@ -87,7 +87,7 @@ func (a *Client) CreateInstanceType(params *CreateInstanceTypeParams, authInfo r
 }
 
 /*
-  DeleteInstanceType deletes an instance type
+DeleteInstanceType deletes an instance type
 */
 func (a *Client) DeleteInstanceType(params *DeleteInstanceTypeParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteInstanceTypeOK, error) {
 	// TODO: Validate the params before sending
@@ -126,7 +126,7 @@ func (a *Client) DeleteInstanceType(params *DeleteInstanceTypeParams, authInfo r
 }
 
 /*
-  GetAZUTypes lists supported azure disk types
+GetAZUTypes lists supported azure disk types
 */
 func (a *Client) GetAZUTypes(params *GetAZUTypesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetAZUTypesOK, error) {
 	// TODO: Validate the params before sending
@@ -165,7 +165,7 @@ func (a *Client) GetAZUTypes(params *GetAZUTypesParams, authInfo runtime.ClientA
 }
 
 /*
-  GetEBSTypes lists supported e b s volume types
+GetEBSTypes lists supported e b s volume types
 */
 func (a *Client) GetEBSTypes(params *GetEBSTypesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetEBSTypesOK, error) {
 	// TODO: Validate the params before sending
@@ -204,7 +204,7 @@ func (a *Client) GetEBSTypes(params *GetEBSTypesParams, authInfo runtime.ClientA
 }
 
 /*
-  GetGCPTypes lists supported g c p disk types
+GetGCPTypes lists supported g c p disk types
 */
 func (a *Client) GetGCPTypes(params *GetGCPTypesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetGCPTypesOK, error) {
 	// TODO: Validate the params before sending
@@ -243,7 +243,7 @@ func (a *Client) GetGCPTypes(params *GetGCPTypesParams, authInfo runtime.ClientA
 }
 
 /*
-  InstanceTypeDetail gets details of an instance type
+InstanceTypeDetail gets details of an instance type
 */
 func (a *Client) InstanceTypeDetail(params *InstanceTypeDetailParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*InstanceTypeDetailOK, error) {
 	// TODO: Validate the params before sending
@@ -282,9 +282,9 @@ func (a *Client) InstanceTypeDetail(params *InstanceTypeDetailParams, authInfo r
 }
 
 /*
-  ListOfInstanceType lists a provider s instance types
+ListOfInstanceType lists a provider s instance types
 
-  Changes from upstream: Changes datatype of field (removes java.util.Collections.emptyList() from the zone field)
+Changes from upstream: Changes datatype of field (removes java.util.Collections.emptyList() from the zone field)
 */
 func (a *Client) ListOfInstanceType(params *ListOfInstanceTypeParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListOfInstanceTypeOK, error) {
 	// TODO: Validate the params before sending

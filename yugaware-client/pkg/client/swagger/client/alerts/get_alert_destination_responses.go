@@ -39,7 +39,8 @@ func NewGetAlertDestinationOK() *GetAlertDestinationOK {
 	return &GetAlertDestinationOK{}
 }
 
-/* GetAlertDestinationOK describes a response with status code 200, with default header values.
+/*
+	GetAlertDestinationOK describes a response with status code 200, with default header values.
 
 successful operation
 */

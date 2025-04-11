@@ -54,10 +54,12 @@ func NewCountAlertsParamsWithHTTPClient(client *http.Client) *CountAlertsParams 
 	}
 }
 
-/* CountAlertsParams contains all the parameters to send to the API endpoint
-   for the count alerts operation.
+/*
+CountAlertsParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the count alerts operation.
+
+	Typically these are written to a http.Request.
 */
 type CountAlertsParams struct {
 

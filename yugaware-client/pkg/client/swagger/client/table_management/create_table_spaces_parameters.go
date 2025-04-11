@@ -54,10 +54,12 @@ func NewCreateTableSpacesParamsWithHTTPClient(client *http.Client) *CreateTableS
 	}
 }
 
-/* CreateTableSpacesParams contains all the parameters to send to the API endpoint
-   for the create table spaces operation.
+/*
+CreateTableSpacesParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the create table spaces operation.
+
+	Typically these are written to a http.Request.
 */
 type CreateTableSpacesParams struct {
 

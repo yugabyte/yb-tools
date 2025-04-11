@@ -39,7 +39,8 @@ func NewCreateCustomerConfigOK() *CreateCustomerConfigOK {
 	return &CreateCustomerConfigOK{}
 }
 
-/* CreateCustomerConfigOK describes a response with status code 200, with default header values.
+/*
+	CreateCustomerConfigOK describes a response with status code 200, with default header values.
 
 successful operation
 */

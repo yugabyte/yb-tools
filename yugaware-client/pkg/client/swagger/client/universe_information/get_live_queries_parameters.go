@@ -52,10 +52,12 @@ func NewGetLiveQueriesParamsWithHTTPClient(client *http.Client) *GetLiveQueriesP
 	}
 }
 
-/* GetLiveQueriesParams contains all the parameters to send to the API endpoint
-   for the get live queries operation.
+/*
+GetLiveQueriesParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get live queries operation.
+
+	Typically these are written to a http.Request.
 */
 type GetLiveQueriesParams struct {
 

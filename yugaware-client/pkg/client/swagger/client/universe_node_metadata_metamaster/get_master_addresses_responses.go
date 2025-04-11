@@ -37,7 +37,8 @@ func NewGetMasterAddressesOK() *GetMasterAddressesOK {
 	return &GetMasterAddressesOK{}
 }
 
-/* GetMasterAddressesOK describes a response with status code 200, with default header values.
+/*
+	GetMasterAddressesOK describes a response with status code 200, with default header values.
 
 successful operation
 */

@@ -54,10 +54,12 @@ func NewEditCustomerConfigV2ParamsWithHTTPClient(client *http.Client) *EditCusto
 	}
 }
 
-/* EditCustomerConfigV2Params contains all the parameters to send to the API endpoint
-   for the edit customer config v2 operation.
+/*
+EditCustomerConfigV2Params contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the edit customer config v2 operation.
+
+	Typically these are written to a http.Request.
 */
 type EditCustomerConfigV2Params struct {
 

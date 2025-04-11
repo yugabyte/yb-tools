@@ -52,10 +52,12 @@ func NewGetAllTableSpacesParamsWithHTTPClient(client *http.Client) *GetAllTableS
 	}
 }
 
-/* GetAllTableSpacesParams contains all the parameters to send to the API endpoint
-   for the get all table spaces operation.
+/*
+GetAllTableSpacesParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get all table spaces operation.
+
+	Typically these are written to a http.Request.
 */
 type GetAllTableSpacesParams struct {
 

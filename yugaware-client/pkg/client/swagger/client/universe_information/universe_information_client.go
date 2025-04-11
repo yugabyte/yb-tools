@@ -54,9 +54,9 @@ type ClientService interface {
 }
 
 /*
-  DownloadNodeLogs downloads a node s logs
+DownloadNodeLogs downloads a node s logs
 
-  Downloads the log files from a given node.
+Downloads the log files from a given node.
 */
 func (a *Client) DownloadNodeLogs(params *DownloadNodeLogsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DownloadNodeLogsOK, error) {
 	// TODO: Validate the params before sending
@@ -95,7 +95,7 @@ func (a *Client) DownloadNodeLogs(params *DownloadNodeLogsParams, authInfo runti
 }
 
 /*
-  GetLiveQueries gets live queries for a universe
+GetLiveQueries gets live queries for a universe
 */
 func (a *Client) GetLiveQueries(params *GetLiveQueriesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetLiveQueriesOK, error) {
 	// TODO: Validate the params before sending
@@ -134,7 +134,7 @@ func (a *Client) GetLiveQueries(params *GetLiveQueriesParams, authInfo runtime.C
 }
 
 /*
-  GetMasterLeaderIP gets IP address of a universe s master leader
+GetMasterLeaderIP gets IP address of a universe s master leader
 */
 func (a *Client) GetMasterLeaderIP(params *GetMasterLeaderIPParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetMasterLeaderIPOK, error) {
 	// TODO: Validate the params before sending
@@ -173,7 +173,7 @@ func (a *Client) GetMasterLeaderIP(params *GetMasterLeaderIPParams, authInfo run
 }
 
 /*
-  GetSlowQueries gets slow queries for a universe
+GetSlowQueries gets slow queries for a universe
 */
 func (a *Client) GetSlowQueries(params *GetSlowQueriesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetSlowQueriesOK, error) {
 	// TODO: Validate the params before sending
@@ -212,7 +212,7 @@ func (a *Client) GetSlowQueries(params *GetSlowQueriesParams, authInfo runtime.C
 }
 
 /*
-  GetUniverseCost gets a cost estimate for a universe
+GetUniverseCost gets a cost estimate for a universe
 */
 func (a *Client) GetUniverseCost(params *GetUniverseCostParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetUniverseCostOK, error) {
 	// TODO: Validate the params before sending
@@ -251,7 +251,7 @@ func (a *Client) GetUniverseCost(params *GetUniverseCostParams, authInfo runtime
 }
 
 /*
-  GetUniverseCostForAll gets a cost estimate for all universes
+GetUniverseCostForAll gets a cost estimate for all universes
 */
 func (a *Client) GetUniverseCostForAll(params *GetUniverseCostForAllParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetUniverseCostForAllOK, error) {
 	// TODO: Validate the params before sending
@@ -290,9 +290,9 @@ func (a *Client) GetUniverseCostForAll(params *GetUniverseCostForAllParams, auth
 }
 
 /*
-  HealthCheckUniverse runs a universe health check
+HealthCheckUniverse runs a universe health check
 
-  Checks the health of all tablet servers and masters in the universe, as well as certain conditions on the machines themselves, including disk utilization, presence of FATAL or core files, and more.
+Checks the health of all tablet servers and masters in the universe, as well as certain conditions on the machines themselves, including disk utilization, presence of FATAL or core files, and more.
 */
 func (a *Client) HealthCheckUniverse(params *HealthCheckUniverseParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*HealthCheckUniverseOK, error) {
 	// TODO: Validate the params before sending
@@ -331,7 +331,7 @@ func (a *Client) HealthCheckUniverse(params *HealthCheckUniverseParams, authInfo
 }
 
 /*
-  ResetSlowQueries resets slow queries for a universe
+ResetSlowQueries resets slow queries for a universe
 */
 func (a *Client) ResetSlowQueries(params *ResetSlowQueriesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ResetSlowQueriesOK, error) {
 	// TODO: Validate the params before sending
@@ -370,9 +370,9 @@ func (a *Client) ResetSlowQueries(params *ResetSlowQueriesParams, authInfo runti
 }
 
 /*
-  TriggerHealthCheck triggers a universe health check
+TriggerHealthCheck triggers a universe health check
 
-  Trigger a universe health check and return the trigger time.
+Trigger a universe health check and return the trigger time.
 */
 func (a *Client) TriggerHealthCheck(params *TriggerHealthCheckParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*TriggerHealthCheckOK, error) {
 	// TODO: Validate the params before sending
@@ -411,9 +411,9 @@ func (a *Client) TriggerHealthCheck(params *TriggerHealthCheckParams, authInfo r
 }
 
 /*
-  UniverseStatus gets a universe s status
+UniverseStatus gets a universe s status
 
-  This will return a Map of node name to its status in json format
+This will return a Map of node name to its status in json format
 */
 func (a *Client) UniverseStatus(params *UniverseStatusParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UniverseStatusOK, error) {
 	// TODO: Validate the params before sending

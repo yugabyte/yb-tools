@@ -52,10 +52,12 @@ func NewSetUniverseKeyParamsWithHTTPClient(client *http.Client) *SetUniverseKeyP
 	}
 }
 
-/* SetUniverseKeyParams contains all the parameters to send to the API endpoint
-   for the set universe key operation.
+/*
+SetUniverseKeyParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the set universe key operation.
+
+	Typically these are written to a http.Request.
 */
 type SetUniverseKeyParams struct {
 

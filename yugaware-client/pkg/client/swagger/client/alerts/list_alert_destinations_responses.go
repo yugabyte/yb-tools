@@ -39,7 +39,8 @@ func NewListAlertDestinationsOK() *ListAlertDestinationsOK {
 	return &ListAlertDestinationsOK{}
 }
 
-/* ListAlertDestinationsOK describes a response with status code 200, with default header values.
+/*
+	ListAlertDestinationsOK describes a response with status code 200, with default header values.
 
 successful operation
 */

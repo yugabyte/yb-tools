@@ -39,7 +39,8 @@ func NewStopBackupOK() *StopBackupOK {
 	return &StopBackupOK{}
 }
 
-/* StopBackupOK describes a response with status code 200, with default header values.
+/*
+	StopBackupOK describes a response with status code 200, with default header values.
 
 successful operation
 */

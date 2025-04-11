@@ -54,10 +54,12 @@ func NewRestartUniverseParamsWithHTTPClient(client *http.Client) *RestartUnivers
 	}
 }
 
-/* RestartUniverseParams contains all the parameters to send to the API endpoint
-   for the restart universe operation.
+/*
+RestartUniverseParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the restart universe operation.
+
+	Typically these are written to a http.Request.
 */
 type RestartUniverseParams struct {
 

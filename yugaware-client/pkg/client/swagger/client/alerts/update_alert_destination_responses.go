@@ -39,7 +39,8 @@ func NewUpdateAlertDestinationOK() *UpdateAlertDestinationOK {
 	return &UpdateAlertDestinationOK{}
 }
 
-/* UpdateAlertDestinationOK describes a response with status code 200, with default header values.
+/*
+	UpdateAlertDestinationOK describes a response with status code 200, with default header values.
 
 successful operation
 */

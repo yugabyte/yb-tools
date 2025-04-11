@@ -52,10 +52,12 @@ func NewTriggerHealthCheckParamsWithHTTPClient(client *http.Client) *TriggerHeal
 	}
 }
 
-/* TriggerHealthCheckParams contains all the parameters to send to the API endpoint
-   for the trigger health check operation.
+/*
+TriggerHealthCheckParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the trigger health check operation.
+
+	Typically these are written to a http.Request.
 */
 type TriggerHealthCheckParams struct {
 

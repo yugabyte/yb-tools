@@ -52,10 +52,12 @@ func NewCreateKMSConfigParamsWithHTTPClient(client *http.Client) *CreateKMSConfi
 	}
 }
 
-/* CreateKMSConfigParams contains all the parameters to send to the API endpoint
-   for the create k m s config operation.
+/*
+CreateKMSConfigParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the create k m s config operation.
+
+	Typically these are written to a http.Request.
 */
 type CreateKMSConfigParams struct {
 

@@ -46,7 +46,7 @@ type ClientService interface {
 }
 
 /*
-  CreateSupportBundle creates support bundle for specific universe
+CreateSupportBundle creates support bundle for specific universe
 */
 func (a *Client) CreateSupportBundle(params *CreateSupportBundleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateSupportBundleOK, error) {
 	// TODO: Validate the params before sending
@@ -85,7 +85,7 @@ func (a *Client) CreateSupportBundle(params *CreateSupportBundleParams, authInfo
 }
 
 /*
-  DeleteSupportBundle deletes a support bundle
+DeleteSupportBundle deletes a support bundle
 */
 func (a *Client) DeleteSupportBundle(params *DeleteSupportBundleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteSupportBundleOK, error) {
 	// TODO: Validate the params before sending
@@ -124,7 +124,7 @@ func (a *Client) DeleteSupportBundle(params *DeleteSupportBundleParams, authInfo
 }
 
 /*
-  DownloadSupportBundle downloads support bundle
+DownloadSupportBundle downloads support bundle
 */
 func (a *Client) DownloadSupportBundle(params *DownloadSupportBundleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DownloadSupportBundleOK, error) {
 	// TODO: Validate the params before sending
@@ -163,7 +163,7 @@ func (a *Client) DownloadSupportBundle(params *DownloadSupportBundleParams, auth
 }
 
 /*
-  GetSupportBundle gets a support bundle from a universe
+GetSupportBundle gets a support bundle from a universe
 */
 func (a *Client) GetSupportBundle(params *GetSupportBundleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetSupportBundleOK, error) {
 	// TODO: Validate the params before sending
@@ -202,7 +202,7 @@ func (a *Client) GetSupportBundle(params *GetSupportBundleParams, authInfo runti
 }
 
 /*
-  ListSupportBundle lists all support bundles from a universe
+ListSupportBundle lists all support bundles from a universe
 */
 func (a *Client) ListSupportBundle(params *ListSupportBundleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListSupportBundleOK, error) {
 	// TODO: Validate the params before sending
@@ -241,7 +241,7 @@ func (a *Client) ListSupportBundle(params *ListSupportBundleParams, authInfo run
 }
 
 /*
-  ListSupportBundleComponents lists all components available in support bundle
+ListSupportBundleComponents lists all components available in support bundle
 */
 func (a *Client) ListSupportBundleComponents(params *ListSupportBundleComponentsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListSupportBundleComponentsOK, error) {
 	// TODO: Validate the params before sending

@@ -52,10 +52,12 @@ func NewGetEBSTypesParamsWithHTTPClient(client *http.Client) *GetEBSTypesParams 
 	}
 }
 
-/* GetEBSTypesParams contains all the parameters to send to the API endpoint
-   for the get e b s types operation.
+/*
+GetEBSTypesParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get e b s types operation.
+
+	Typically these are written to a http.Request.
 */
 type GetEBSTypesParams struct {
 	timeout    time.Duration

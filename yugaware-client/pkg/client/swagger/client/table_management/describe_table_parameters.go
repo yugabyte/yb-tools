@@ -52,10 +52,12 @@ func NewDescribeTableParamsWithHTTPClient(client *http.Client) *DescribeTablePar
 	}
 }
 
-/* DescribeTableParams contains all the parameters to send to the API endpoint
-   for the describe table operation.
+/*
+DescribeTableParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the describe table operation.
+
+	Typically these are written to a http.Request.
 */
 type DescribeTableParams struct {
 

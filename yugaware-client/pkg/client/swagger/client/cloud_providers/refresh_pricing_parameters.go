@@ -52,10 +52,12 @@ func NewRefreshPricingParamsWithHTTPClient(client *http.Client) *RefreshPricingP
 	}
 }
 
-/* RefreshPricingParams contains all the parameters to send to the API endpoint
-   for the refresh pricing operation.
+/*
+RefreshPricingParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the refresh pricing operation.
+
+	Typically these are written to a http.Request.
 */
 type RefreshPricingParams struct {
 

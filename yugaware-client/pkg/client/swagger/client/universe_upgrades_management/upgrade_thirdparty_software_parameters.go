@@ -54,10 +54,12 @@ func NewUpgradeThirdpartySoftwareParamsWithHTTPClient(client *http.Client) *Upgr
 	}
 }
 
-/* UpgradeThirdpartySoftwareParams contains all the parameters to send to the API endpoint
-   for the upgrade thirdparty software operation.
+/*
+UpgradeThirdpartySoftwareParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the upgrade thirdparty software operation.
+
+	Typically these are written to a http.Request.
 */
 type UpgradeThirdpartySoftwareParams struct {
 

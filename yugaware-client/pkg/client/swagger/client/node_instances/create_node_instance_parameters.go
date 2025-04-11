@@ -54,10 +54,12 @@ func NewCreateNodeInstanceParamsWithHTTPClient(client *http.Client) *CreateNodeI
 	}
 }
 
-/* CreateNodeInstanceParams contains all the parameters to send to the API endpoint
-   for the create node instance operation.
+/*
+CreateNodeInstanceParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the create node instance operation.
+
+	Typically these are written to a http.Request.
 */
 type CreateNodeInstanceParams struct {
 

@@ -53,10 +53,12 @@ func NewListOfInstanceTypeParamsWithHTTPClient(client *http.Client) *ListOfInsta
 	}
 }
 
-/* ListOfInstanceTypeParams contains all the parameters to send to the API endpoint
-   for the list of instance type operation.
+/*
+ListOfInstanceTypeParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the list of instance type operation.
+
+	Typically these are written to a http.Request.
 */
 type ListOfInstanceTypeParams struct {
 

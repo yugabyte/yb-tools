@@ -39,7 +39,8 @@ func NewGetSessionInfoOK() *GetSessionInfoOK {
 	return &GetSessionInfoOK{}
 }
 
-/* GetSessionInfoOK describes a response with status code 200, with default header values.
+/*
+	GetSessionInfoOK describes a response with status code 200, with default header values.
 
 successful operation
 */

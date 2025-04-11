@@ -52,10 +52,12 @@ func NewSetKeyParamsWithHTTPClient(client *http.Client) *SetKeyParams {
 	}
 }
 
-/* SetKeyParams contains all the parameters to send to the API endpoint
-   for the set key operation.
+/*
+SetKeyParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the set key operation.
+
+	Typically these are written to a http.Request.
 */
 type SetKeyParams struct {
 

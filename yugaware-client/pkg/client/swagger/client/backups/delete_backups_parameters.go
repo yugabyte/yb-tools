@@ -52,10 +52,12 @@ func NewDeleteBackupsParamsWithHTTPClient(client *http.Client) *DeleteBackupsPar
 	}
 }
 
-/* DeleteBackupsParams contains all the parameters to send to the API endpoint
-   for the delete backups operation.
+/*
+DeleteBackupsParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the delete backups operation.
+
+	Typically these are written to a http.Request.
 */
 type DeleteBackupsParams struct {
 

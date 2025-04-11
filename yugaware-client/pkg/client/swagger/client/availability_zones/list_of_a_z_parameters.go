@@ -52,10 +52,12 @@ func NewListOfAZParamsWithHTTPClient(client *http.Client) *ListOfAZParams {
 	}
 }
 
-/* ListOfAZParams contains all the parameters to send to the API endpoint
-   for the list of a z operation.
+/*
+ListOfAZParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the list of a z operation.
+
+	Typically these are written to a http.Request.
 */
 type ListOfAZParams struct {
 

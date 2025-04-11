@@ -54,10 +54,12 @@ func NewCreateReadOnlyClusterParamsWithHTTPClient(client *http.Client) *CreateRe
 	}
 }
 
-/* CreateReadOnlyClusterParams contains all the parameters to send to the API endpoint
-   for the create read only cluster operation.
+/*
+CreateReadOnlyClusterParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the create read only cluster operation.
+
+	Typically these are written to a http.Request.
 */
 type CreateReadOnlyClusterParams struct {
 

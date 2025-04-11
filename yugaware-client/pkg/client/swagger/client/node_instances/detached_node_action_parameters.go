@@ -52,10 +52,12 @@ func NewDetachedNodeActionParamsWithHTTPClient(client *http.Client) *DetachedNod
 	}
 }
 
-/* DetachedNodeActionParams contains all the parameters to send to the API endpoint
-   for the detached node action operation.
+/*
+DetachedNodeActionParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the detached node action operation.
+
+	Typically these are written to a http.Request.
 */
 type DetachedNodeActionParams struct {
 

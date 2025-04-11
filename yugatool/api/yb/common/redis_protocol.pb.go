@@ -1398,17 +1398,18 @@ func (*RedisKeyValueSubKeyPB_TimestampSubkey) isRedisKeyValueSubKeyPB_Subkey() {
 
 func (*RedisKeyValueSubKeyPB_DoubleSubkey) isRedisKeyValueSubKeyPB_Subkey() {}
 
-// - Even if just a key is needed, or there are multiple values, this is used.
-// - In case of referring to an entity within a container, the type of the outer_key and the subkey
-//   or index of the inner entity is specified.
+//   - Even if just a key is needed, or there are multiple values, this is used.
+//   - In case of referring to an entity within a container, the type of the outer_key and the subkey
+//     or index of the inner entity is specified.
 //   - String    : Set the key and value only (setting STRING type is optional as it is understood).
 //   - List      : Set the key, index, and value.
 //   - Set       : Set the key, and value (possibly multiple depending on the command).
 //   - Hash      : Set key, subkey, value.
 //   - SortedSet : Set key, subkey, value (value is interpreted as score).
 //   - Timeseries: Set key, subkey, value (timestamp_subkey in RedisKeyValueSubKeyPB is interpreted
-//                 as timestamp).
-// - Value is not present in case of an append, get, exists, etc. For multiple inserts into a
+//     as timestamp).
+//   - Value is not present in case of an append, get, exists, etc. For multiple inserts into a
+//
 // container, the subkey and value fields have one or more items.
 type RedisKeyValuePB struct {
 	state         protoimpl.MessageState

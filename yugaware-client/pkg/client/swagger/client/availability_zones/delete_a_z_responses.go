@@ -39,7 +39,8 @@ func NewDeleteAZOK() *DeleteAZOK {
 	return &DeleteAZOK{}
 }
 
-/* DeleteAZOK describes a response with status code 200, with default header values.
+/*
+	DeleteAZOK describes a response with status code 200, with default header values.
 
 successful operation
 */

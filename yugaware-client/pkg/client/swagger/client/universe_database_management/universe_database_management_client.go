@@ -42,7 +42,7 @@ type ClientService interface {
 }
 
 /*
-  CreateUserInDB creates a database user for a universe
+CreateUserInDB creates a database user for a universe
 */
 func (a *Client) CreateUserInDB(params *CreateUserInDBParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateUserInDBOK, error) {
 	// TODO: Validate the params before sending
@@ -81,9 +81,9 @@ func (a *Client) CreateUserInDB(params *CreateUserInDBParams, authInfo runtime.C
 }
 
 /*
-  RunInShell runs a shell command
+RunInShell runs a shell command
 
-  This operation is no longer supported, for security reasons.
+This operation is no longer supported, for security reasons.
 */
 func (a *Client) RunInShell(params *RunInShellParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*RunInShellOK, error) {
 	// TODO: Validate the params before sending
@@ -122,9 +122,9 @@ func (a *Client) RunInShell(params *RunInShellParams, authInfo runtime.ClientAut
 }
 
 /*
-  RunYsqlQueryUniverse runs a y SQL query in a universe
+RunYsqlQueryUniverse runs a y SQL query in a universe
 
-  Runs a YSQL query. Only valid when the platform is running in `OSS` mode.
+Runs a YSQL query. Only valid when the platform is running in `OSS` mode.
 */
 func (a *Client) RunYsqlQueryUniverse(params *RunYsqlQueryUniverseParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*RunYsqlQueryUniverseOK, error) {
 	// TODO: Validate the params before sending
@@ -163,7 +163,7 @@ func (a *Client) RunYsqlQueryUniverse(params *RunYsqlQueryUniverseParams, authIn
 }
 
 /*
-  SetDatabaseCredentials sets a universe s database credentials
+SetDatabaseCredentials sets a universe s database credentials
 */
 func (a *Client) SetDatabaseCredentials(params *SetDatabaseCredentialsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*SetDatabaseCredentialsOK, error) {
 	// TODO: Validate the params before sending

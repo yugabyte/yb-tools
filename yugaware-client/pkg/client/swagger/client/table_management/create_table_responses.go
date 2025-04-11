@@ -39,7 +39,8 @@ func NewCreateTableOK() *CreateTableOK {
 	return &CreateTableOK{}
 }
 
-/* CreateTableOK describes a response with status code 200, with default header values.
+/*
+	CreateTableOK describes a response with status code 200, with default header values.
 
 successful operation
 */

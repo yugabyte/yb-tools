@@ -52,10 +52,12 @@ func NewDeleteKMSConfigParamsWithHTTPClient(client *http.Client) *DeleteKMSConfi
 	}
 }
 
-/* DeleteKMSConfigParams contains all the parameters to send to the API endpoint
-   for the delete k m s config operation.
+/*
+DeleteKMSConfigParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the delete k m s config operation.
+
+	Typically these are written to a http.Request.
 */
 type DeleteKMSConfigParams struct {
 

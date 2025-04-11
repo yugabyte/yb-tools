@@ -39,7 +39,8 @@ func NewCreateSingleTableBackupOK() *CreateSingleTableBackupOK {
 	return &CreateSingleTableBackupOK{}
 }
 
-/* CreateSingleTableBackupOK describes a response with status code 200, with default header values.
+/*
+	CreateSingleTableBackupOK describes a response with status code 200, with default header values.
 
 successful operation
 */

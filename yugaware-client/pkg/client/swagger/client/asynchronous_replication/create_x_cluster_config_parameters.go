@@ -54,10 +54,12 @@ func NewCreateXClusterConfigParamsWithHTTPClient(client *http.Client) *CreateXCl
 	}
 }
 
-/* CreateXClusterConfigParams contains all the parameters to send to the API endpoint
-   for the create x cluster config operation.
+/*
+CreateXClusterConfigParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the create x cluster config operation.
+
+	Typically these are written to a http.Request.
 */
 type CreateXClusterConfigParams struct {
 

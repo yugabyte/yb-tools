@@ -39,7 +39,8 @@ func NewListAllRegionsOK() *ListAllRegionsOK {
 	return &ListAllRegionsOK{}
 }
 
-/* ListAllRegionsOK describes a response with status code 200, with default header values.
+/*
+	ListAllRegionsOK describes a response with status code 200, with default header values.
 
 successful operation
 */

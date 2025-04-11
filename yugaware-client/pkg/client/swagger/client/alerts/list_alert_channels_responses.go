@@ -39,7 +39,8 @@ func NewListAlertChannelsOK() *ListAlertChannelsOK {
 	return &ListAlertChannelsOK{}
 }
 
-/* ListAlertChannelsOK describes a response with status code 200, with default header values.
+/*
+	ListAlertChannelsOK describes a response with status code 200, with default header values.
 
 successful operation
 */

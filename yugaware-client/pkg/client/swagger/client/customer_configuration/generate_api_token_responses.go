@@ -39,7 +39,8 @@ func NewGenerateAPITokenOK() *GenerateAPITokenOK {
 	return &GenerateAPITokenOK{}
 }
 
-/* GenerateAPITokenOK describes a response with status code 200, with default header values.
+/*
+	GenerateAPITokenOK describes a response with status code 200, with default header values.
 
 successful operation
 */

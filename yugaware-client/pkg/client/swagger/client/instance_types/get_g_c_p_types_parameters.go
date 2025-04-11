@@ -52,10 +52,12 @@ func NewGetGCPTypesParamsWithHTTPClient(client *http.Client) *GetGCPTypesParams 
 	}
 }
 
-/* GetGCPTypesParams contains all the parameters to send to the API endpoint
-   for the get g c p types operation.
+/*
+GetGCPTypesParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get g c p types operation.
+
+	Typically these are written to a http.Request.
 */
 type GetGCPTypesParams struct {
 	timeout    time.Duration

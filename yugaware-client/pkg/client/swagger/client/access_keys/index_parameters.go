@@ -52,10 +52,12 @@ func NewIndexParamsWithHTTPClient(client *http.Client) *IndexParams {
 	}
 }
 
-/* IndexParams contains all the parameters to send to the API endpoint
-   for the index operation.
+/*
+IndexParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the index operation.
+
+	Typically these are written to a http.Request.
 */
 type IndexParams struct {
 

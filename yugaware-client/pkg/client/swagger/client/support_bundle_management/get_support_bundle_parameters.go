@@ -52,10 +52,12 @@ func NewGetSupportBundleParamsWithHTTPClient(client *http.Client) *GetSupportBun
 	}
 }
 
-/* GetSupportBundleParams contains all the parameters to send to the API endpoint
-   for the get support bundle operation.
+/*
+GetSupportBundleParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get support bundle operation.
+
+	Typically these are written to a http.Request.
 */
 type GetSupportBundleParams struct {
 

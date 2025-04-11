@@ -39,7 +39,8 @@ func NewGetRootCertOK() *GetRootCertOK {
 	return &GetRootCertOK{}
 }
 
-/* GetRootCertOK describes a response with status code 200, with default header values.
+/*
+	GetRootCertOK describes a response with status code 200, with default header values.
 
 successful operation
 */

@@ -37,7 +37,8 @@ func NewListSupportBundleComponentsOK() *ListSupportBundleComponentsOK {
 	return &ListSupportBundleComponentsOK{}
 }
 
-/* ListSupportBundleComponentsOK describes a response with status code 200, with default header values.
+/*
+	ListSupportBundleComponentsOK describes a response with status code 200, with default header values.
 
 successful operation
 */

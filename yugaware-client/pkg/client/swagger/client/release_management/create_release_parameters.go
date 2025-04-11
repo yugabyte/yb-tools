@@ -54,10 +54,12 @@ func NewCreateReleaseParamsWithHTTPClient(client *http.Client) *CreateReleasePar
 	}
 }
 
-/* CreateReleaseParams contains all the parameters to send to the API endpoint
-   for the create release operation.
+/*
+CreateReleaseParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the create release operation.
+
+	Typically these are written to a http.Request.
 */
 type CreateReleaseParams struct {
 

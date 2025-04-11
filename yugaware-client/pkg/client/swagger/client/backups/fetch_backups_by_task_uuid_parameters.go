@@ -52,10 +52,12 @@ func NewFetchBackupsByTaskUUIDParamsWithHTTPClient(client *http.Client) *FetchBa
 	}
 }
 
-/* FetchBackupsByTaskUUIDParams contains all the parameters to send to the API endpoint
-   for the fetch backups by task UUID operation.
+/*
+FetchBackupsByTaskUUIDParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the fetch backups by task UUID operation.
+
+	Typically these are written to a http.Request.
 */
 type FetchBackupsByTaskUUIDParams struct {
 

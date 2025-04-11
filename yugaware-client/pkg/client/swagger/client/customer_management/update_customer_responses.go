@@ -39,7 +39,8 @@ func NewUpdateCustomerOK() *UpdateCustomerOK {
 	return &UpdateCustomerOK{}
 }
 
-/* UpdateCustomerOK describes a response with status code 200, with default header values.
+/*
+	UpdateCustomerOK describes a response with status code 200, with default header values.
 
 successful operation
 */

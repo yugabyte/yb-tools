@@ -54,10 +54,12 @@ func NewPageAlertConfigurationsParamsWithHTTPClient(client *http.Client) *PageAl
 	}
 }
 
-/* PageAlertConfigurationsParams contains all the parameters to send to the API endpoint
-   for the page alert configurations operation.
+/*
+PageAlertConfigurationsParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the page alert configurations operation.
+
+	Typically these are written to a http.Request.
 */
 type PageAlertConfigurationsParams struct {
 

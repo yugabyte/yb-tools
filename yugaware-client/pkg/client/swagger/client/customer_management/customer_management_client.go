@@ -46,7 +46,7 @@ type ClientService interface {
 }
 
 /*
-  CustomerDetail gets a customer s details
+CustomerDetail gets a customer s details
 */
 func (a *Client) CustomerDetail(params *CustomerDetailParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CustomerDetailOK, error) {
 	// TODO: Validate the params before sending
@@ -85,7 +85,7 @@ func (a *Client) CustomerDetail(params *CustomerDetailParams, authInfo runtime.C
 }
 
 /*
-  ListOfCustomers lists customers
+ListOfCustomers lists customers
 */
 func (a *Client) ListOfCustomers(params *ListOfCustomersParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListOfCustomersOK, error) {
 	// TODO: Validate the params before sending
@@ -124,7 +124,7 @@ func (a *Client) ListOfCustomers(params *ListOfCustomersParams, authInfo runtime
 }
 
 /*
-  UpdateCustomer updates a customer
+UpdateCustomer updates a customer
 */
 func (a *Client) UpdateCustomer(params *UpdateCustomerParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpdateCustomerOK, error) {
 	// TODO: Validate the params before sending
@@ -163,7 +163,7 @@ func (a *Client) UpdateCustomer(params *UpdateCustomerParams, authInfo runtime.C
 }
 
 /*
-  DeleteCustomer deletes a customer
+DeleteCustomer deletes a customer
 */
 func (a *Client) DeleteCustomer(params *DeleteCustomerParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteCustomerOK, error) {
 	// TODO: Validate the params before sending
@@ -202,7 +202,7 @@ func (a *Client) DeleteCustomer(params *DeleteCustomerParams, authInfo runtime.C
 }
 
 /*
-  GetHostInfo gets a customer s host info
+GetHostInfo gets a customer s host info
 */
 func (a *Client) GetHostInfo(params *GetHostInfoParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetHostInfoOK, error) {
 	// TODO: Validate the params before sending
@@ -241,7 +241,7 @@ func (a *Client) GetHostInfo(params *GetHostInfoParams, authInfo runtime.ClientA
 }
 
 /*
-  Metrics adds metrics to a customer
+Metrics adds metrics to a customer
 */
 func (a *Client) Metrics(params *MetricsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*MetricsOK, error) {
 	// TODO: Validate the params before sending

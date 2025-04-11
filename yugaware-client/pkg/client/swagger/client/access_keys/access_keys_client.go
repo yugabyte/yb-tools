@@ -42,7 +42,7 @@ type ClientService interface {
 }
 
 /*
-  CreateAccesskey creates an access key
+CreateAccesskey creates an access key
 */
 func (a *Client) CreateAccesskey(params *CreateAccesskeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateAccesskeyOK, error) {
 	// TODO: Validate the params before sending
@@ -81,7 +81,7 @@ func (a *Client) CreateAccesskey(params *CreateAccesskeyParams, authInfo runtime
 }
 
 /*
-  DeleteAccesskey deletes an access key
+DeleteAccesskey deletes an access key
 */
 func (a *Client) DeleteAccesskey(params *DeleteAccesskeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteAccesskeyOK, error) {
 	// TODO: Validate the params before sending
@@ -120,7 +120,7 @@ func (a *Client) DeleteAccesskey(params *DeleteAccesskeyParams, authInfo runtime
 }
 
 /*
-  Index gets an access key
+Index gets an access key
 */
 func (a *Client) Index(params *IndexParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*IndexOK, error) {
 	// TODO: Validate the params before sending
@@ -159,7 +159,7 @@ func (a *Client) Index(params *IndexParams, authInfo runtime.ClientAuthInfoWrite
 }
 
 /*
-  List lists access keys for a specific provider
+List lists access keys for a specific provider
 */
 func (a *Client) List(params *ListParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListOK, error) {
 	// TODO: Validate the params before sending

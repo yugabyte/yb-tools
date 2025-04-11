@@ -54,10 +54,12 @@ func NewBulkImportDataParamsWithHTTPClient(client *http.Client) *BulkImportDataP
 	}
 }
 
-/* BulkImportDataParams contains all the parameters to send to the API endpoint
-   for the bulk import data operation.
+/*
+BulkImportDataParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the bulk import data operation.
+
+	Typically these are written to a http.Request.
 */
 type BulkImportDataParams struct {
 

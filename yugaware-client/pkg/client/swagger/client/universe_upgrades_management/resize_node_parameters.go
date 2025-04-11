@@ -54,10 +54,12 @@ func NewResizeNodeParamsWithHTTPClient(client *http.Client) *ResizeNodeParams {
 	}
 }
 
-/* ResizeNodeParams contains all the parameters to send to the API endpoint
-   for the resize node operation.
+/*
+ResizeNodeParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the resize node operation.
+
+	Typically these are written to a http.Request.
 */
 type ResizeNodeParams struct {
 

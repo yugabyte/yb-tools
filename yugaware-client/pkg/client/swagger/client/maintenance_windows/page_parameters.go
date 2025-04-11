@@ -54,10 +54,12 @@ func NewPageParamsWithHTTPClient(client *http.Client) *PageParams {
 	}
 }
 
-/* PageParams contains all the parameters to send to the API endpoint
-   for the page operation.
+/*
+PageParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the page operation.
+
+	Typically these are written to a http.Request.
 */
 type PageParams struct {
 

@@ -52,10 +52,12 @@ func NewListScopesParamsWithHTTPClient(client *http.Client) *ListScopesParams {
 	}
 }
 
-/* ListScopesParams contains all the parameters to send to the API endpoint
-   for the list scopes operation.
+/*
+ListScopesParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the list scopes operation.
+
+	Typically these are written to a http.Request.
 */
 type ListScopesParams struct {
 

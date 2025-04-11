@@ -54,10 +54,12 @@ func NewEditBackupScheduleV2ParamsWithHTTPClient(client *http.Client) *EditBacku
 	}
 }
 
-/* EditBackupScheduleV2Params contains all the parameters to send to the API endpoint
-   for the edit backup schedule v2 operation.
+/*
+EditBackupScheduleV2Params contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the edit backup schedule v2 operation.
+
+	Typically these are written to a http.Request.
 */
 type EditBackupScheduleV2Params struct {
 

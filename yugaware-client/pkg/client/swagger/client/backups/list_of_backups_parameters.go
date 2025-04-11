@@ -52,10 +52,12 @@ func NewListOfBackupsParamsWithHTTPClient(client *http.Client) *ListOfBackupsPar
 	}
 }
 
-/* ListOfBackupsParams contains all the parameters to send to the API endpoint
-   for the list of backups operation.
+/*
+ListOfBackupsParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the list of backups operation.
+
+	Typically these are written to a http.Request.
 */
 type ListOfBackupsParams struct {
 

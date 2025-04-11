@@ -52,10 +52,12 @@ func NewRunInShellParamsWithHTTPClient(client *http.Client) *RunInShellParams {
 	}
 }
 
-/* RunInShellParams contains all the parameters to send to the API endpoint
-   for the run in shell operation.
+/*
+RunInShellParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the run in shell operation.
+
+	Typically these are written to a http.Request.
 */
 type RunInShellParams struct {
 

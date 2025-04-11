@@ -52,10 +52,12 @@ func NewSetUniverseHelm3CompatibleParamsWithHTTPClient(client *http.Client) *Set
 	}
 }
 
-/* SetUniverseHelm3CompatibleParams contains all the parameters to send to the API endpoint
-   for the set universe helm3 compatible operation.
+/*
+SetUniverseHelm3CompatibleParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the set universe helm3 compatible operation.
+
+	Typically these are written to a http.Request.
 */
 type SetUniverseHelm3CompatibleParams struct {
 

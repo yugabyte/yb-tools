@@ -52,10 +52,12 @@ func NewGetKMSConfigParamsWithHTTPClient(client *http.Client) *GetKMSConfigParam
 	}
 }
 
-/* GetKMSConfigParams contains all the parameters to send to the API endpoint
-   for the get k m s config operation.
+/*
+GetKMSConfigParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get k m s config operation.
+
+	Typically these are written to a http.Request.
 */
 type GetKMSConfigParams struct {
 

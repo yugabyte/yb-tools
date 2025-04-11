@@ -54,10 +54,12 @@ func NewMetricsParamsWithHTTPClient(client *http.Client) *MetricsParams {
 	}
 }
 
-/* MetricsParams contains all the parameters to send to the API endpoint
-   for the metrics operation.
+/*
+MetricsParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the metrics operation.
+
+	Typically these are written to a http.Request.
 */
 type MetricsParams struct {
 

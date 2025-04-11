@@ -52,10 +52,12 @@ func NewGetListOfCustomerConfigParamsWithHTTPClient(client *http.Client) *GetLis
 	}
 }
 
-/* GetListOfCustomerConfigParams contains all the parameters to send to the API endpoint
-   for the get list of customer config operation.
+/*
+GetListOfCustomerConfigParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get list of customer config operation.
+
+	Typically these are written to a http.Request.
 */
 type GetListOfCustomerConfigParams struct {
 

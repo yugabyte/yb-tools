@@ -39,7 +39,8 @@ func NewUpdatePrimaryClusterOK() *UpdatePrimaryClusterOK {
 	return &UpdatePrimaryClusterOK{}
 }
 
-/* UpdatePrimaryClusterOK describes a response with status code 200, with default header values.
+/*
+	UpdatePrimaryClusterOK describes a response with status code 200, with default header values.
 
 successful operation
 */

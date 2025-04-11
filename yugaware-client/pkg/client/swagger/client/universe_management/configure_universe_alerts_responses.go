@@ -39,7 +39,8 @@ func NewConfigureUniverseAlertsOK() *ConfigureUniverseAlertsOK {
 	return &ConfigureUniverseAlertsOK{}
 }
 
-/* ConfigureUniverseAlertsOK describes a response with status code 200, with default header values.
+/*
+	ConfigureUniverseAlertsOK describes a response with status code 200, with default header values.
 
 successful operation
 */

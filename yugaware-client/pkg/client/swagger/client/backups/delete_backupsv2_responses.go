@@ -39,7 +39,8 @@ func NewDeleteBackupsv2OK() *DeleteBackupsv2OK {
 	return &DeleteBackupsv2OK{}
 }
 
-/* DeleteBackupsv2OK describes a response with status code 200, with default header values.
+/*
+	DeleteBackupsv2OK describes a response with status code 200, with default header values.
 
 successful operation
 */

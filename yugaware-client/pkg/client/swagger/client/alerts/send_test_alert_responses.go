@@ -39,7 +39,8 @@ func NewSendTestAlertOK() *SendTestAlertOK {
 	return &SendTestAlertOK{}
 }
 
-/* SendTestAlertOK describes a response with status code 200, with default header values.
+/*
+	SendTestAlertOK describes a response with status code 200, with default header values.
 
 successful operation
 */

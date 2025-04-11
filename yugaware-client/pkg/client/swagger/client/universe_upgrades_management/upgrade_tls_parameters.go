@@ -54,10 +54,12 @@ func NewUpgradeTLSParamsWithHTTPClient(client *http.Client) *UpgradeTLSParams {
 	}
 }
 
-/* UpgradeTLSParams contains all the parameters to send to the API endpoint
-   for the upgrade Tls operation.
+/*
+UpgradeTLSParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the upgrade Tls operation.
+
+	Typically these are written to a http.Request.
 */
 type UpgradeTLSParams struct {
 

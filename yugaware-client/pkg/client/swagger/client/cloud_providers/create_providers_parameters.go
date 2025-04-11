@@ -54,10 +54,12 @@ func NewCreateProvidersParamsWithHTTPClient(client *http.Client) *CreateProvider
 	}
 }
 
-/* CreateProvidersParams contains all the parameters to send to the API endpoint
-   for the create providers operation.
+/*
+CreateProvidersParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the create providers operation.
+
+	Typically these are written to a http.Request.
 */
 type CreateProvidersParams struct {
 

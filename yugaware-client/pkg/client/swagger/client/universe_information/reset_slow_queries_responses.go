@@ -37,7 +37,8 @@ func NewResetSlowQueriesOK() *ResetSlowQueriesOK {
 	return &ResetSlowQueriesOK{}
 }
 
-/* ResetSlowQueriesOK describes a response with status code 200, with default header values.
+/*
+	ResetSlowQueriesOK describes a response with status code 200, with default header values.
 
 successful operation
 */

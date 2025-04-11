@@ -52,10 +52,12 @@ func NewGetRedisServerAddressesParamsWithHTTPClient(client *http.Client) *GetRed
 	}
 }
 
-/* GetRedisServerAddressesParams contains all the parameters to send to the API endpoint
-   for the get redis server addresses operation.
+/*
+GetRedisServerAddressesParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get redis server addresses operation.
+
+	Typically these are written to a http.Request.
 */
 type GetRedisServerAddressesParams struct {
 

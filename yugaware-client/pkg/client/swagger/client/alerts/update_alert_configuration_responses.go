@@ -39,7 +39,8 @@ func NewUpdateAlertConfigurationOK() *UpdateAlertConfigurationOK {
 	return &UpdateAlertConfigurationOK{}
 }
 
-/* UpdateAlertConfigurationOK describes a response with status code 200, with default header values.
+/*
+	UpdateAlertConfigurationOK describes a response with status code 200, with default header values.
 
 successful operation
 */

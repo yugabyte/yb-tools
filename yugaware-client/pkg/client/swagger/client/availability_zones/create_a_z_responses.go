@@ -39,7 +39,8 @@ func NewCreateAZOK() *CreateAZOK {
 	return &CreateAZOK{}
 }
 
-/* CreateAZOK describes a response with status code 200, with default header values.
+/*
+	CreateAZOK describes a response with status code 200, with default header values.
 
 successful operation
 */

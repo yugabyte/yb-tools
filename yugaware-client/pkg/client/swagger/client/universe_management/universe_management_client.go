@@ -56,7 +56,7 @@ type ClientService interface {
 }
 
 /*
-  ConfigureUniverseAlerts configures alerts for a universe
+ConfigureUniverseAlerts configures alerts for a universe
 */
 func (a *Client) ConfigureUniverseAlerts(params *ConfigureUniverseAlertsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ConfigureUniverseAlertsOK, error) {
 	// TODO: Validate the params before sending
@@ -95,7 +95,7 @@ func (a *Client) ConfigureUniverseAlerts(params *ConfigureUniverseAlertsParams, 
 }
 
 /*
-  DeleteUniverse deletes a universe
+DeleteUniverse deletes a universe
 */
 func (a *Client) DeleteUniverse(params *DeleteUniverseParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteUniverseOK, error) {
 	// TODO: Validate the params before sending
@@ -134,7 +134,7 @@ func (a *Client) DeleteUniverse(params *DeleteUniverseParams, authInfo runtime.C
 }
 
 /*
-  GetUniverse gets a universe
+GetUniverse gets a universe
 */
 func (a *Client) GetUniverse(params *GetUniverseParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetUniverseOK, error) {
 	// TODO: Validate the params before sending
@@ -173,7 +173,7 @@ func (a *Client) GetUniverse(params *GetUniverseParams, authInfo runtime.ClientA
 }
 
 /*
-  ListUniverses lists universes
+ListUniverses lists universes
 */
 func (a *Client) ListUniverses(params *ListUniversesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListUniversesOK, error) {
 	// TODO: Validate the params before sending
@@ -212,7 +212,7 @@ func (a *Client) ListUniverses(params *ListUniversesParams, authInfo runtime.Cli
 }
 
 /*
-  PauseUniverse pauses a universe
+PauseUniverse pauses a universe
 */
 func (a *Client) PauseUniverse(params *PauseUniverseParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*PauseUniverseOK, error) {
 	// TODO: Validate the params before sending
@@ -251,9 +251,9 @@ func (a *Client) PauseUniverse(params *PauseUniverseParams, authInfo runtime.Cli
 }
 
 /*
-  ResetUniverseVersion resets universe version
+ResetUniverseVersion resets universe version
 
-  Requires a DUMMY body to work around issue https://yugabyte.atlassian.net/browse/PLAT-2076
+Requires a DUMMY body to work around issue https://yugabyte.atlassian.net/browse/PLAT-2076
 */
 func (a *Client) ResetUniverseVersion(params *ResetUniverseVersionParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ResetUniverseVersionOK, error) {
 	// TODO: Validate the params before sending
@@ -292,7 +292,7 @@ func (a *Client) ResetUniverseVersion(params *ResetUniverseVersionParams, authIn
 }
 
 /*
-  ResumeUniverse resumes a paused universe
+ResumeUniverse resumes a paused universe
 */
 func (a *Client) ResumeUniverse(params *ResumeUniverseParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ResumeUniverseOK, error) {
 	// TODO: Validate the params before sending
@@ -331,7 +331,7 @@ func (a *Client) ResumeUniverse(params *ResumeUniverseParams, authInfo runtime.C
 }
 
 /*
-  SetUniverseBackupFlag sets a universe s backup flag
+SetUniverseBackupFlag sets a universe s backup flag
 */
 func (a *Client) SetUniverseBackupFlag(params *SetUniverseBackupFlagParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*SetUniverseBackupFlagOK, error) {
 	// TODO: Validate the params before sending
@@ -370,7 +370,7 @@ func (a *Client) SetUniverseBackupFlag(params *SetUniverseBackupFlagParams, auth
 }
 
 /*
-  SetUniverseHelm3Compatible flags a universe as helm 3 compatible
+SetUniverseHelm3Compatible flags a universe as helm 3 compatible
 */
 func (a *Client) SetUniverseHelm3Compatible(params *SetUniverseHelm3CompatibleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*SetUniverseHelm3CompatibleOK, error) {
 	// TODO: Validate the params before sending
@@ -409,7 +409,7 @@ func (a *Client) SetUniverseHelm3Compatible(params *SetUniverseHelm3CompatiblePa
 }
 
 /*
-  SetUniverseKey sets a universe s key
+SetUniverseKey sets a universe s key
 */
 func (a *Client) SetUniverseKey(params *SetUniverseKeyParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*SetUniverseKeyOK, error) {
 	// TODO: Validate the params before sending
@@ -448,9 +448,9 @@ func (a *Client) SetUniverseKey(params *SetUniverseKeyParams, authInfo runtime.C
 }
 
 /*
-  ToggleUniverseTLS toggles a universe s TLS state
+ToggleUniverseTLS toggles a universe s TLS state
 
-  Enable or disable node-to-node and client-to-node encryption. Supports rolling and non-rolling universe upgrades.
+Enable or disable node-to-node and client-to-node encryption. Supports rolling and non-rolling universe upgrades.
 */
 func (a *Client) ToggleUniverseTLS(params *ToggleUniverseTLSParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ToggleUniverseTLSOK, error) {
 	// TODO: Validate the params before sending

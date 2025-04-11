@@ -52,10 +52,12 @@ func NewListOfAlertsParamsWithHTTPClient(client *http.Client) *ListOfAlertsParam
 	}
 }
 
-/* ListOfAlertsParams contains all the parameters to send to the API endpoint
-   for the list of alerts operation.
+/*
+ListOfAlertsParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the list of alerts operation.
+
+	Typically these are written to a http.Request.
 */
 type ListOfAlertsParams struct {
 

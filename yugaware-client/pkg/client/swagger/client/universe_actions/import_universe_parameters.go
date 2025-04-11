@@ -52,10 +52,12 @@ func NewImportUniverseParamsWithHTTPClient(client *http.Client) *ImportUniverseP
 	}
 }
 
-/* ImportUniverseParams contains all the parameters to send to the API endpoint
-   for the import universe operation.
+/*
+ImportUniverseParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the import universe operation.
+
+	Typically these are written to a http.Request.
 */
 type ImportUniverseParams struct {
 

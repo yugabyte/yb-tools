@@ -52,10 +52,12 @@ func NewConfigureUniverseAlertsParamsWithHTTPClient(client *http.Client) *Config
 	}
 }
 
-/* ConfigureUniverseAlertsParams contains all the parameters to send to the API endpoint
-   for the configure universe alerts operation.
+/*
+ConfigureUniverseAlertsParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the configure universe alerts operation.
+
+	Typically these are written to a http.Request.
 */
 type ConfigureUniverseAlertsParams struct {
 

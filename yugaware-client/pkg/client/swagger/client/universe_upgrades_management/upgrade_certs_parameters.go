@@ -54,10 +54,12 @@ func NewUpgradeCertsParamsWithHTTPClient(client *http.Client) *UpgradeCertsParam
 	}
 }
 
-/* UpgradeCertsParams contains all the parameters to send to the API endpoint
-   for the upgrade certs operation.
+/*
+UpgradeCertsParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the upgrade certs operation.
+
+	Typically these are written to a http.Request.
 */
 type UpgradeCertsParams struct {
 

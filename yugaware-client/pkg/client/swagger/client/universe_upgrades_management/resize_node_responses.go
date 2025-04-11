@@ -39,7 +39,8 @@ func NewResizeNodeOK() *ResizeNodeOK {
 	return &ResizeNodeOK{}
 }
 
-/* ResizeNodeOK describes a response with status code 200, with default header values.
+/*
+	ResizeNodeOK describes a response with status code 200, with default header values.
 
 successful operation
 */

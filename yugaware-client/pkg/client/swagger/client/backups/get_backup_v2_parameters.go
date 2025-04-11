@@ -52,10 +52,12 @@ func NewGetBackupV2ParamsWithHTTPClient(client *http.Client) *GetBackupV2Params 
 	}
 }
 
-/* GetBackupV2Params contains all the parameters to send to the API endpoint
-   for the get backup v2 operation.
+/*
+GetBackupV2Params contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get backup v2 operation.
+
+	Typically these are written to a http.Request.
 */
 type GetBackupV2Params struct {
 

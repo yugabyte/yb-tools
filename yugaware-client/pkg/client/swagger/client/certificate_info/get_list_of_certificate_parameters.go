@@ -52,10 +52,12 @@ func NewGetListOfCertificateParamsWithHTTPClient(client *http.Client) *GetListOf
 	}
 }
 
-/* GetListOfCertificateParams contains all the parameters to send to the API endpoint
-   for the get list of certificate operation.
+/*
+GetListOfCertificateParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get list of certificate operation.
+
+	Typically these are written to a http.Request.
 */
 type GetListOfCertificateParams struct {
 

@@ -52,10 +52,12 @@ func NewListOfMaintenanceWindowsParamsWithHTTPClient(client *http.Client) *ListO
 	}
 }
 
-/* ListOfMaintenanceWindowsParams contains all the parameters to send to the API endpoint
-   for the list of maintenance windows operation.
+/*
+ListOfMaintenanceWindowsParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the list of maintenance windows operation.
+
+	Typically these are written to a http.Request.
 */
 type ListOfMaintenanceWindowsParams struct {
 

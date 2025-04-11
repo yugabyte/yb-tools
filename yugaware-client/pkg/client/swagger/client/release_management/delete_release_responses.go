@@ -39,7 +39,8 @@ func NewDeleteReleaseOK() *DeleteReleaseOK {
 	return &DeleteReleaseOK{}
 }
 
-/* DeleteReleaseOK describes a response with status code 200, with default header values.
+/*
+	DeleteReleaseOK describes a response with status code 200, with default header values.
 
 successful operation
 */

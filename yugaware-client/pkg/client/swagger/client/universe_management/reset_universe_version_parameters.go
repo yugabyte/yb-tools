@@ -54,10 +54,12 @@ func NewResetUniverseVersionParamsWithHTTPClient(client *http.Client) *ResetUniv
 	}
 }
 
-/* ResetUniverseVersionParams contains all the parameters to send to the API endpoint
-   for the reset universe version operation.
+/*
+ResetUniverseVersionParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the reset universe version operation.
+
+	Typically these are written to a http.Request.
 */
 type ResetUniverseVersionParams struct {
 

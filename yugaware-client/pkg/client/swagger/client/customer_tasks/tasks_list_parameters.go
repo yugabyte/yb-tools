@@ -52,10 +52,12 @@ func NewTasksListParamsWithHTTPClient(client *http.Client) *TasksListParams {
 	}
 }
 
-/* TasksListParams contains all the parameters to send to the API endpoint
-   for the tasks list operation.
+/*
+TasksListParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the tasks list operation.
+
+	Typically these are written to a http.Request.
 */
 type TasksListParams struct {
 

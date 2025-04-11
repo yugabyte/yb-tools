@@ -40,7 +40,7 @@ type ClientService interface {
 }
 
 /*
-  CreateAZ creates an availability zone
+CreateAZ creates an availability zone
 */
 func (a *Client) CreateAZ(params *CreateAZParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateAZOK, error) {
 	// TODO: Validate the params before sending
@@ -79,7 +79,7 @@ func (a *Client) CreateAZ(params *CreateAZParams, authInfo runtime.ClientAuthInf
 }
 
 /*
-  DeleteAZ deletes an availability zone
+DeleteAZ deletes an availability zone
 */
 func (a *Client) DeleteAZ(params *DeleteAZParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteAZOK, error) {
 	// TODO: Validate the params before sending
@@ -118,7 +118,7 @@ func (a *Client) DeleteAZ(params *DeleteAZParams, authInfo runtime.ClientAuthInf
 }
 
 /*
-  ListOfAZ lists availability zones
+ListOfAZ lists availability zones
 */
 func (a *Client) ListOfAZ(params *ListOfAZParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListOfAZOK, error) {
 	// TODO: Validate the params before sending

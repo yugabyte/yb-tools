@@ -39,7 +39,8 @@ func NewDeleteUserOK() *DeleteUserOK {
 	return &DeleteUserOK{}
 }
 
-/* DeleteUserOK describes a response with status code 200, with default header values.
+/*
+	DeleteUserOK describes a response with status code 200, with default header values.
 
 successful operation
 */

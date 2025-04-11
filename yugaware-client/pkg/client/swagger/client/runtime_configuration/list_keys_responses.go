@@ -37,7 +37,8 @@ func NewListKeysOK() *ListKeysOK {
 	return &ListKeysOK{}
 }
 
-/* ListKeysOK describes a response with status code 200, with default header values.
+/*
+	ListKeysOK describes a response with status code 200, with default header values.
 
 successful operation
 */

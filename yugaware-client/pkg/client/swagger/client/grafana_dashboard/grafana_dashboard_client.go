@@ -36,7 +36,7 @@ type ClientService interface {
 }
 
 /*
-  GrafanaDashboard gets grafana dashboard
+GrafanaDashboard gets grafana dashboard
 */
 func (a *Client) GrafanaDashboard(params *GrafanaDashboardParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GrafanaDashboardOK, error) {
 	// TODO: Validate the params before sending

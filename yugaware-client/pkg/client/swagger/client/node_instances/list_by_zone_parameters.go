@@ -52,10 +52,12 @@ func NewListByZoneParamsWithHTTPClient(client *http.Client) *ListByZoneParams {
 	}
 }
 
-/* ListByZoneParams contains all the parameters to send to the API endpoint
-   for the list by zone operation.
+/*
+ListByZoneParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the list by zone operation.
+
+	Typically these are written to a http.Request.
 */
 type ListByZoneParams struct {
 

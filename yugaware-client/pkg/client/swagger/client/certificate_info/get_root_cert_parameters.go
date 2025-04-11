@@ -52,10 +52,12 @@ func NewGetRootCertParamsWithHTTPClient(client *http.Client) *GetRootCertParams 
 	}
 }
 
-/* GetRootCertParams contains all the parameters to send to the API endpoint
-   for the get root cert operation.
+/*
+GetRootCertParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get root cert operation.
+
+	Typically these are written to a http.Request.
 */
 type GetRootCertParams struct {
 

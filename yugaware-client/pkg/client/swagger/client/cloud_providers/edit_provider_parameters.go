@@ -54,10 +54,12 @@ func NewEditProviderParamsWithHTTPClient(client *http.Client) *EditProviderParam
 	}
 }
 
-/* EditProviderParams contains all the parameters to send to the API endpoint
-   for the edit provider operation.
+/*
+EditProviderParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the edit provider operation.
+
+	Typically these are written to a http.Request.
 */
 type EditProviderParams struct {
 

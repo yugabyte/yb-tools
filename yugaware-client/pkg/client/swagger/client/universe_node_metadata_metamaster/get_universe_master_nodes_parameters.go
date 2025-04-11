@@ -52,10 +52,12 @@ func NewGetUniverseMasterNodesParamsWithHTTPClient(client *http.Client) *GetUniv
 	}
 }
 
-/* GetUniverseMasterNodesParams contains all the parameters to send to the API endpoint
-   for the get universe master nodes operation.
+/*
+GetUniverseMasterNodesParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get universe master nodes operation.
+
+	Typically these are written to a http.Request.
 */
 type GetUniverseMasterNodesParams struct {
 

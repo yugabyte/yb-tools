@@ -53,10 +53,12 @@ func NewDeleteReadonlyClusterParamsWithHTTPClient(client *http.Client) *DeleteRe
 	}
 }
 
-/* DeleteReadonlyClusterParams contains all the parameters to send to the API endpoint
-   for the delete readonly cluster operation.
+/*
+DeleteReadonlyClusterParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the delete readonly cluster operation.
+
+	Typically these are written to a http.Request.
 */
 type DeleteReadonlyClusterParams struct {
 

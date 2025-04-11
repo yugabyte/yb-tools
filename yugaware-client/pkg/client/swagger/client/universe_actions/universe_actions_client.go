@@ -36,7 +36,7 @@ type ClientService interface {
 }
 
 /*
-  ImportUniverse imports a universe
+ImportUniverse imports a universe
 */
 func (a *Client) ImportUniverse(params *ImportUniverseParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ImportUniverseOK, error) {
 	// TODO: Validate the params before sending

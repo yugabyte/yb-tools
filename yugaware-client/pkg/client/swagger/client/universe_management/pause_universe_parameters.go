@@ -52,10 +52,12 @@ func NewPauseUniverseParamsWithHTTPClient(client *http.Client) *PauseUniversePar
 	}
 }
 
-/* PauseUniverseParams contains all the parameters to send to the API endpoint
-   for the pause universe operation.
+/*
+PauseUniverseParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the pause universe operation.
+
+	Typically these are written to a http.Request.
 */
 type PauseUniverseParams struct {
 

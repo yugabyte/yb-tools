@@ -42,7 +42,7 @@ type ClientService interface {
 }
 
 /*
-  CreateProviders creates a provider
+CreateProviders creates a provider
 */
 func (a *Client) CreateProviders(params *CreateProvidersParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateProvidersOK, error) {
 	// TODO: Validate the params before sending
@@ -81,7 +81,7 @@ func (a *Client) CreateProviders(params *CreateProvidersParams, authInfo runtime
 }
 
 /*
-  EditProvider updates a provider
+EditProvider updates a provider
 */
 func (a *Client) EditProvider(params *EditProviderParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*EditProviderOK, error) {
 	// TODO: Validate the params before sending
@@ -120,7 +120,7 @@ func (a *Client) EditProvider(params *EditProviderParams, authInfo runtime.Clien
 }
 
 /*
-  GetListOfProviders lists cloud providers
+GetListOfProviders lists cloud providers
 */
 func (a *Client) GetListOfProviders(params *GetListOfProvidersParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetListOfProvidersOK, error) {
 	// TODO: Validate the params before sending
@@ -159,9 +159,9 @@ func (a *Client) GetListOfProviders(params *GetListOfProvidersParams, authInfo r
 }
 
 /*
-  RefreshPricing refreshes pricing
+RefreshPricing refreshes pricing
 
-  Refresh provider pricing info
+Refresh provider pricing info
 */
 func (a *Client) RefreshPricing(params *RefreshPricingParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*RefreshPricingOK, error) {
 	// TODO: Validate the params before sending

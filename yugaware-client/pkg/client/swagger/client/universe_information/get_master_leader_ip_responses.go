@@ -37,7 +37,8 @@ func NewGetMasterLeaderIPOK() *GetMasterLeaderIPOK {
 	return &GetMasterLeaderIPOK{}
 }
 
-/* GetMasterLeaderIPOK describes a response with status code 200, with default header values.
+/*
+	GetMasterLeaderIPOK describes a response with status code 200, with default header values.
 
 successful operation
 */

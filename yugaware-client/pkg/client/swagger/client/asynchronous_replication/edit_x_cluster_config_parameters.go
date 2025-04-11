@@ -54,10 +54,12 @@ func NewEditXClusterConfigParamsWithHTTPClient(client *http.Client) *EditXCluste
 	}
 }
 
-/* EditXClusterConfigParams contains all the parameters to send to the API endpoint
-   for the edit x cluster config operation.
+/*
+EditXClusterConfigParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the edit x cluster config operation.
+
+	Typically these are written to a http.Request.
 */
 type EditXClusterConfigParams struct {
 

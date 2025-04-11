@@ -39,7 +39,8 @@ func NewSetDatabaseCredentialsOK() *SetDatabaseCredentialsOK {
 	return &SetDatabaseCredentialsOK{}
 }
 
-/* SetDatabaseCredentialsOK describes a response with status code 200, with default header values.
+/*
+	SetDatabaseCredentialsOK describes a response with status code 200, with default header values.
 
 successful operation
 */

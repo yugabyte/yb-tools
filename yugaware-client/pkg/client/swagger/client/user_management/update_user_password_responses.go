@@ -39,7 +39,8 @@ func NewUpdateUserPasswordOK() *UpdateUserPasswordOK {
 	return &UpdateUserPasswordOK{}
 }
 
-/* UpdateUserPasswordOK describes a response with status code 200, with default header values.
+/*
+	UpdateUserPasswordOK describes a response with status code 200, with default header values.
 
 successful operation
 */

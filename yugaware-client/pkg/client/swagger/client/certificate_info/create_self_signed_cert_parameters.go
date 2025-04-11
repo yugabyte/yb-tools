@@ -52,10 +52,12 @@ func NewCreateSelfSignedCertParamsWithHTTPClient(client *http.Client) *CreateSel
 	}
 }
 
-/* CreateSelfSignedCertParams contains all the parameters to send to the API endpoint
-   for the create self signed cert operation.
+/*
+CreateSelfSignedCertParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the create self signed cert operation.
+
+	Typically these are written to a http.Request.
 */
 type CreateSelfSignedCertParams struct {
 

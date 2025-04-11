@@ -53,10 +53,12 @@ func NewGetListOfReleasesParamsWithHTTPClient(client *http.Client) *GetListOfRel
 	}
 }
 
-/* GetListOfReleasesParams contains all the parameters to send to the API endpoint
-   for the get list of releases operation.
+/*
+GetListOfReleasesParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get list of releases operation.
+
+	Typically these are written to a http.Request.
 */
 type GetListOfReleasesParams struct {
 

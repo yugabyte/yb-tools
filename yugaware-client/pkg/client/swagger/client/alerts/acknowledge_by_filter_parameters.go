@@ -54,10 +54,12 @@ func NewAcknowledgeByFilterParamsWithHTTPClient(client *http.Client) *Acknowledg
 	}
 }
 
-/* AcknowledgeByFilterParams contains all the parameters to send to the API endpoint
-   for the acknowledge by filter operation.
+/*
+AcknowledgeByFilterParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the acknowledge by filter operation.
+
+	Typically these are written to a http.Request.
 */
 type AcknowledgeByFilterParams struct {
 

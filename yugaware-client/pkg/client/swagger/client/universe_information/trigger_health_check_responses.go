@@ -39,7 +39,8 @@ func NewTriggerHealthCheckOK() *TriggerHealthCheckOK {
 	return &TriggerHealthCheckOK{}
 }
 
-/* TriggerHealthCheckOK describes a response with status code 200, with default header values.
+/*
+	TriggerHealthCheckOK describes a response with status code 200, with default header values.
 
 successful operation
 */

@@ -52,10 +52,12 @@ func NewDownloadSupportBundleParamsWithHTTPClient(client *http.Client) *Download
 	}
 }
 
-/* DownloadSupportBundleParams contains all the parameters to send to the API endpoint
-   for the download support bundle operation.
+/*
+DownloadSupportBundleParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the download support bundle operation.
+
+	Typically these are written to a http.Request.
 */
 type DownloadSupportBundleParams struct {
 

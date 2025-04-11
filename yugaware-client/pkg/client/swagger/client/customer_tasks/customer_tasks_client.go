@@ -44,9 +44,9 @@ type ClientService interface {
 }
 
 /*
-  AbortTask aborts a task
+AbortTask aborts a task
 
-  Aborts a running task
+Aborts a running task
 */
 func (a *Client) AbortTask(params *AbortTaskParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*AbortTaskOK, error) {
 	// TODO: Validate the params before sending
@@ -85,7 +85,7 @@ func (a *Client) AbortTask(params *AbortTaskParams, authInfo runtime.ClientAuthI
 }
 
 /*
-  FailedSubtasks gets a task s failed subtasks
+FailedSubtasks gets a task s failed subtasks
 */
 func (a *Client) FailedSubtasks(params *FailedSubtasksParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*FailedSubtasksOK, error) {
 	// TODO: Validate the params before sending
@@ -124,9 +124,9 @@ func (a *Client) FailedSubtasks(params *FailedSubtasksParams, authInfo runtime.C
 }
 
 /*
-  RetryTask retries a universe task
+RetryTask retries a universe task
 
-  Retry a Universe task.
+Retry a Universe task.
 */
 func (a *Client) RetryTask(params *RetryTaskParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*RetryTaskOK, error) {
 	// TODO: Validate the params before sending
@@ -165,7 +165,7 @@ func (a *Client) RetryTask(params *RetryTaskParams, authInfo runtime.ClientAuthI
 }
 
 /*
-  TaskStatus gets a task s status
+TaskStatus gets a task s status
 */
 func (a *Client) TaskStatus(params *TaskStatusParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*TaskStatusOK, error) {
 	// TODO: Validate the params before sending
@@ -204,7 +204,7 @@ func (a *Client) TaskStatus(params *TaskStatusParams, authInfo runtime.ClientAut
 }
 
 /*
-  TasksList lists task
+TasksList lists task
 */
 func (a *Client) TasksList(params *TasksListParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*TasksListOK, error) {
 	// TODO: Validate the params before sending

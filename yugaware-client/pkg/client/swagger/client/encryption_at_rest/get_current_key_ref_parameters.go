@@ -52,10 +52,12 @@ func NewGetCurrentKeyRefParamsWithHTTPClient(client *http.Client) *GetCurrentKey
 	}
 }
 
-/* GetCurrentKeyRefParams contains all the parameters to send to the API endpoint
-   for the get current key ref operation.
+/*
+GetCurrentKeyRefParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get current key ref operation.
+
+	Typically these are written to a http.Request.
 */
 type GetCurrentKeyRefParams struct {
 

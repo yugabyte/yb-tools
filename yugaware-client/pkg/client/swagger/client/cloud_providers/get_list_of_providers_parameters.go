@@ -52,10 +52,12 @@ func NewGetListOfProvidersParamsWithHTTPClient(client *http.Client) *GetListOfPr
 	}
 }
 
-/* GetListOfProvidersParams contains all the parameters to send to the API endpoint
-   for the get list of providers operation.
+/*
+GetListOfProvidersParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get list of providers operation.
+
+	Typically these are written to a http.Request.
 */
 type GetListOfProvidersParams struct {
 

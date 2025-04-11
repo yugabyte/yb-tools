@@ -52,10 +52,12 @@ func NewDeleteInstanceTypeParamsWithHTTPClient(client *http.Client) *DeleteInsta
 	}
 }
 
-/* DeleteInstanceTypeParams contains all the parameters to send to the API endpoint
-   for the delete instance type operation.
+/*
+DeleteInstanceTypeParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the delete instance type operation.
+
+	Typically these are written to a http.Request.
 */
 type DeleteInstanceTypeParams struct {
 

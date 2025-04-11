@@ -52,10 +52,12 @@ func NewGetTaskAuditParamsWithHTTPClient(client *http.Client) *GetTaskAuditParam
 	}
 }
 
-/* GetTaskAuditParams contains all the parameters to send to the API endpoint
-   for the get task audit operation.
+/*
+GetTaskAuditParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get task audit operation.
+
+	Typically these are written to a http.Request.
 */
 type GetTaskAuditParams struct {
 

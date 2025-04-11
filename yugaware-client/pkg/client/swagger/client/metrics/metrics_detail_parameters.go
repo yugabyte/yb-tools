@@ -52,10 +52,12 @@ func NewMetricsDetailParamsWithHTTPClient(client *http.Client) *MetricsDetailPar
 	}
 }
 
-/* MetricsDetailParams contains all the parameters to send to the API endpoint
-   for the metrics detail operation.
+/*
+MetricsDetailParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the metrics detail operation.
+
+	Typically these are written to a http.Request.
 */
 type MetricsDetailParams struct {
 	timeout    time.Duration

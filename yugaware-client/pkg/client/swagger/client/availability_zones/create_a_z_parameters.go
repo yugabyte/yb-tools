@@ -54,10 +54,12 @@ func NewCreateAZParamsWithHTTPClient(client *http.Client) *CreateAZParams {
 	}
 }
 
-/* CreateAZParams contains all the parameters to send to the API endpoint
-   for the create a z operation.
+/*
+CreateAZParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the create a z operation.
+
+	Typically these are written to a http.Request.
 */
 type CreateAZParams struct {
 

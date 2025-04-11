@@ -46,7 +46,7 @@ type ClientService interface {
 }
 
 /*
-  DeleteSchedule deletes a schedule
+DeleteSchedule deletes a schedule
 */
 func (a *Client) DeleteSchedule(params *DeleteScheduleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteScheduleOK, error) {
 	// TODO: Validate the params before sending
@@ -85,7 +85,7 @@ func (a *Client) DeleteSchedule(params *DeleteScheduleParams, authInfo runtime.C
 }
 
 /*
-  DeleteScheduleV2 deletes a schedule v2
+DeleteScheduleV2 deletes a schedule v2
 */
 func (a *Client) DeleteScheduleV2(params *DeleteScheduleV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteScheduleV2OK, error) {
 	// TODO: Validate the params before sending
@@ -124,7 +124,7 @@ func (a *Client) DeleteScheduleV2(params *DeleteScheduleV2Params, authInfo runti
 }
 
 /*
-  EditBackupScheduleV2 edits a backup schedule v2
+EditBackupScheduleV2 edits a backup schedule v2
 */
 func (a *Client) EditBackupScheduleV2(params *EditBackupScheduleV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*EditBackupScheduleV2OK, error) {
 	// TODO: Validate the params before sending
@@ -163,7 +163,7 @@ func (a *Client) EditBackupScheduleV2(params *EditBackupScheduleV2Params, authIn
 }
 
 /*
-  GetSchedule gets schedule
+GetSchedule gets schedule
 */
 func (a *Client) GetSchedule(params *GetScheduleParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetScheduleOK, error) {
 	// TODO: Validate the params before sending
@@ -202,7 +202,7 @@ func (a *Client) GetSchedule(params *GetScheduleParams, authInfo runtime.ClientA
 }
 
 /*
-  ListSchedules lists schedules
+ListSchedules lists schedules
 */
 func (a *Client) ListSchedules(params *ListSchedulesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListSchedulesOK, error) {
 	// TODO: Validate the params before sending
@@ -241,7 +241,7 @@ func (a *Client) ListSchedules(params *ListSchedulesParams, authInfo runtime.Cli
 }
 
 /*
-  ListSchedulesV2 lists schedules v2
+ListSchedulesV2 lists schedules v2
 */
 func (a *Client) ListSchedulesV2(params *ListSchedulesV2Params, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListSchedulesV2OK, error) {
 	// TODO: Validate the params before sending

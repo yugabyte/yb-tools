@@ -39,7 +39,8 @@ func NewSetKeyOK() *SetKeyOK {
 	return &SetKeyOK{}
 }
 
-/* SetKeyOK describes a response with status code 200, with default header values.
+/*
+	SetKeyOK describes a response with status code 200, with default header values.
 
 successful operation
 */

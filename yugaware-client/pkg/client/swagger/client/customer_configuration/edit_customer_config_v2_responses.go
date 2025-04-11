@@ -39,7 +39,8 @@ func NewEditCustomerConfigV2OK() *EditCustomerConfigV2OK {
 	return &EditCustomerConfigV2OK{}
 }
 
-/* EditCustomerConfigV2OK describes a response with status code 200, with default header values.
+/*
+	EditCustomerConfigV2OK describes a response with status code 200, with default header values.
 
 successful operation
 */

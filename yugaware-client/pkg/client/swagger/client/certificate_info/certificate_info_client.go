@@ -52,7 +52,7 @@ type ClientService interface {
 }
 
 /*
-  CreateSelfSignedCert creates a self signed certificate
+CreateSelfSignedCert creates a self signed certificate
 */
 func (a *Client) CreateSelfSignedCert(params *CreateSelfSignedCertParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateSelfSignedCertOK, error) {
 	// TODO: Validate the params before sending
@@ -91,7 +91,7 @@ func (a *Client) CreateSelfSignedCert(params *CreateSelfSignedCertParams, authIn
 }
 
 /*
-  DeleteCertificate deletes a certificate
+DeleteCertificate deletes a certificate
 */
 func (a *Client) DeleteCertificate(params *DeleteCertificateParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteCertificateOK, error) {
 	// TODO: Validate the params before sending
@@ -130,7 +130,7 @@ func (a *Client) DeleteCertificate(params *DeleteCertificateParams, authInfo run
 }
 
 /*
-  EditCertificate edits TLS certificate config details
+EditCertificate edits TLS certificate config details
 */
 func (a *Client) EditCertificate(params *EditCertificateParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*EditCertificateOK, error) {
 	// TODO: Validate the params before sending
@@ -169,7 +169,7 @@ func (a *Client) EditCertificate(params *EditCertificateParams, authInfo runtime
 }
 
 /*
-  GetCertificate gets a certificate s UUID
+GetCertificate gets a certificate s UUID
 */
 func (a *Client) GetCertificate(params *GetCertificateParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetCertificateOK, error) {
 	// TODO: Validate the params before sending
@@ -208,7 +208,7 @@ func (a *Client) GetCertificate(params *GetCertificateParams, authInfo runtime.C
 }
 
 /*
-  GetClientCert adds a client certificate
+GetClientCert adds a client certificate
 */
 func (a *Client) GetClientCert(params *GetClientCertParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetClientCertOK, error) {
 	// TODO: Validate the params before sending
@@ -247,7 +247,7 @@ func (a *Client) GetClientCert(params *GetClientCertParams, authInfo runtime.Cli
 }
 
 /*
-  GetListOfCertificate lists a customer s certificates
+GetListOfCertificate lists a customer s certificates
 */
 func (a *Client) GetListOfCertificate(params *GetListOfCertificateParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetListOfCertificateOK, error) {
 	// TODO: Validate the params before sending
@@ -286,9 +286,9 @@ func (a *Client) GetListOfCertificate(params *GetListOfCertificateParams, authIn
 }
 
 /*
-  GetRootCert gets a customer s root certificate
+GetRootCert gets a customer s root certificate
 
-  UNOFFICIAL ADDITION: Add root certificate to return value
+UNOFFICIAL ADDITION: Add root certificate to return value
 */
 func (a *Client) GetRootCert(params *GetRootCertParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetRootCertOK, error) {
 	// TODO: Validate the params before sending
@@ -327,7 +327,7 @@ func (a *Client) GetRootCert(params *GetRootCertParams, authInfo runtime.ClientA
 }
 
 /*
-  UpdateEmptyCustomCert updates an empty certificate
+UpdateEmptyCustomCert updates an empty certificate
 */
 func (a *Client) UpdateEmptyCustomCert(params *UpdateEmptyCustomCertParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpdateEmptyCustomCertOK, error) {
 	// TODO: Validate the params before sending
@@ -366,7 +366,7 @@ func (a *Client) UpdateEmptyCustomCert(params *UpdateEmptyCustomCertParams, auth
 }
 
 /*
-  Upload restores a certificate from backup
+Upload restores a certificate from backup
 */
 func (a *Client) Upload(params *UploadParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UploadOK, error) {
 	// TODO: Validate the params before sending

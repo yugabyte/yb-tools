@@ -52,10 +52,12 @@ func NewFailedSubtasksParamsWithHTTPClient(client *http.Client) *FailedSubtasksP
 	}
 }
 
-/* FailedSubtasksParams contains all the parameters to send to the API endpoint
-   for the failed subtasks operation.
+/*
+FailedSubtasksParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the failed subtasks operation.
+
+	Typically these are written to a http.Request.
 */
 type FailedSubtasksParams struct {
 

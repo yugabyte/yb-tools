@@ -39,7 +39,8 @@ func NewIndexOK() *IndexOK {
 	return &IndexOK{}
 }
 
-/* IndexOK describes a response with status code 200, with default header values.
+/*
+	IndexOK describes a response with status code 200, with default header values.
 
 successful operation
 */

@@ -52,10 +52,12 @@ func NewCreateUserInDBParamsWithHTTPClient(client *http.Client) *CreateUserInDBP
 	}
 }
 
-/* CreateUserInDBParams contains all the parameters to send to the API endpoint
-   for the create user in d b operation.
+/*
+CreateUserInDBParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the create user in d b operation.
+
+	Typically these are written to a http.Request.
 */
 type CreateUserInDBParams struct {
 

@@ -44,7 +44,7 @@ type ClientService interface {
 }
 
 /*
-  CreateXClusterConfig creates xcluster config
+CreateXClusterConfig creates xcluster config
 */
 func (a *Client) CreateXClusterConfig(params *CreateXClusterConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateXClusterConfigOK, error) {
 	// TODO: Validate the params before sending
@@ -83,7 +83,7 @@ func (a *Client) CreateXClusterConfig(params *CreateXClusterConfigParams, authIn
 }
 
 /*
-  DeleteXClusterConfig deletes xcluster config
+DeleteXClusterConfig deletes xcluster config
 */
 func (a *Client) DeleteXClusterConfig(params *DeleteXClusterConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteXClusterConfigOK, error) {
 	// TODO: Validate the params before sending
@@ -122,7 +122,7 @@ func (a *Client) DeleteXClusterConfig(params *DeleteXClusterConfigParams, authIn
 }
 
 /*
-  EditXClusterConfig edits xcluster config
+EditXClusterConfig edits xcluster config
 */
 func (a *Client) EditXClusterConfig(params *EditXClusterConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*EditXClusterConfigOK, error) {
 	// TODO: Validate the params before sending
@@ -161,7 +161,7 @@ func (a *Client) EditXClusterConfig(params *EditXClusterConfigParams, authInfo r
 }
 
 /*
-  GetXClusterConfig gets xcluster config
+GetXClusterConfig gets xcluster config
 */
 func (a *Client) GetXClusterConfig(params *GetXClusterConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetXClusterConfigOK, error) {
 	// TODO: Validate the params before sending
@@ -200,9 +200,9 @@ func (a *Client) GetXClusterConfig(params *GetXClusterConfigParams, authInfo run
 }
 
 /*
-  SyncXClusterConfig syncs xcluster config
+SyncXClusterConfig syncs xcluster config
 
-  Changes from upstream: Changes default value of targetUniverseUUID to null
+Changes from upstream: Changes default value of targetUniverseUUID to null
 */
 func (a *Client) SyncXClusterConfig(params *SyncXClusterConfigParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*SyncXClusterConfigOK, error) {
 	// TODO: Validate the params before sending

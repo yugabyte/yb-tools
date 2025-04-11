@@ -48,7 +48,7 @@ type ClientService interface {
 }
 
 /*
-  CreateNodeInstance creates a node instance
+CreateNodeInstance creates a node instance
 */
 func (a *Client) CreateNodeInstance(params *CreateNodeInstanceParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateNodeInstanceOK, error) {
 	// TODO: Validate the params before sending
@@ -87,7 +87,7 @@ func (a *Client) CreateNodeInstance(params *CreateNodeInstanceParams, authInfo r
 }
 
 /*
-  DeleteInstance deletes a node instance
+DeleteInstance deletes a node instance
 */
 func (a *Client) DeleteInstance(params *DeleteInstanceParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteInstanceOK, error) {
 	// TODO: Validate the params before sending
@@ -126,7 +126,7 @@ func (a *Client) DeleteInstance(params *DeleteInstanceParams, authInfo runtime.C
 }
 
 /*
-  DetachedNodeAction detacheds node action
+DetachedNodeAction detacheds node action
 */
 func (a *Client) DetachedNodeAction(params *DetachedNodeActionParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DetachedNodeActionOK, error) {
 	// TODO: Validate the params before sending
@@ -165,7 +165,7 @@ func (a *Client) DetachedNodeAction(params *DetachedNodeActionParams, authInfo r
 }
 
 /*
-  GetNodeInstance gets a node instance
+GetNodeInstance gets a node instance
 */
 func (a *Client) GetNodeInstance(params *GetNodeInstanceParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetNodeInstanceOK, error) {
 	// TODO: Validate the params before sending
@@ -204,7 +204,7 @@ func (a *Client) GetNodeInstance(params *GetNodeInstanceParams, authInfo runtime
 }
 
 /*
-  ListByProvider lists all of a provider s node instances
+ListByProvider lists all of a provider s node instances
 */
 func (a *Client) ListByProvider(params *ListByProviderParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListByProviderOK, error) {
 	// TODO: Validate the params before sending
@@ -243,7 +243,7 @@ func (a *Client) ListByProvider(params *ListByProviderParams, authInfo runtime.C
 }
 
 /*
-  ListByZone lists all of a zone s node instances
+ListByZone lists all of a zone s node instances
 */
 func (a *Client) ListByZone(params *ListByZoneParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListByZoneOK, error) {
 	// TODO: Validate the params before sending
@@ -282,7 +282,7 @@ func (a *Client) ListByZone(params *ListByZoneParams, authInfo runtime.ClientAut
 }
 
 /*
-  NodeAction updates a node
+NodeAction updates a node
 */
 func (a *Client) NodeAction(params *NodeActionParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*NodeActionOK, error) {
 	// TODO: Validate the params before sending

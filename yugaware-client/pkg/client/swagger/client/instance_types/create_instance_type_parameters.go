@@ -54,10 +54,12 @@ func NewCreateInstanceTypeParamsWithHTTPClient(client *http.Client) *CreateInsta
 	}
 }
 
-/* CreateInstanceTypeParams contains all the parameters to send to the API endpoint
-   for the create instance type operation.
+/*
+CreateInstanceTypeParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the create instance type operation.
+
+	Typically these are written to a http.Request.
 */
 type CreateInstanceTypeParams struct {
 

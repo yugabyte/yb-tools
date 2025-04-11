@@ -45,7 +45,8 @@ func NewListOfBackupsOK() *ListOfBackupsOK {
 	return &ListOfBackupsOK{}
 }
 
-/* ListOfBackupsOK describes a response with status code 200, with default header values.
+/*
+	ListOfBackupsOK describes a response with status code 200, with default header values.
 
 successful operation
 */
@@ -75,7 +76,8 @@ func NewListOfBackupsInternalServerError() *ListOfBackupsInternalServerError {
 	return &ListOfBackupsInternalServerError{}
 }
 
-/* ListOfBackupsInternalServerError describes a response with status code 500, with default header values.
+/*
+	ListOfBackupsInternalServerError describes a response with status code 500, with default header values.
 
 If there was a server or database issue when listing the backups
 */

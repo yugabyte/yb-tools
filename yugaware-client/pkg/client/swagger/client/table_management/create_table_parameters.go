@@ -54,10 +54,12 @@ func NewCreateTableParamsWithHTTPClient(client *http.Client) *CreateTableParams 
 	}
 }
 
-/* CreateTableParams contains all the parameters to send to the API endpoint
-   for the create table operation.
+/*
+CreateTableParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the create table operation.
+
+	Typically these are written to a http.Request.
 */
 type CreateTableParams struct {
 

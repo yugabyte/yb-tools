@@ -45,7 +45,8 @@ func NewMetricsOK() *MetricsOK {
 	return &MetricsOK{}
 }
 
-/* MetricsOK describes a response with status code 200, with default header values.
+/*
+	MetricsOK describes a response with status code 200, with default header values.
 
 successful operation
 */
@@ -75,7 +76,8 @@ func NewMetricsBadRequest() *MetricsBadRequest {
 	return &MetricsBadRequest{}
 }
 
-/* MetricsBadRequest describes a response with status code 400, with default header values.
+/*
+	MetricsBadRequest describes a response with status code 400, with default header values.
 
 When request fails validations.
 */

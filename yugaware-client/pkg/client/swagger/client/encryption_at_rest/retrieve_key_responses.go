@@ -37,7 +37,8 @@ func NewRetrieveKeyOK() *RetrieveKeyOK {
 	return &RetrieveKeyOK{}
 }
 
-/* RetrieveKeyOK describes a response with status code 200, with default header values.
+/*
+	RetrieveKeyOK describes a response with status code 200, with default header values.
 
 successful operation
 */

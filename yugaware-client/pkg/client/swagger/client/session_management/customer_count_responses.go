@@ -39,7 +39,8 @@ func NewCustomerCountOK() *CustomerCountOK {
 	return &CustomerCountOK{}
 }
 
-/* CustomerCountOK describes a response with status code 200, with default header values.
+/*
+	CustomerCountOK describes a response with status code 200, with default header values.
 
 successful operation
 */

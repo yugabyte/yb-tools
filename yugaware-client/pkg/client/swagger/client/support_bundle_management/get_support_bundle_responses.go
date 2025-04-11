@@ -39,7 +39,8 @@ func NewGetSupportBundleOK() *GetSupportBundleOK {
 	return &GetSupportBundleOK{}
 }
 
-/* GetSupportBundleOK describes a response with status code 200, with default header values.
+/*
+	GetSupportBundleOK describes a response with status code 200, with default header values.
 
 successful operation
 */

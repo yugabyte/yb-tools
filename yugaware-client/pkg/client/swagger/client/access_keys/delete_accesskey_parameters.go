@@ -52,10 +52,12 @@ func NewDeleteAccesskeyParamsWithHTTPClient(client *http.Client) *DeleteAccesske
 	}
 }
 
-/* DeleteAccesskeyParams contains all the parameters to send to the API endpoint
-   for the delete accesskey operation.
+/*
+DeleteAccesskeyParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the delete accesskey operation.
+
+	Typically these are written to a http.Request.
 */
 type DeleteAccesskeyParams struct {
 

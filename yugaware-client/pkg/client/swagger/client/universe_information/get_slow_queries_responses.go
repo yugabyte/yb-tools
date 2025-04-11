@@ -37,7 +37,8 @@ func NewGetSlowQueriesOK() *GetSlowQueriesOK {
 	return &GetSlowQueriesOK{}
 }
 
-/* GetSlowQueriesOK describes a response with status code 200, with default header values.
+/*
+	GetSlowQueriesOK describes a response with status code 200, with default header values.
 
 successful operation
 */

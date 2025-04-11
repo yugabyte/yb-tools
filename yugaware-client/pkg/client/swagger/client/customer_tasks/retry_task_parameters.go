@@ -52,10 +52,12 @@ func NewRetryTaskParamsWithHTTPClient(client *http.Client) *RetryTaskParams {
 	}
 }
 
-/* RetryTaskParams contains all the parameters to send to the API endpoint
-   for the retry task operation.
+/*
+RetryTaskParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the retry task operation.
+
+	Typically these are written to a http.Request.
 */
 type RetryTaskParams struct {
 

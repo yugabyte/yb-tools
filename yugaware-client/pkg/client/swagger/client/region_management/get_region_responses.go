@@ -45,7 +45,8 @@ func NewGetRegionOK() *GetRegionOK {
 	return &GetRegionOK{}
 }
 
-/* GetRegionOK describes a response with status code 200, with default header values.
+/*
+	GetRegionOK describes a response with status code 200, with default header values.
 
 successful operation
 */
@@ -75,7 +76,8 @@ func NewGetRegionInternalServerError() *GetRegionInternalServerError {
 	return &GetRegionInternalServerError{}
 }
 
-/* GetRegionInternalServerError describes a response with status code 500, with default header values.
+/*
+	GetRegionInternalServerError describes a response with status code 500, with default header values.
 
 If there was a server or database issue when listing the regions
 */

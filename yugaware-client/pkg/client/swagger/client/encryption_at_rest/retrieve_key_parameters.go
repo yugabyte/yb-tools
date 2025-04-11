@@ -52,10 +52,12 @@ func NewRetrieveKeyParamsWithHTTPClient(client *http.Client) *RetrieveKeyParams 
 	}
 }
 
-/* RetrieveKeyParams contains all the parameters to send to the API endpoint
-   for the retrieve key operation.
+/*
+RetrieveKeyParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the retrieve key operation.
+
+	Typically these are written to a http.Request.
 */
 type RetrieveKeyParams struct {
 

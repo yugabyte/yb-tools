@@ -52,10 +52,12 @@ func NewListAllRegionsParamsWithHTTPClient(client *http.Client) *ListAllRegionsP
 	}
 }
 
-/* ListAllRegionsParams contains all the parameters to send to the API endpoint
-   for the list all regions operation.
+/*
+ListAllRegionsParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the list all regions operation.
+
+	Typically these are written to a http.Request.
 */
 type ListAllRegionsParams struct {
 

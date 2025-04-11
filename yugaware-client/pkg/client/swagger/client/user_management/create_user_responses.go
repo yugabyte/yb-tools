@@ -39,7 +39,8 @@ func NewCreateUserOK() *CreateUserOK {
 	return &CreateUserOK{}
 }
 
-/* CreateUserOK describes a response with status code 200, with default header values.
+/*
+	CreateUserOK describes a response with status code 200, with default header values.
 
 successful operation
 */

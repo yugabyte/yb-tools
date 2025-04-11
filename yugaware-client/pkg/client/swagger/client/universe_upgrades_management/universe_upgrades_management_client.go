@@ -52,9 +52,9 @@ type ClientService interface {
 }
 
 /*
-  ResizeNode resizes node
+ResizeNode resizes node
 
-  Queues a task to perform node resize and rolling restart in a universe.
+Queues a task to perform node resize and rolling restart in a universe.
 */
 func (a *Client) ResizeNode(params *ResizeNodeParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ResizeNodeOK, error) {
 	// TODO: Validate the params before sending
@@ -93,9 +93,9 @@ func (a *Client) ResizeNode(params *ResizeNodeParams, authInfo runtime.ClientAut
 }
 
 /*
-  RestartUniverse restarts universe
+RestartUniverse restarts universe
 
-  Queues a task to perform a rolling restart in a universe.
+Queues a task to perform a rolling restart in a universe.
 */
 func (a *Client) RestartUniverse(params *RestartUniverseParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*RestartUniverseOK, error) {
 	// TODO: Validate the params before sending
@@ -134,9 +134,9 @@ func (a *Client) RestartUniverse(params *RestartUniverseParams, authInfo runtime
 }
 
 /*
-  UpgradeCerts upgrades certs
+UpgradeCerts upgrades certs
 
-  Queues a task to perform certificate rotation and rolling restart in a universe.
+Queues a task to perform certificate rotation and rolling restart in a universe.
 */
 func (a *Client) UpgradeCerts(params *UpgradeCertsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpgradeCertsOK, error) {
 	// TODO: Validate the params before sending
@@ -175,9 +175,9 @@ func (a *Client) UpgradeCerts(params *UpgradeCertsParams, authInfo runtime.Clien
 }
 
 /*
-  UpgradeGFlags upgrades g flags
+UpgradeGFlags upgrades g flags
 
-  Queues a task to perform gflags upgrade and rolling restart in a universe.
+Queues a task to perform gflags upgrade and rolling restart in a universe.
 */
 func (a *Client) UpgradeGFlags(params *UpgradeGFlagsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpgradeGFlagsOK, error) {
 	// TODO: Validate the params before sending
@@ -216,9 +216,9 @@ func (a *Client) UpgradeGFlags(params *UpgradeGFlagsParams, authInfo runtime.Cli
 }
 
 /*
-  UpgradeSoftware upgrades software
+UpgradeSoftware upgrades software
 
-  Queues a task to perform software upgrade and rolling restart in a universe.
+Queues a task to perform software upgrade and rolling restart in a universe.
 */
 func (a *Client) UpgradeSoftware(params *UpgradeSoftwareParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpgradeSoftwareOK, error) {
 	// TODO: Validate the params before sending
@@ -257,9 +257,9 @@ func (a *Client) UpgradeSoftware(params *UpgradeSoftwareParams, authInfo runtime
 }
 
 /*
-  UpgradeSystemd upgrades systemd
+UpgradeSystemd upgrades systemd
 
-  Queues a task to perform systemd upgrade and rolling restart in a universe.
+Queues a task to perform systemd upgrade and rolling restart in a universe.
 */
 func (a *Client) UpgradeSystemd(params *UpgradeSystemdParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpgradeSystemdOK, error) {
 	// TODO: Validate the params before sending
@@ -298,9 +298,9 @@ func (a *Client) UpgradeSystemd(params *UpgradeSystemdParams, authInfo runtime.C
 }
 
 /*
-  UpgradeThirdpartySoftware upgrades third party software
+UpgradeThirdpartySoftware upgrades third party software
 
-  Queues a task to perform upgrade third-party software in a universe.
+Queues a task to perform upgrade third-party software in a universe.
 */
 func (a *Client) UpgradeThirdpartySoftware(params *UpgradeThirdpartySoftwareParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpgradeThirdpartySoftwareOK, error) {
 	// TODO: Validate the params before sending
@@ -339,9 +339,9 @@ func (a *Client) UpgradeThirdpartySoftware(params *UpgradeThirdpartySoftwarePara
 }
 
 /*
-  UpgradeTLS upgrades TLS
+UpgradeTLS upgrades TLS
 
-  Queues a task to perform TLS ugprade and rolling restart in a universe.
+Queues a task to perform TLS ugprade and rolling restart in a universe.
 */
 func (a *Client) UpgradeTLS(params *UpgradeTLSParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpgradeTLSOK, error) {
 	// TODO: Validate the params before sending
@@ -380,9 +380,9 @@ func (a *Client) UpgradeTLS(params *UpgradeTLSParams, authInfo runtime.ClientAut
 }
 
 /*
-  UpgradeVMImage upgrades VM image
+UpgradeVMImage upgrades VM image
 
-  Queues a task to perform VM Image upgrade and rolling restart in a universe.
+Queues a task to perform VM Image upgrade and rolling restart in a universe.
 */
 func (a *Client) UpgradeVMImage(params *UpgradeVMImageParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpgradeVMImageOK, error) {
 	// TODO: Validate the params before sending

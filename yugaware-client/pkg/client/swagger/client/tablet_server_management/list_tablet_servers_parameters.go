@@ -52,10 +52,12 @@ func NewListTabletServersParamsWithHTTPClient(client *http.Client) *ListTabletSe
 	}
 }
 
-/* ListTabletServersParams contains all the parameters to send to the API endpoint
-   for the list tablet servers operation.
+/*
+ListTabletServersParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the list tablet servers operation.
+
+	Typically these are written to a http.Request.
 */
 type ListTabletServersParams struct {
 

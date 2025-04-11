@@ -1039,10 +1039,10 @@ func (InvolvedTabletMetadataState) EnumDescriptor() ([]byte, []int) {
 	return file_yb_common_common_proto_rawDescGZIP(), []int{12}
 }
 
-//--------------------------------------------------------------------------------------------------
+// --------------------------------------------------------------------------------------------------
 // YQL support.
 // The following section is common for all query language.
-//--------------------------------------------------------------------------------------------------
+// --------------------------------------------------------------------------------------------------
 // Represent system internal values.
 type QLVirtualValuePB int32
 
@@ -1884,12 +1884,12 @@ func (x *SchemaPB) GetColocatedTableId() *ColocatedTableIdentifierPB {
 // It maps the index::columns to the expressions of table::columns.
 //
 // Notes on where to find metadata of an INDEX.
-// - Each INDEX is represented by IndexInfo and IndexTable.
+//   - Each INDEX is represented by IndexInfo and IndexTable.
 //     IndexInfoPB contains the definitions of the INDEX.
 //     IndexTable contains duplicate user-data for quick access.
-// - The IndexInfoPB is stored in the Catalog::Table being indexed.
-// - The TablePropertiesPB is kept in Catalog::IndexTable.
-//   Internally, Catalog::IndexTable is just the same as any Catalog::Table.
+//   - The IndexInfoPB is stored in the Catalog::Table being indexed.
+//   - The TablePropertiesPB is kept in Catalog::IndexTable.
+//     Internally, Catalog::IndexTable is just the same as any Catalog::Table.
 type IndexInfoPB struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -3656,12 +3656,12 @@ func (x *QLConditionPB) GetOperands() []*QLExpressionPB {
 }
 
 // Builtin call expression. There are 3 different calls.
-// - Builtin operators such as '>', '<', '=', ...
-//   These operators can be executed anywhere.
-// - Builtin functions such as Now().
-//   These functions can be executed anywhere.
-// - Server builtin functions.
-//   Only tablet servers can execute these functions.
+//   - Builtin operators such as '>', '<', '=', ...
+//     These operators can be executed anywhere.
+//   - Builtin functions such as Now().
+//     These functions can be executed anywhere.
+//   - Server builtin functions.
+//     Only tablet servers can execute these functions.
 //
 // TODO(neil) Regular builtin operators. This message can be executed anywhere.
 // - This is more efficient than builtin call as it avoids most overheads of calling builtin lib.
@@ -4191,20 +4191,21 @@ func (x *QLTypePB_UDTypeInfo) GetFieldNames() []string {
 
 // Index column mapping.
 // "colexpr" is used to compute the value of this column in an INDEX.
-// - When a table is indexed by expressions, we create internal/hidden columns to store the index
-//   value, and "value_expr" specifies the indexing expression.
-// - As of 07/2019, only QLJsonColumnOperationsPB is allowed for "colexpr".
-// - In the current index design & implementation, expression can only reference ONE column.
+//   - When a table is indexed by expressions, we create internal/hidden columns to store the index
+//     value, and "value_expr" specifies the indexing expression.
+//   - As of 07/2019, only QLJsonColumnOperationsPB is allowed for "colexpr".
+//   - In the current index design & implementation, expression can only reference ONE column.
 //
 // Example:
-//   Example for scalar index
-//     TABLE (a, b, c)
-//     INDEX (c) -> INDEX is a table whose column 'c' is referencing TABLE(c)
-//     colexpr = ref to "c" column_id.
-//   Example for JSON index
-//     TABLE (a, b, j)
-//     INDEX (j->>'b') -> INDEX is a table whose column 'j->>b' is referencing to TABLE(j)
-//     colexpr = j->'b'
+//
+//	Example for scalar index
+//	  TABLE (a, b, c)
+//	  INDEX (c) -> INDEX is a table whose column 'c' is referencing TABLE(c)
+//	  colexpr = ref to "c" column_id.
+//	Example for JSON index
+//	  TABLE (a, b, j)
+//	  INDEX (j->>'b') -> INDEX is a table whose column 'j->>b' is referencing to TABLE(j)
+//	  colexpr = j->'b'
 type IndexInfoPB_IndexColumnPB struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

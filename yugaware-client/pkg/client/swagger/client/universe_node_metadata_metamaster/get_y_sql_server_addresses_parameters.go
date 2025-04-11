@@ -52,10 +52,12 @@ func NewGetYSQLServerAddressesParamsWithHTTPClient(client *http.Client) *GetYSQL
 	}
 }
 
-/* GetYSQLServerAddressesParams contains all the parameters to send to the API endpoint
-   for the get y SQL server addresses operation.
+/*
+GetYSQLServerAddressesParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get y SQL server addresses operation.
+
+	Typically these are written to a http.Request.
 */
 type GetYSQLServerAddressesParams struct {
 

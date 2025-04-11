@@ -52,10 +52,12 @@ func NewEditKMSConfigParamsWithHTTPClient(client *http.Client) *EditKMSConfigPar
 	}
 }
 
-/* EditKMSConfigParams contains all the parameters to send to the API endpoint
-   for the edit k m s config operation.
+/*
+EditKMSConfigParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the edit k m s config operation.
+
+	Typically these are written to a http.Request.
 */
 type EditKMSConfigParams struct {
 

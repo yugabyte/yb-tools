@@ -38,7 +38,7 @@ type ClientService interface {
 }
 
 /*
-  SetAuditLoggingSettings sets audit logging level
+SetAuditLoggingSettings sets audit logging level
 */
 func (a *Client) SetAuditLoggingSettings(params *SetAuditLoggingSettingsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*SetAuditLoggingSettingsOK, error) {
 	// TODO: Validate the params before sending
@@ -77,7 +77,7 @@ func (a *Client) SetAuditLoggingSettings(params *SetAuditLoggingSettingsParams, 
 }
 
 /*
-  SetLoggingSettings sets logging level
+SetLoggingSettings sets logging level
 */
 func (a *Client) SetLoggingSettings(params *SetLoggingSettingsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*SetLoggingSettingsOK, error) {
 	// TODO: Validate the params before sending

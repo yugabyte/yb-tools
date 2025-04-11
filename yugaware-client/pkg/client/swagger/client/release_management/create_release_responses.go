@@ -39,7 +39,8 @@ func NewCreateReleaseOK() *CreateReleaseOK {
 	return &CreateReleaseOK{}
 }
 
-/* CreateReleaseOK describes a response with status code 200, with default header values.
+/*
+	CreateReleaseOK describes a response with status code 200, with default header values.
 
 successful operation
 */

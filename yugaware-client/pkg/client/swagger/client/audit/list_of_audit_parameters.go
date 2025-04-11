@@ -52,10 +52,12 @@ func NewListOfAuditParamsWithHTTPClient(client *http.Client) *ListOfAuditParams 
 	}
 }
 
-/* ListOfAuditParams contains all the parameters to send to the API endpoint
-   for the list of audit operation.
+/*
+ListOfAuditParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the list of audit operation.
+
+	Typically these are written to a http.Request.
 */
 type ListOfAuditParams struct {
 

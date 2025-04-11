@@ -52,10 +52,12 @@ func NewDeleteAlertChannelParamsWithHTTPClient(client *http.Client) *DeleteAlert
 	}
 }
 
-/* DeleteAlertChannelParams contains all the parameters to send to the API endpoint
-   for the delete alert channel operation.
+/*
+DeleteAlertChannelParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the delete alert channel operation.
+
+	Typically these are written to a http.Request.
 */
 type DeleteAlertChannelParams struct {
 

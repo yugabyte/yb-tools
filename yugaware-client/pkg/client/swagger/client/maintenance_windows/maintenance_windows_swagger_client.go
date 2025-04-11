@@ -46,7 +46,7 @@ type ClientService interface {
 }
 
 /*
-  Create creates maintenance window
+Create creates maintenance window
 */
 func (a *Client) Create(params *CreateParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*CreateOK, error) {
 	// TODO: Validate the params before sending
@@ -85,7 +85,7 @@ func (a *Client) Create(params *CreateParams, authInfo runtime.ClientAuthInfoWri
 }
 
 /*
-  Delete deletes maintenance window
+Delete deletes maintenance window
 */
 func (a *Client) Delete(params *DeleteParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*DeleteOK, error) {
 	// TODO: Validate the params before sending
@@ -124,9 +124,9 @@ func (a *Client) Delete(params *DeleteParams, authInfo runtime.ClientAuthInfoWri
 }
 
 /*
-  GetMaintenanceWindow gets details of a maintenance window
+GetMaintenanceWindow gets details of a maintenance window
 
-  Changes from upstream: This method is called simply 'get' in the upstream swagger.json
+Changes from upstream: This method is called simply 'get' in the upstream swagger.json
 */
 func (a *Client) GetMaintenanceWindow(params *GetMaintenanceWindowParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetMaintenanceWindowOK, error) {
 	// TODO: Validate the params before sending
@@ -165,7 +165,7 @@ func (a *Client) GetMaintenanceWindow(params *GetMaintenanceWindowParams, authIn
 }
 
 /*
-  ListOfMaintenanceWindows lists maintenance windows
+ListOfMaintenanceWindows lists maintenance windows
 */
 func (a *Client) ListOfMaintenanceWindows(params *ListOfMaintenanceWindowsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListOfMaintenanceWindowsOK, error) {
 	// TODO: Validate the params before sending
@@ -204,7 +204,7 @@ func (a *Client) ListOfMaintenanceWindows(params *ListOfMaintenanceWindowsParams
 }
 
 /*
-  Page lists maintenance windows paginated
+Page lists maintenance windows paginated
 */
 func (a *Client) Page(params *PageParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*PageOK, error) {
 	// TODO: Validate the params before sending
@@ -243,7 +243,7 @@ func (a *Client) Page(params *PageParams, authInfo runtime.ClientAuthInfoWriter,
 }
 
 /*
-  Update updates maintenance window
+Update updates maintenance window
 */
 func (a *Client) Update(params *UpdateParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*UpdateOK, error) {
 	// TODO: Validate the params before sending

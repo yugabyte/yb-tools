@@ -52,10 +52,12 @@ func NewAcknowledgeParamsWithHTTPClient(client *http.Client) *AcknowledgeParams 
 	}
 }
 
-/* AcknowledgeParams contains all the parameters to send to the API endpoint
-   for the acknowledge operation.
+/*
+AcknowledgeParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the acknowledge operation.
+
+	Typically these are written to a http.Request.
 */
 type AcknowledgeParams struct {
 

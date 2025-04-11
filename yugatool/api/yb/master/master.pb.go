@@ -8723,7 +8723,9 @@ func (x *AreTransactionLeadersSpreadResponsePB) GetError() *MasterErrorPB {
 }
 
 // ============================================================================
-//  Namespace  (default namespace = ANY placement)
+//
+//	Namespace  (default namespace = ANY placement)
+//
 // ============================================================================
 // Database type is added to metadata entries such that PGSQL clients cannot delete or connect to
 // CQL database_type and vice versa.

@@ -39,7 +39,8 @@ func NewSetUniverseKeyOK() *SetUniverseKeyOK {
 	return &SetUniverseKeyOK{}
 }
 
-/* SetUniverseKeyOK describes a response with status code 200, with default header values.
+/*
+	SetUniverseKeyOK describes a response with status code 200, with default header values.
 
 successful operation
 */

@@ -40,7 +40,7 @@ type ClientService interface {
 }
 
 /*
-  ListOfAudit lists a user s audit entries
+ListOfAudit lists a user s audit entries
 */
 func (a *Client) ListOfAudit(params *ListOfAuditParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*ListOfAuditOK, error) {
 	// TODO: Validate the params before sending
@@ -79,7 +79,7 @@ func (a *Client) ListOfAudit(params *ListOfAuditParams, authInfo runtime.ClientA
 }
 
 /*
-  GetTaskAudit gets audit info for a task
+GetTaskAudit gets audit info for a task
 */
 func (a *Client) GetTaskAudit(params *GetTaskAuditParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetTaskAuditOK, error) {
 	// TODO: Validate the params before sending
@@ -118,7 +118,7 @@ func (a *Client) GetTaskAudit(params *GetTaskAuditParams, authInfo runtime.Clien
 }
 
 /*
-  GetUserFromTask gets the user associated with a task
+GetUserFromTask gets the user associated with a task
 */
 func (a *Client) GetUserFromTask(params *GetUserFromTaskParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetUserFromTaskOK, error) {
 	// TODO: Validate the params before sending

@@ -46,7 +46,7 @@ type ClientService interface {
 }
 
 /*
-  AppVersion apps version
+AppVersion apps version
 */
 func (a *Client) AppVersion(params *AppVersionParams, opts ...ClientOption) (*AppVersionOK, error) {
 	// TODO: Validate the params before sending
@@ -84,7 +84,7 @@ func (a *Client) AppVersion(params *AppVersionParams, opts ...ClientOption) (*Ap
 }
 
 /*
-  CustomerCount customers count
+CustomerCount customers count
 */
 func (a *Client) CustomerCount(params *CustomerCountParams, opts ...ClientOption) (*CustomerCountOK, error) {
 	// TODO: Validate the params before sending
@@ -122,9 +122,9 @@ func (a *Client) CustomerCount(params *CustomerCountParams, opts ...ClientOption
 }
 
 /*
-  GetFilteredLogs gets filtered logs
+GetFilteredLogs gets filtered logs
 
-  PLAT-3091: Adds security key (missing in upstream swagger.json)
+PLAT-3091: Adds security key (missing in upstream swagger.json)
 */
 func (a *Client) GetFilteredLogs(params *GetFilteredLogsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetFilteredLogsOK, error) {
 	// TODO: Validate the params before sending
@@ -163,9 +163,9 @@ func (a *Client) GetFilteredLogs(params *GetFilteredLogsParams, authInfo runtime
 }
 
 /*
-  GetLogs gets logs
+GetLogs gets logs
 
-  PLAT-3091: Adds security key (missing in upstream swagger.json)
+PLAT-3091: Adds security key (missing in upstream swagger.json)
 */
 func (a *Client) GetLogs(params *GetLogsParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetLogsOK, error) {
 	// TODO: Validate the params before sending
@@ -204,7 +204,7 @@ func (a *Client) GetLogs(params *GetLogsParams, authInfo runtime.ClientAuthInfoW
 }
 
 /*
-  GetSessionInfo gets current user customer uuid auth api token
+GetSessionInfo gets current user customer uuid auth api token
 */
 func (a *Client) GetSessionInfo(params *GetSessionInfoParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetSessionInfoOK, error) {
 	// TODO: Validate the params before sending
@@ -243,9 +243,9 @@ func (a *Client) GetSessionInfo(params *GetSessionInfoParams, authInfo runtime.C
 }
 
 /*
-  RegisterCustomer registers a customer
+RegisterCustomer registers a customer
 
-  Creates new customer and user
+Creates new customer and user
 */
 func (a *Client) RegisterCustomer(params *RegisterCustomerParams, opts ...ClientOption) (*RegisterCustomerOK, error) {
 	// TODO: Validate the params before sending

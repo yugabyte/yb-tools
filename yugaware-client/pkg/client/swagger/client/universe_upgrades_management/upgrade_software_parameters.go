@@ -54,10 +54,12 @@ func NewUpgradeSoftwareParamsWithHTTPClient(client *http.Client) *UpgradeSoftwar
 	}
 }
 
-/* UpgradeSoftwareParams contains all the parameters to send to the API endpoint
-   for the upgrade software operation.
+/*
+UpgradeSoftwareParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the upgrade software operation.
+
+	Typically these are written to a http.Request.
 */
 type UpgradeSoftwareParams struct {
 

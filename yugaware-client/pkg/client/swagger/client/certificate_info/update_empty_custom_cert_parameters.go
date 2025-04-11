@@ -52,10 +52,12 @@ func NewUpdateEmptyCustomCertParamsWithHTTPClient(client *http.Client) *UpdateEm
 	}
 }
 
-/* UpdateEmptyCustomCertParams contains all the parameters to send to the API endpoint
-   for the update empty custom cert operation.
+/*
+UpdateEmptyCustomCertParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the update empty custom cert operation.
+
+	Typically these are written to a http.Request.
 */
 type UpdateEmptyCustomCertParams struct {
 

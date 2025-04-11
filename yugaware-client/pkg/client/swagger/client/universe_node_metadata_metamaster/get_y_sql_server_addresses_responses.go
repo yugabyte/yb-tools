@@ -37,7 +37,8 @@ func NewGetYSQLServerAddressesOK() *GetYSQLServerAddressesOK {
 	return &GetYSQLServerAddressesOK{}
 }
 
-/* GetYSQLServerAddressesOK describes a response with status code 200, with default header values.
+/*
+	GetYSQLServerAddressesOK describes a response with status code 200, with default header values.
 
 successful operation
 */

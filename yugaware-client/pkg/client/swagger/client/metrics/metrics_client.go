@@ -36,7 +36,7 @@ type ClientService interface {
 }
 
 /*
-  MetricsDetail gets prometheus metrics
+MetricsDetail gets prometheus metrics
 */
 func (a *Client) MetricsDetail(params *MetricsDetailParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*MetricsDetailOK, error) {
 	// TODO: Validate the params before sending

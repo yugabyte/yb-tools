@@ -39,7 +39,8 @@ func NewCreateTableSpacesOK() *CreateTableSpacesOK {
 	return &CreateTableSpacesOK{}
 }
 
-/* CreateTableSpacesOK describes a response with status code 200, with default header values.
+/*
+	CreateTableSpacesOK describes a response with status code 200, with default header values.
 
 successful operation
 */

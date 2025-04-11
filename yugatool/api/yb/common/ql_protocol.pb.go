@@ -253,7 +253,6 @@ func (x *QLColumnValuePB) GetExpr() *QLExpressionPB {
 // next tablet's partition. "next_row_key" is empty in this case which means we will start from the
 // very beginning of the next tablet. (TODO: we need to return the clean snapshot time in this case
 // also).
-//
 type QLPagingStatePB struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

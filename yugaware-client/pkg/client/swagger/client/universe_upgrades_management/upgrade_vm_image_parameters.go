@@ -54,10 +54,12 @@ func NewUpgradeVMImageParamsWithHTTPClient(client *http.Client) *UpgradeVMImageP
 	}
 }
 
-/* UpgradeVMImageParams contains all the parameters to send to the API endpoint
-   for the upgrade VM image operation.
+/*
+UpgradeVMImageParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the upgrade VM image operation.
+
+	Typically these are written to a http.Request.
 */
 type UpgradeVMImageParams struct {
 

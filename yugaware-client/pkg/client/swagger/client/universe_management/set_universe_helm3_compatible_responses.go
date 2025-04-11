@@ -39,7 +39,8 @@ func NewSetUniverseHelm3CompatibleOK() *SetUniverseHelm3CompatibleOK {
 	return &SetUniverseHelm3CompatibleOK{}
 }
 
-/* SetUniverseHelm3CompatibleOK describes a response with status code 200, with default header values.
+/*
+	SetUniverseHelm3CompatibleOK describes a response with status code 200, with default header values.
 
 successful operation
 */

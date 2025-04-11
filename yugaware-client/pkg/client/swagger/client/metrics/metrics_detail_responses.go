@@ -37,7 +37,8 @@ func NewMetricsDetailOK() *MetricsDetailOK {
 	return &MetricsDetailOK{}
 }
 
-/* MetricsDetailOK describes a response with status code 200, with default header values.
+/*
+	MetricsDetailOK describes a response with status code 200, with default header values.
 
 successful operation
 */

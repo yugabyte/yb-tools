@@ -39,7 +39,8 @@ func NewDeleteScheduleV2OK() *DeleteScheduleV2OK {
 	return &DeleteScheduleV2OK{}
 }
 
-/* DeleteScheduleV2OK describes a response with status code 200, with default header values.
+/*
+	DeleteScheduleV2OK describes a response with status code 200, with default header values.
 
 successful operation
 */

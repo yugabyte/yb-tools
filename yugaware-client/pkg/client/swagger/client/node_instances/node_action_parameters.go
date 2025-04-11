@@ -54,10 +54,12 @@ func NewNodeActionParamsWithHTTPClient(client *http.Client) *NodeActionParams {
 	}
 }
 
-/* NodeActionParams contains all the parameters to send to the API endpoint
-   for the node action operation.
+/*
+NodeActionParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the node action operation.
+
+	Typically these are written to a http.Request.
 */
 type NodeActionParams struct {
 

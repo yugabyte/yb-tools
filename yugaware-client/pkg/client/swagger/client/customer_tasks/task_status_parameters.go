@@ -52,10 +52,12 @@ func NewTaskStatusParamsWithHTTPClient(client *http.Client) *TaskStatusParams {
 	}
 }
 
-/* TaskStatusParams contains all the parameters to send to the API endpoint
-   for the task status operation.
+/*
+TaskStatusParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the task status operation.
+
+	Typically these are written to a http.Request.
 */
 type TaskStatusParams struct {
 

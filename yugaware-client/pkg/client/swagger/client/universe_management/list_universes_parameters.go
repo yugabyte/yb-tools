@@ -52,10 +52,12 @@ func NewListUniversesParamsWithHTTPClient(client *http.Client) *ListUniversesPar
 	}
 }
 
-/* ListUniversesParams contains all the parameters to send to the API endpoint
-   for the list universes operation.
+/*
+ListUniversesParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the list universes operation.
+
+	Typically these are written to a http.Request.
 */
 type ListUniversesParams struct {
 

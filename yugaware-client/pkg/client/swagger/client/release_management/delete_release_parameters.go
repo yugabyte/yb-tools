@@ -52,10 +52,12 @@ func NewDeleteReleaseParamsWithHTTPClient(client *http.Client) *DeleteReleasePar
 	}
 }
 
-/* DeleteReleaseParams contains all the parameters to send to the API endpoint
-   for the delete release operation.
+/*
+DeleteReleaseParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the delete release operation.
+
+	Typically these are written to a http.Request.
 */
 type DeleteReleaseParams struct {
 

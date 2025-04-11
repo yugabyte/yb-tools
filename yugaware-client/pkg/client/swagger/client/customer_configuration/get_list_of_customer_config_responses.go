@@ -39,7 +39,8 @@ func NewGetListOfCustomerConfigOK() *GetListOfCustomerConfigOK {
 	return &GetListOfCustomerConfigOK{}
 }
 
-/* GetListOfCustomerConfigOK describes a response with status code 200, with default header values.
+/*
+	GetListOfCustomerConfigOK describes a response with status code 200, with default header values.
 
 successful operation
 */

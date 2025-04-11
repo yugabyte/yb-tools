@@ -52,10 +52,12 @@ func NewHealthCheckUniverseParamsWithHTTPClient(client *http.Client) *HealthChec
 	}
 }
 
-/* HealthCheckUniverseParams contains all the parameters to send to the API endpoint
-   for the health check universe operation.
+/*
+HealthCheckUniverseParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the health check universe operation.
+
+	Typically these are written to a http.Request.
 */
 type HealthCheckUniverseParams struct {
 

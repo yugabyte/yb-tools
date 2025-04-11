@@ -37,7 +37,8 @@ func NewGetListOfReleasesOK() *GetListOfReleasesOK {
 	return &GetListOfReleasesOK{}
 }
 
-/* GetListOfReleasesOK describes a response with status code 200, with default header values.
+/*
+	GetListOfReleasesOK describes a response with status code 200, with default header values.
 
 successful operation
 */

@@ -39,7 +39,8 @@ func NewDeleteOK() *DeleteOK {
 	return &DeleteOK{}
 }
 
-/* DeleteOK describes a response with status code 200, with default header values.
+/*
+	DeleteOK describes a response with status code 200, with default header values.
 
 successful operation
 */

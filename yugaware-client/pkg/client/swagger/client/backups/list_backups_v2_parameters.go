@@ -54,10 +54,12 @@ func NewListBackupsV2ParamsWithHTTPClient(client *http.Client) *ListBackupsV2Par
 	}
 }
 
-/* ListBackupsV2Params contains all the parameters to send to the API endpoint
-   for the list backups v2 operation.
+/*
+ListBackupsV2Params contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the list backups v2 operation.
+
+	Typically these are written to a http.Request.
 */
 type ListBackupsV2Params struct {
 

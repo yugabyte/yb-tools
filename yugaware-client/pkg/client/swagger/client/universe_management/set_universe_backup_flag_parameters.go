@@ -53,10 +53,12 @@ func NewSetUniverseBackupFlagParamsWithHTTPClient(client *http.Client) *SetUnive
 	}
 }
 
-/* SetUniverseBackupFlagParams contains all the parameters to send to the API endpoint
-   for the set universe backup flag operation.
+/*
+SetUniverseBackupFlagParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the set universe backup flag operation.
+
+	Typically these are written to a http.Request.
 */
 type SetUniverseBackupFlagParams struct {
 

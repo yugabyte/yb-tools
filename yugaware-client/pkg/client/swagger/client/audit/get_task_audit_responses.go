@@ -39,7 +39,8 @@ func NewGetTaskAuditOK() *GetTaskAuditOK {
 	return &GetTaskAuditOK{}
 }
 
-/* GetTaskAuditOK describes a response with status code 200, with default header values.
+/*
+	GetTaskAuditOK describes a response with status code 200, with default header values.
 
 successful operation
 */

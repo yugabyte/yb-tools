@@ -52,10 +52,12 @@ func NewGetXClusterConfigParamsWithHTTPClient(client *http.Client) *GetXClusterC
 	}
 }
 
-/* GetXClusterConfigParams contains all the parameters to send to the API endpoint
-   for the get x cluster config operation.
+/*
+GetXClusterConfigParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get x cluster config operation.
+
+	Typically these are written to a http.Request.
 */
 type GetXClusterConfigParams struct {
 

@@ -39,7 +39,8 @@ func NewGetBackupV2OK() *GetBackupV2OK {
 	return &GetBackupV2OK{}
 }
 
-/* GetBackupV2OK describes a response with status code 200, with default header values.
+/*
+	GetBackupV2OK describes a response with status code 200, with default header values.
 
 successful operation
 */

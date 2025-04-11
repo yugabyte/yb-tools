@@ -45,7 +45,8 @@ func NewListOfInstanceTypeOK() *ListOfInstanceTypeOK {
 	return &ListOfInstanceTypeOK{}
 }
 
-/* ListOfInstanceTypeOK describes a response with status code 200, with default header values.
+/*
+	ListOfInstanceTypeOK describes a response with status code 200, with default header values.
 
 successful operation
 */
@@ -75,7 +76,8 @@ func NewListOfInstanceTypeInternalServerError() *ListOfInstanceTypeInternalServe
 	return &ListOfInstanceTypeInternalServerError{}
 }
 
-/* ListOfInstanceTypeInternalServerError describes a response with status code 500, with default header values.
+/*
+	ListOfInstanceTypeInternalServerError describes a response with status code 500, with default header values.
 
 If there was a server or database issue when listing the instance types
 */

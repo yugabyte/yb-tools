@@ -39,7 +39,8 @@ func NewPageAlertsOK() *PageAlertsOK {
 	return &PageAlertsOK{}
 }
 
-/* PageAlertsOK describes a response with status code 200, with default header values.
+/*
+	PageAlertsOK describes a response with status code 200, with default header values.
 
 successful operation
 */

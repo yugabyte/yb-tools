@@ -54,10 +54,12 @@ func NewGenerateAPITokenParamsWithHTTPClient(client *http.Client) *GenerateAPITo
 	}
 }
 
-/* GenerateAPITokenParams contains all the parameters to send to the API endpoint
-   for the generate API token operation.
+/*
+GenerateAPITokenParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the generate API token operation.
+
+	Typically these are written to a http.Request.
 */
 type GenerateAPITokenParams struct {
 

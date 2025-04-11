@@ -52,10 +52,12 @@ func NewToggleUniverseTLSParamsWithHTTPClient(client *http.Client) *ToggleUniver
 	}
 }
 
-/* ToggleUniverseTLSParams contains all the parameters to send to the API endpoint
-   for the toggle universe TLS operation.
+/*
+ToggleUniverseTLSParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the toggle universe TLS operation.
+
+	Typically these are written to a http.Request.
 */
 type ToggleUniverseTLSParams struct {
 

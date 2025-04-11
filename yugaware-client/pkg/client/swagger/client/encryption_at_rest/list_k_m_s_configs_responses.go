@@ -37,7 +37,8 @@ func NewListKMSConfigsOK() *ListKMSConfigsOK {
 	return &ListKMSConfigsOK{}
 }
 
-/* ListKMSConfigsOK describes a response with status code 200, with default header values.
+/*
+	ListKMSConfigsOK describes a response with status code 200, with default header values.
 
 successful operation
 */

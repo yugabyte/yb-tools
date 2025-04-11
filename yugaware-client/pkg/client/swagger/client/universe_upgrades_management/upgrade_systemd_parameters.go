@@ -54,10 +54,12 @@ func NewUpgradeSystemdParamsWithHTTPClient(client *http.Client) *UpgradeSystemdP
 	}
 }
 
-/* UpgradeSystemdParams contains all the parameters to send to the API endpoint
-   for the upgrade systemd operation.
+/*
+UpgradeSystemdParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the upgrade systemd operation.
+
+	Typically these are written to a http.Request.
 */
 type UpgradeSystemdParams struct {
 

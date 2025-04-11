@@ -52,10 +52,12 @@ func NewDropTableParamsWithHTTPClient(client *http.Client) *DropTableParams {
 	}
 }
 
-/* DropTableParams contains all the parameters to send to the API endpoint
-   for the drop table operation.
+/*
+DropTableParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the drop table operation.
+
+	Typically these are written to a http.Request.
 */
 type DropTableParams struct {
 

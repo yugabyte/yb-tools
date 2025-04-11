@@ -39,7 +39,8 @@ func NewToggleUniverseTLSOK() *ToggleUniverseTLSOK {
 	return &ToggleUniverseTLSOK{}
 }
 
-/* ToggleUniverseTLSOK describes a response with status code 200, with default header values.
+/*
+	ToggleUniverseTLSOK describes a response with status code 200, with default header values.
 
 successful operation
 */

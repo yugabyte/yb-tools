@@ -39,7 +39,8 @@ func NewGetUniverseCostOK() *GetUniverseCostOK {
 	return &GetUniverseCostOK{}
 }
 
-/* GetUniverseCostOK describes a response with status code 200, with default header values.
+/*
+	GetUniverseCostOK describes a response with status code 200, with default header values.
 
 successful operation
 */

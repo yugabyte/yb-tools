@@ -39,7 +39,8 @@ func NewPageOK() *PageOK {
 	return &PageOK{}
 }
 
-/* PageOK describes a response with status code 200, with default header values.
+/*
+	PageOK describes a response with status code 200, with default header values.
 
 successful operation
 */

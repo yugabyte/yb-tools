@@ -54,10 +54,12 @@ func NewUpdateReadOnlyClusterParamsWithHTTPClient(client *http.Client) *UpdateRe
 	}
 }
 
-/* UpdateReadOnlyClusterParams contains all the parameters to send to the API endpoint
-   for the update read only cluster operation.
+/*
+UpdateReadOnlyClusterParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the update read only cluster operation.
+
+	Typically these are written to a http.Request.
 */
 type UpdateReadOnlyClusterParams struct {
 

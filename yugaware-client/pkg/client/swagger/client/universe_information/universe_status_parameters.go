@@ -52,10 +52,12 @@ func NewUniverseStatusParamsWithHTTPClient(client *http.Client) *UniverseStatusP
 	}
 }
 
-/* UniverseStatusParams contains all the parameters to send to the API endpoint
-   for the universe status operation.
+/*
+UniverseStatusParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the universe status operation.
+
+	Typically these are written to a http.Request.
 */
 type UniverseStatusParams struct {
 

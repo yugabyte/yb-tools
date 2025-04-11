@@ -52,10 +52,12 @@ func NewGetConfigurationKeyParamsWithHTTPClient(client *http.Client) *GetConfigu
 	}
 }
 
-/* GetConfigurationKeyParams contains all the parameters to send to the API endpoint
-   for the get configuration key operation.
+/*
+GetConfigurationKeyParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the get configuration key operation.
+
+	Typically these are written to a http.Request.
 */
 type GetConfigurationKeyParams struct {
 

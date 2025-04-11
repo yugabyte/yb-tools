@@ -52,10 +52,12 @@ func NewSetDatabaseCredentialsParamsWithHTTPClient(client *http.Client) *SetData
 	}
 }
 
-/* SetDatabaseCredentialsParams contains all the parameters to send to the API endpoint
-   for the set database credentials operation.
+/*
+SetDatabaseCredentialsParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the set database credentials operation.
+
+	Typically these are written to a http.Request.
 */
 type SetDatabaseCredentialsParams struct {
 

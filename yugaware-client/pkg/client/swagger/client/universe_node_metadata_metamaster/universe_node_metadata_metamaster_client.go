@@ -44,7 +44,7 @@ type ClientService interface {
 }
 
 /*
-  GetMasterAddresses lists a master node s addresses
+GetMasterAddresses lists a master node s addresses
 */
 func (a *Client) GetMasterAddresses(params *GetMasterAddressesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetMasterAddressesOK, error) {
 	// TODO: Validate the params before sending
@@ -83,7 +83,7 @@ func (a *Client) GetMasterAddresses(params *GetMasterAddressesParams, authInfo r
 }
 
 /*
-  GetRedisServerAddresses lists a r e d i s server s addresses
+GetRedisServerAddresses lists a r e d i s server s addresses
 */
 func (a *Client) GetRedisServerAddresses(params *GetRedisServerAddressesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetRedisServerAddressesOK, error) {
 	// TODO: Validate the params before sending
@@ -122,7 +122,7 @@ func (a *Client) GetRedisServerAddresses(params *GetRedisServerAddressesParams, 
 }
 
 /*
-  GetUniverseMasterNodes lists a universe s master nodes
+GetUniverseMasterNodes lists a universe s master nodes
 */
 func (a *Client) GetUniverseMasterNodes(params *GetUniverseMasterNodesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetUniverseMasterNodesOK, error) {
 	// TODO: Validate the params before sending
@@ -161,7 +161,7 @@ func (a *Client) GetUniverseMasterNodes(params *GetUniverseMasterNodesParams, au
 }
 
 /*
-  GetYQLServerAddresses lists a y q l server s addresses
+GetYQLServerAddresses lists a y q l server s addresses
 */
 func (a *Client) GetYQLServerAddresses(params *GetYQLServerAddressesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetYQLServerAddressesOK, error) {
 	// TODO: Validate the params before sending
@@ -200,7 +200,7 @@ func (a *Client) GetYQLServerAddresses(params *GetYQLServerAddressesParams, auth
 }
 
 /*
-  GetYSQLServerAddresses lists a y SQL server s addresses
+GetYSQLServerAddresses lists a y SQL server s addresses
 */
 func (a *Client) GetYSQLServerAddresses(params *GetYSQLServerAddressesParams, authInfo runtime.ClientAuthInfoWriter, opts ...ClientOption) (*GetYSQLServerAddressesOK, error) {
 	// TODO: Validate the params before sending

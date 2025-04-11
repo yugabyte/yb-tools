@@ -54,10 +54,12 @@ func NewRunYsqlQueryUniverseParamsWithHTTPClient(client *http.Client) *RunYsqlQu
 	}
 }
 
-/* RunYsqlQueryUniverseParams contains all the parameters to send to the API endpoint
-   for the run ysql query universe operation.
+/*
+RunYsqlQueryUniverseParams contains all the parameters to send to the API endpoint
 
-   Typically these are written to a http.Request.
+	for the run ysql query universe operation.
+
+	Typically these are written to a http.Request.
 */
 type RunYsqlQueryUniverseParams struct {
 
