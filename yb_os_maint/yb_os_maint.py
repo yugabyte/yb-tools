@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.22"
+Version = "2.25"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -126,10 +126,16 @@ v 2.19 - 2.20
     Health check will check for active alerts - and give WARNING if any. Error out if not "root" user.
 v 2.21
     Properly handle the case where there is no 'private_ip' (Decomissioned node)
+v 2.23 - 2.24
+    Maint Window will now explicitly include suppressHealthCheckNotificationsConfig; Retry DB node actions;
+    Enable prometheus HTTP auth (--promuser XX --prompass YY) which can be in the ENV or .rc file.
+v 2.25
+    Universe health check : New: verify each tserver's masters list matches Universe's.
 '''
 
 import argparse
 from logging import fatal
+import re
 from re import T
 from uuid import UUID
 import requests
@@ -147,6 +153,8 @@ import fnmatch
 import random
 import copy
 from urllib3.exceptions import InsecureRequestWarning
+from requests.auth import HTTPBasicAuth
+from http import HTTPStatus
 
 ## Return value constants
 OTHER_ERROR = 1
@@ -397,7 +405,7 @@ class Universe_class:
                     + 'export_type="'   + server_type + '_export"}[' + str(LAG_LOOKBACK_MINUTES) + 'm])))'
         log('  Executing the following Prometheus query for ' + server_type + ' '+label_dimensions+':')
         log('   ' + promql)
-        resp = requests.get(self.YBA_API.promhost, params={'query':promql}, verify=False)
+        resp = self.YBA_API.prometheus_request(promql)
         metrics = resp.json()
         lag = float(0.00)
         if      'data' in metrics and \
@@ -557,6 +565,34 @@ class Universe_class:
                 self.universeDetails['clusters'][0]['userIntent']['replicationFactor'],
                 num_masters), True)
             errcount+=1
+
+        # Check if each tserver has master-list matching universe's master list
+        log('  Checking tserver master addresses for (' + master_list + ')')
+        for tserver in self.nodeDetailsSet:
+            if not tserver["isTserver"]:
+                continue
+            if not tserver["state"] == "Live":
+                continue
+            gflag_uri = tserver["cloudInfo"]['private_ip'] + ":" + str(tserver['tserverHttpPort']) + "/varz?raw"
+            try:  # try  http and https endpoints
+                gflag_resp = requests.get('https://' + gflag_uri,verify=False)
+            except:
+                gflag_resp = requests.get('http://' + gflag_uri)
+            if gflag_resp is None or gflag_resp.status_code != HTTPStatus.OK:
+                log("   Warning: Could not get gflags from tserver: "+ gflag_uri 
+                    + " : HTTP code=" + ("N/A" if gflag_resp is None else str(gflag_resp.status_code)))
+                continue
+            tserver_master_addrs = re.search(r"--tserver_master_addrs=(.+?)\n",gflag_resp.text).group(1)
+            if tserver_master_addrs is None  or  len(tserver_master_addrs) < 8:
+                log("   Error: Could not get tserver master addresses for tserver " + tserver["nodeName"] )
+                errcount+=1
+                continue
+            if sorted(tserver_master_addrs.split(",")) == sorted(master_list.split(",")):
+                continue # Check Passed .. all is well
+            else:
+                errcount+=1
+                log("   Error: tserver "+ tserver["nodeName"] + " master list='" + tserver_master_addrs
+                    + "' does not match Universe master list=" + master_list)
 
         # Check master lag
         if totalTablets > 0:
@@ -960,6 +996,17 @@ class YBA_API_CLASS:
             return
         retry_successful(self._Initialize_w_retry, params=[], verbose=True,sleep=30,fatal=True)
 
+    def prometheus_request(self,querystr:str):
+        if self.args.promuser is None:
+            resp = requests.get(self.promhost, params={'query': querystr}, verify=False)
+        else:
+            resp = requests.get(self.promhost, params={'query': querystr}, verify=False,
+                                auth=HTTPBasicAuth(self.args.promuser, self.args.prompass))
+        if resp.status_code == HTTPStatus.UNAUTHORIZED:
+            log('ERROR: Prometheus Authentication failed, accessing '+ self.promhost)
+
+        return resp
+
     def _Initialize_w_retry(self):
         self.get_customers()
         log('Retrieving Universes from YBA server at ' +self.api_host)
@@ -974,20 +1021,21 @@ class YBA_API_CLASS:
         # put together Prometheus URL by stripping off existing port of API server if specified and appending proper port
         # Then try https, if fails, step down to http
         tmp_url = self.api_host.split(':')
-        promhost = tmp_url[0] + ':' + tmp_url[1] + ':' + str(PROMETHEUS_PORT) + '/api/v1/query'
+        self.promhost = tmp_url[0] + ':' + tmp_url[1] + ':' + str(PROMETHEUS_PORT) + '/api/v1/query'
         try:
-            log('Checking for prometheus host at {}'.format(promhost), newline=True)
-            resp = requests.get(promhost, params={'query': 'min(node_boot_time_seconds)'}, verify=False)
+            log('Checking for prometheus host at {}'.format(self.promhost), newline=True)
+            resp = self.prometheus_request( 'min(node_boot_time_seconds)')
         except:
-            if 'https' in promhost:
-                promhost = promhost.replace('https', 'http')
-                log('Could not contact prometheus host using HTTPS.  Trying insecure connection at {}'.format(promhost))
-                resp = requests.get(promhost, params={'query': 'min(node_boot_time_seconds)'}, verify=False)
+            if 'https' in self.promhost:
+                self.promhost = self.promhost.replace('https', 'http')
+                log('Could not contact prometheus host using HTTPS.  Trying insecure connection at {}'.format(self.promhost))
+                resp =  self.prometheus_request( 'min(node_boot_time_seconds)')
             else:
-                log('Could not contact prometheus host at {}'.format(promhost), isError=True)
+                log('Could not contact prometheus host at {}'.format(self.promhost), isError=True)
                 errcount += 1;
-        log('Using prometheus host at {}\n'.format(promhost))
-        self.promhost=promhost
+        resp.raise_for_status()
+        log('Using prometheus host at {}\n'.format(self.promhost))
+        #self.promhost=promhost
         self.initialized = True
         return(True)
 
@@ -1090,10 +1138,14 @@ class YBA_API_CLASS:
                 "alertConfigurationFilter": {
                     "targetType": "UNIVERSE",
                     "target": {
-                        "all": False,
+                        "all": True, # TRUE Required due to https://phorge.dev.yugabyte.com/D24893
                         "uuids": [node.universe.UUID]
                     }
-                }
+                },
+                "suppressHealthCheckNotificationsConfig": {
+                    "suppressAllUniverses": False,
+                    "universeUUIDSet": [node.universe.UUID]
+                    }
             }
             if win is not None:
                 log('- Updating existing Maintenance window "{}" for {} minutes' \
@@ -1293,6 +1345,13 @@ class YB_Data_Node:
         self.node_info_printed = False 
         return self
 
+    def node_action_api_call(self, action:str): # Returns a "response" object 
+        return requests.put(
+            self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' 
+                          + self.universe.UUID + '/nodes/' + self.node_json['nodeName'],
+            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token}, verify=False,
+            json=json.loads('{"nodeAction": "' + action + '"}'))
+        
     def Print_node_info_line(self):
         if self.node_info_printed:
             return()
@@ -1335,11 +1394,12 @@ class YB_Data_Node:
                 exit(NODE_DB_ERROR)
             log('  Node ' + self.node_json['nodeName'] + ' is already in "Live" state - skipping startup')
         else:
-            response = requests.put(
-                self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' + 
-                    self.universe.UUID + '/nodes/' + self.node_json['nodeName'],
-                headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token},
-                json=json.loads('{"nodeAction": "START"}'),verify=False)
+            response = retry_successful(self.node_action_api_call,params=["START"],fatal=True,ReturnFuncVal=True)
+              #requests.put(
+              #  self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' + 
+              #      self.universe.UUID + '/nodes/' + self.node_json['nodeName'],
+              #  headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token},
+              #  json=json.loads('{"nodeAction": "START"}'),verify=False)
             task = response.json()
             if 'error' in task:
                 log('Could not start node : ' + task['error'], logTime=True,isError=True)
@@ -1514,11 +1574,12 @@ class YB_Data_Node:
 
         ## Shutdown server
         log(' Shutting down DB server ' + str(self.node_json['nodeName']), logTime=True)
-        response = requests.put(
-            self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' 
-                          + self.universe.UUID + '/nodes/' + self.node_json['nodeName'],
-            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token}, verify=False,
-            json=json.loads('{"nodeAction": "STOP"}'),)
+        response = retry_successful(self.node_action_api_call,params=["STOP"], fatal=True,ReturnFuncVal=True)
+          #requests.put(
+          #  self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' 
+          #                + self.universe.UUID + '/nodes/' + self.node_json['nodeName'],
+          #  headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token}, verify=False,
+          #  json=json.loads('{"nodeAction": "STOP"}'),)
         task = response.json()
         if  task.get('taskUUID') is None:
             log("NODE STOP  task error:{}".format(task))
@@ -1558,11 +1619,12 @@ class YB_Data_Node:
 
         ## Startup server
         log(' re-provisioning DB server', logTime=True)
-        response = requests.put(
-            self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' + 
-                self.universe.UUID + '/nodes/' + self.node_json['nodeName'],
-            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token},
-            json=json.loads('{"nodeAction": "REPROVISION"}'),verify=False)
+        response = retry_successful(self.node_action_api_call,params=["REPROVISION"],fatal=True,ReturnFuncVal=True)
+          #requests.put(
+          #  self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' + 
+          #      self.universe.UUID + '/nodes/' + self.node_json['nodeName'],
+          #  headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token},
+          #  json=json.loads('{"nodeAction": "REPROVISION"}'),verify=False)
         task = response.json()
         if 'error' in task:
             log('Could not reprovision node : ' + task['error'], logTime=True,isError=True)
@@ -1576,12 +1638,20 @@ class YB_Data_Node:
 #-------------------------------------------------------------------------------------------
 
 def Get_Environment_info():
+    """
+    Retrieves environment information, allowing PROMUSER and PROMPASS to be optional.
+    """
     env_dict = dict(YBA_HOST   = os.environ.get("YBA_HOST"),
                     API_TOKEN  = os.environ.get("API_TOKEN"),
                     CUST_UUID  = os.environ.get("CUST_UUID"),
+                    PROMUSER   = os.environ.get("PROMUSER"),
+                    PROMPASS   = os.environ.get("PROMPASS"),
                     RUNNING_AS_ROOT = os.getuid() == 0)
-    if None not in env_dict.values():
-        return env_dict # We have all values specified 
+    
+    required_keys = ["YBA_HOST", "API_TOKEN", "CUST_UUID", "RUNNING_AS_ROOT"]
+
+    if all(env_dict.get(key) is not None for key in required_keys):
+        return env_dict  # Required values are set from environment
     
     if not os.path.exists(ENV_FILE_PATH):
         log(ENV_FILE_PATH + " does not exist.",isError=True)
@@ -1611,17 +1681,20 @@ def Get_Environment_info():
                 continue
             value = parts[1].replace("'", "").replace('"', '').replace('\n', '').replace('\r', '')
             for name in env_dict.keys():
-                if name in parts[0]:
+                if name in parts[0]  or  name.lower() in parts[0]:
                     env_dict[name] = value
                     break
 
-    for name,value in env_dict.items():
-        if value is None:
-            log('Environment variable " + name + " not found', True)
+    missing_required = False
 
-    if None in env_dict.values():
+    for key in required_keys:
+        if env_dict[key] is None:
+            log(f'Environment variable "{key}" not found (does not have a VALUE)', True)
+            missing_required = True
+
+    if missing_required:
         log(' Process failed - exiting with code ' + str(OTHER_ERROR), logTime=True)
-        if (not LOG_TO_TERMINAL):
+        if not LOG_TO_TERMINAL:
             LOG_FILE.close()
         exit(OTHER_ERROR)
     
@@ -1695,6 +1768,14 @@ def main():
                         help='Skip master-stepdown if this is a STOP on a master-leader. If not set, we will attempt stepdown.',
                         required=False,
                         default=False)    
+    parser.add_argument('--promuser',
+                        action='store',
+                        help='Prometheus User name (Required if prometheus is configured to require login)',
+                        required=False)
+    parser.add_argument('--prompass',
+                        action='store',
+                        help='Prometheus Password',
+                        required=False)
     args = parser.parse_args()
 
     hostname = str(socket.gethostname())
@@ -1751,6 +1832,13 @@ def main():
         raise Exception("ERROR: Failed to get YBA API Info from enviornment")
     if not env_dict.get("RUNNING_AS_ROOT"):
         raise Exception("ERROR: This program must be run as the ROOT user.")
+    for name in ("promuser","prompass"):
+        if vars(args).get(name) is not None:
+            continue
+        if env_dict.get(name.upper()) is None:
+            continue
+        #The setattr(object, name, value) function allows you to set an attribute of an object by its name, which can be a string variable.
+        setattr(args, name, env_dict.get(name.upper()))
 
     # ---- Mainline code -------
     YBA_API   = YBA_API_CLASS(env_dict,args) # Instantiated , but not Initialized yet
