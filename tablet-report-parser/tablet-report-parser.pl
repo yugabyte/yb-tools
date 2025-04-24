@@ -37,7 +37,7 @@
 #   * Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
 #         ./yugatool -m $MASTERS $TLS_CONFIG tablet_info $TABLET_UUID > $TABLET_UUID.txt 
 ##########################################################################
-our $VERSION = "0.42";
+our $VERSION = "0.47";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -169,13 +169,22 @@ CREATE VIEW table_detail AS
      SELECT  namespace,table_name, count(*) as total_tablet_count,count(DISTINCT tablet_uuid) as unique_tablet_count, count(DISTINCT node_uuid) as nodes
 	 FROM tablet GROUP BY namespace,table_name;
 CREATE VIEW tablets_per_node AS
-    SELECT node_uuid,min(ip) as node_ip,min(zone) as zone,  count(*) as tablet_count,
+    SELECT node_uuid,ip as node_ip,zone,  count(*) as tablet_count,
+           sum(CASE WHEN status='TABLET_DATA_COPYING' THEN 1 ELSE 0 END) as copying,
+           sum(CASE WHEN tablet.state = 'TABLET_DATA_TOMBSTONED' THEN 1 ELSE 0 END) as tombstoned,
            sum(CASE WHEN node_uuid = leader THEN 1 ELSE 0 END) as leaders,
-           count(DISTINCT table_name) as table_count	
-	FROM tablet,cluster 
-	WHERE cluster.type='TSERVER' and cluster.uuid=node_uuid 
-	GROUP BY node_uuid
-	ORDER BY tablet_count;
+           count(DISTINCT table_name) as table_count
+        FROM tablet,cluster
+        WHERE cluster.type='TSERVER' and cluster.uuid=node_uuid
+        GROUP BY node_uuid, ip, zone 
+    UNION
+    SELECT '~~TOTAL~~',
+	    '*(All '|| (select count(*) from cluster where type='TSERVER') || ' nodes)*', 'ALL',
+       (Select count(*) from tablet),(Select count(*) from tablet WHERE status='TABLET_DATA_COPYING'),
+	   (SELECT count(*) from tablet where state = 'TABLET_DATA_TOMBSTONED'),
+	   (SELECT count(*) from tablet where node_uuid = leader),
+	   (SELECT count(DISTINCT table_name) as table_count from tablet)
+	   ORDER BY 1;
 CREATE VIEW tablet_replica_detail AS
 	SELECT t.namespace,t.table_name,t.table_uuid,t.tablet_uuid,
     sum(CASE WHEN t.status = 'TABLET_DATA_TOMBSTONED' THEN 0 ELSE 1 END) as replicas  ,
@@ -204,7 +213,9 @@ CREATE VIEW UNSAFE_Leader_create AS
     SELECT  '\$HOME/tserver/bin/yb-ts-cli --server_address='|| ip ||':'||port 
         || ' unsafe_config_change ' || t.tablet_uuid
 		|| ' ' || node_uuid
-		|| ' -certs_dir_name \$TLSDIR;sleep 30;' AS cmd_to_run
+		|| ' -certs_dir_name \$TLSDIR;sleep 10;#'
+		|| trd.replicas || ' replica(s)'
+		AS cmd_to_run
 	 from tablet t,cluster ,tablet_replica_detail trd
 	 WHERE  cluster.type='TSERVER' AND cluster.uuid=node_uuid
 	       AND  t.tablet_uuid=trd.tablet_uuid  AND t.status != 'TABLET_DATA_TOMBSTONED'
@@ -332,7 +343,7 @@ my %entity = (
 				LINE_REGEX =>
                  	qr| ^\s(?<tablet_uuid>(\w{32}))\s{3}
 					(?<tablename>([\w\-.]+))\s+
-					(?<table_uuid>(\w{32})?)\s* # This exists only if --show_table_uuid is set
+					(?<table_uuid>(\w{32})?)(:?\.colocation\.parent\.uuid)?\s* # This exists only if --show_table_uuid is set
 					(?<namespace>([\w\-]+))\s+
 					(?<state>(\w+))\s*
 					(?<status>(\w+))\s+
@@ -571,7 +582,8 @@ sub Parse_Tablet_line{
         die "ERROR: Line $. failed to match tablet regex";		
 	}
 	my %save_val=%+; # Save collected regex named capture hash (before it gets clobbered by next regex)
-    if ($save_val{namespace} eq "RUNNING"  or  $save_val{namespace} eq "NOT_STARTED"){
+    if ($save_val{namespace} eq "RUNNING"  or  $save_val{namespace} eq "NOT_STARTED"
+	    or $save_val{namespace} eq "BOOTSTRAPPING"){
 	   # We have mis-interpreted this line because NAMESPACE wa missing - re-interpret without namespace
        $line =~m/^\s(?<tablet_uuid>(\w{32}))\s{3}
 					(?<tablename>([\w\-]+))\s+

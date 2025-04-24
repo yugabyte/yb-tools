@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.36";
+our $VERSION = "0.37";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, \x1b[1;33;100mmoses.pl\x1b[0m  Version $VERSION
                ========
@@ -1071,13 +1071,21 @@ sub Create_Views{
 
   CREATE VIEW tablets_per_node AS 
     SELECT node_uuid,min(public_ip) as node_ip,min(region ) as region,  count(*) as tablet_count,
+           sum(CASE WHEN tablet.state='TABLET_DATA_COPYING' THEN 1 ELSE 0 END) as copying,
            sum(CASE WHEN private_ip = leader THEN 1 ELSE 0 END) as leaders,
            sum(CASE WHEN tablet.state = 'TABLET_DATA_TOMBSTONED' THEN 1 ELSE 0 END) as tombstoned,
            count(DISTINCT table_name) as table_count
   FROM tablet,node 
   WHERE isTserver  and node.nodeuuid=node_uuid 
   GROUP BY node_uuid
-  ORDER BY tablet_count;
+  UNION
+    SELECT '~~TOTAL~~',
+      '*(All '|| (select count(*) from node where isTserver=1) || ' nodes)*', 'ALL',
+       (Select count(*) from tablet),(Select count(*) from tablet WHERE state='TABLET_DATA_COPYING'),
+      (SELECT count(*) from tablet where leader > ""),
+      (SELECT count(*) from tablet where state = 'TABLET_DATA_TOMBSTONED'),
+      (SELECT count(DISTINCT table_name) as table_count from tablet)
+  ORDER BY 1;
 
   CREATE VIEW tablet_replica_detail AS
     SELECT t.namespace,t.table_name,t.table_uuid,t.tablet_uuid,
@@ -1106,8 +1114,10 @@ sub Create_Views{
   CREATE VIEW UNSAFE_Leader_create AS
         SELECT  '\$HOME/tserver/bin/yb-ts-cli --server_address='|| private_ip ||':'||tserverrpcport 
         || ' unsafe_config_change ' || t.tablet_uuid
-    || ' ' || node_uuid
-    || ' -certs_dir_name \$TLSDIR;sleep 30;' AS cmd_to_run
+        || ' ' || node_uuid
+        || ' -certs_dir_name \$TLSDIR;sleep 10;# '
+        || trd.replicas || ' replica(s)'
+        AS cmd_to_run
    from tablet t,node ,tablet_replica_detail trd
    WHERE  node.isTserver  AND nodeuuid=node_uuid
          AND  t.tablet_uuid=trd.tablet_uuid  

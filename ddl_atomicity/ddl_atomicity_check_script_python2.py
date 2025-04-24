@@ -1,4 +1,5 @@
-# -*- coding: UTF8 -*-
+#!/usr/bin/env python2
+# -*- coding: utf-8 -*-
 
 from collections import defaultdict
 import HTMLParser
@@ -33,7 +34,7 @@ html_parser = HTMLParser.HTMLParser()
 if args.master_leader_only:
     print("Checking if the node is the master leader.")
     is_leader = subprocess.check_output(
-        "{} -s http://localhost:9300/metrics | {} yb_node_is_master_leader{{ | {} '{{print $2}}'".format(
+        "{} -skL http://localhost:9300/metrics | {} yb_node_is_master_leader{{ | {} '{{print $2}}'".format(
             args.curl_path,
             args.grep_path,
             args.awk_path
@@ -56,7 +57,7 @@ else:
 # Get table data
 tables_output = json.loads(
     subprocess.check_output(
-        [args.curl_path, "-s", "http://{}:{}/api/v1/tables".format(
+        [args.curl_path, "-skL", "http://{}:{}/api/v1/tables".format(
             master_interface_address,
             args.master_interface_port
         )]
@@ -77,7 +78,7 @@ for table in table_data_json:
     if pg_oid == "" or table["hidden"]:
         continue
     # Extract table oid
-    yb_pg_table_oid = str(int(table["uuid"][-4:], 16))
+    yb_pg_table_oid = str(int(table["uuid"][-8:], 16))
 
     # Add table to the database's list in the dictionary
     if dbname not in db_tables:
@@ -155,7 +156,7 @@ for dbname, tables in db_tables.items():
             table_schema_json = json.loads(
                 subprocess.check_output([
                     args.curl_path, 
-                    "-s", 
+                    "-skL", 
                     "http://{}:{}/api/v1/table?id={}".format(
                         master_interface_address,
                         args.master_interface_port,

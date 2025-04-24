@@ -1,4 +1,5 @@
-# -*- coding: UTF8 -*-
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
 from collections import defaultdict
 import html
@@ -32,7 +33,7 @@ FNULL = open(os.devnull, 'w')
 if args.master_leader_only:
     print("Checking if the node is the master leader.")
     is_leader = subprocess.check_output(
-        f"{args.curl_path} -s http://localhost:9300/metrics | {args.grep_path} yb_node_is_master_leader{{ | {args.awk_path} '{{print $2}}'", 
+        f"{args.curl_path} -skL http://localhost:9300/metrics | {args.grep_path} yb_node_is_master_leader{{ | {args.awk_path} '{{print $2}}'", 
         shell=True
     ).decode('utf-8').strip()
     if is_leader == "0":
@@ -51,7 +52,7 @@ else:
 # Get table data
 tables_output = json.loads(
     subprocess.check_output(
-        [args.curl_path, "-s", f"http://{master_interface_address}:{args.master_interface_port}/api/v1/tables"]
+        [args.curl_path, "-skL", f"http://{master_interface_address}:{args.master_interface_port}/api/v1/tables"]
     ).decode('utf-8')
 )
 table_data_json = tables_output["user"]
@@ -70,7 +71,7 @@ for table in table_data_json:
     if pg_oid == "" or table["hidden"]:
         continue
     # Extract table oid
-    yb_pg_table_oid = str(int(table["uuid"][-4:], 16))
+    yb_pg_table_oid = str(int(table["uuid"][-8:], 16))
 
     # Add table to the database's list in the dictionary
     if dbname not in db_tables:
@@ -142,7 +143,7 @@ for dbname, tables in db_tables.items():
             table_schema_json = json.loads(
                 subprocess.check_output([
                     args.curl_path,
-                    "-s",
+                    "-skL",
                     f"http://{master_interface_address}:{args.master_interface_port}/api/v1/table?id={tableid}"
                 ]).decode()
             )

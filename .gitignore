@@ -4,3 +4,5 @@ bin/
 
 cover.out
 yb_sync_LDAP/yb_sync_ldap.py
+querymonitor/flags
+querymonitor/nohup.out

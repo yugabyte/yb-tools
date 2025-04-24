@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.17"
+Version = "2.22"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -120,11 +120,18 @@ v 2.12 - 2.14
     Implement "--fix placement" (placementModificationTaskUUID zapped in DB)
 v 2.15 - 2.16 - 2.17
     Mark MAINT window Complete, managed expired delete. Retry Health on STOP node. lag metric improvement.
+v 2.18
+    --resume for ZONE; Maint alert suppress.; Allow YBA region action; snooze health alerts. --reprovision.
+v 2.19 - 2.20
+    Health check will check for active alerts - and give WARNING if any. Error out if not "root" user.
+v 2.21
+    Properly handle the case where there is no 'private_ip' (Decomissioned node)
 '''
 
 import argparse
 from logging import fatal
 from re import T
+from uuid import UUID
 import requests
 import json
 import socket
@@ -256,11 +263,18 @@ class Universe_class:
 
     def get_node_json(self,hostname,ip=None):
         for candidate_node in self.nodeDetailsSet:
-            if str(candidate_node['nodeName']).upper() in hostname.upper() or hostname.upper() in \
-                str(candidate_node['nodeName']).upper() or \
-                    candidate_node['cloudInfo']['private_ip'] == ip or \
-                    candidate_node['cloudInfo']['public_ip'] == ip or \
-                    candidate_node['cloudInfo']['private_ip'].upper() in hostname.upper():
+            if str(candidate_node['nodeName']).upper() in hostname.upper() \
+                or hostname.upper() in str(candidate_node['nodeName']).upper():
+                return candidate_node
+            if 'private_ip' in candidate_node['cloudInfo']:
+                if candidate_node['cloudInfo']['private_ip'] is None:
+                    continue
+                if  candidate_node['cloudInfo']['private_ip'] == ip or \
+                    candidate_node['cloudInfo'].get('private_ip').upper() in hostname.upper():
+                    return candidate_node
+            if 'public_ip' not in candidate_node['cloudInfo']:
+                continue
+            if candidate_node['cloudInfo'].get('public_ip') == ip:
                 return candidate_node
         return None
     
@@ -553,6 +567,8 @@ class Universe_class:
         else:
             log('  Tablet count in universe is zero - bypassing master replication lag check')
 
+        if self.YBA_API.active_alerts(self):
+            pass # This is a WARNING only 
 
         def check_active_maintenance_windows(win):
             if win['state'] != 'ACTIVE':
@@ -858,8 +874,13 @@ class YBA_Node:
             log(e.output,isError=True)
             raise # re-raise for caller's benefit 
         log(status,logTime=True)
+        self.YBA_API.active_alerts(None) # No universe specified .. so report on all of them
 
     def resume(self):
+        if self.args.region:
+            log("Unexpected --region in YBA resume. Did you specify --universe ?",isError=True)
+            raise("Incorrect or extra arguments found.")
+        
         log(' Host is YBA Server - Starting up services...', logTime=True)
         if self.ybaVersion >= '2.18.0':
             try:
@@ -888,12 +909,16 @@ class YBA_Node:
                     exit(NODE_YBA_ERROR)
 
     def stop(self):
+        if self.args.region:
+            log("Unexpected --region in YBA stop. Did you specify --universe ?",isError=True)
+            raise("Incorrect or extra arguments found.")
+        
         log(' Host is YBA Server {} - Shutting down services...'.format(self.ybaVersion), logTime=True)
         if self.ybaVersion >= '2.18.0':
             try:
                 status=subprocess.check_output(['yba-ctl','stop'],  stderr=subprocess.STDOUT) # No output
-                time.sleep(2)
-                self.health()
+                #  time.sleep(2)
+                #  self.health() - Disabled. Fails with Connection aborted, ConnectionResetError
                 return(True)
             except subprocess.CalledProcessError as e:
                 log('  yba-ctl stop failed - skipping. Err:{}'.format(str(e)),logTime=True)
@@ -914,6 +939,11 @@ class YBA_Node:
                     exit(NODE_YBA_ERROR)
             except subprocess.CalledProcessError as e:
                 log('  Service {} is not running - skipping'.format(svc))
+
+    def fix(self): # This is a 'Universe_class' method - we land here if -u is not specified
+        log("--fix requires that --universe must be specified",isError=True,newline=True)
+        os.exit(10)
+
 #-------------------------------------------------------------------------------------------
 class YBA_API_CLASS:
     def __init__(self,env_dict,args):
@@ -1014,6 +1044,38 @@ class YBA_API_CLASS:
                 headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False)
         return resp.json()
     
+    def snooze_health_alerts(self,universe:Universe_class=None,disable=True,duration_sec=MAINTENANCE_WINDOW_DURATION_MINUTES*60):
+        log('- Snoozing health alerts for {} seconds' \
+            .format(str(duration_sec)) \
+            , logTime=True)
+        response = requests.post(
+            self.api_host + '/api/v1/customers/' + self.customer_uuid 
+                    +'/universes/' + universe.UUID + '/config_alerts',
+            headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
+            json = {"disabled": disable, "disablePeriodSecs": duration_sec})
+        response.raise_for_status() # Trap error responses
+
+    def active_alerts(self, universe):
+        response = requests.get(
+            self.api_host + '/api/v1/customers/' + self.customer_uuid +'/alerts/active',
+            headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False)
+        response.raise_for_status() # Trap error responses
+        
+        foundAlert = False
+        for alert in response.json():
+            if universe is None:
+                pass # Fall through
+            elif alert.get("configurationType") == "UNIVERSE" and alert.get("sourceUUID") == universe.UUID :
+                pass # fall through
+            else:
+                continue # Do not report other universers 
+            log("*WARNING: "+ alert.get("createTime") + " " + alert.get('state') + " ALERT: " + alert.get("name") +"(" + alert.get("message") + ")")
+            if alert.get("configurationType") == "UNIVERSE":
+                log('  for Universe ' + alert.get("sourceName"))
+            foundAlert = True
+        
+        return foundAlert
+
     def maintenance_window(self, node, action):
         host = node.hostname
         desc = "IP:" + node.ip + ", nodeName:" + node.node_json["nodeName"]
@@ -1039,10 +1101,11 @@ class YBA_API_CLASS:
                     , logTime=True,newline=True)
                 j['uuid'] = win['uuid']
                 response = requests.put(
-                    self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + w_id,
+                    self.api_host + '/api/v1/customers/' + self.customer_uuid + '/maintenance_windows/' + win['uuid'],
                     headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
                     json = j)
                 response.raise_for_status() # Trap error responses
+                self.snooze_health_alerts(node.universe,disable=True,duration_sec=MAINTENANCE_WINDOW_DURATION_MINUTES*60)
             else:
                 log('- Creating Maintenance window "{}" for {} minutes' \
                     .format(MAINTENANCE_WINDOW_NAME + host, str(MAINTENANCE_WINDOW_DURATION_MINUTES)) \
@@ -1052,6 +1115,7 @@ class YBA_API_CLASS:
                     headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
                     json = j)
                 response.raise_for_status() # Trap error responses
+                self.snooze_health_alerts(node.universe,disable=True,duration_sec=MAINTENANCE_WINDOW_DURATION_MINUTES*60)
         else: # "finish" the window
             if win is not None:
                 mins_to_add = timedelta(minutes=5) # add 5 min from now, to allow load-bal.
@@ -1063,6 +1127,7 @@ class YBA_API_CLASS:
                     headers = {'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.api_token}, verify=False,
                     json = win)
                 response.raise_for_status() # Trap error responses
+                self.snooze_health_alerts(node.universe,disable=False,duration_sec=1) # Zero sec fails, so use 1.
             else:
                 log('- No existing Maintenance window "{}" found for "{}"' \
                     .format(MAINTENANCE_WINDOW_NAME + host,action), logTime=True,newline=True)
@@ -1225,6 +1290,7 @@ class YB_Data_Node:
         self.args     = args
         self.isMaster = json['isMaster']
         self.isTserver= json['isTserver']
+        self.node_info_printed = False 
         return self
 
     def Print_node_info_line(self):
@@ -1428,7 +1494,7 @@ class YB_Data_Node:
 
         ## Pause x-cluster replication if specified
         if self.args.skip_xcluster:
-            log('- Skipping pause of x-cluster replication',newline=True)
+            log('- Skipping pause of x-cluster replication',logTime=True)
         else:
             retry_successful(self.universe.Pause_xCluster_Replication,params=[],verbose=True,fatal=True,sleep=15)
 
@@ -1482,12 +1548,38 @@ class YB_Data_Node:
         self.universe.health_check()
         self.verify()
 
+    def reprovision(self):
+        self.YBA_API.Initialize()
+        if self.universe is None:
+            self.universe, self.node_json = self.YBA_API.find_universe_for_node(self.hostname, self.ip)        
+        if self.args.dryrun:
+            log('--- Dry run only - (reprovision) no action performed')
+            return
+
+        ## Startup server
+        log(' re-provisioning DB server', logTime=True)
+        response = requests.put(
+            self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' + 
+                self.universe.UUID + '/nodes/' + self.node_json['nodeName'],
+            headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.YBA_API.api_token},
+            json=json.loads('{"nodeAction": "REPROVISION"}'),verify=False)
+        task = response.json()
+        if 'error' in task:
+            log('Could not reprovision node : ' + task['error'], logTime=True,isError=True)
+            log('Process failed - exiting with code ' + str(NODE_DB_ERROR), logTime=True)
+            exit(NODE_DB_ERROR)
+        if retry_successful(self.YBA_API.wait_for_task, params=[ task['taskUUID'] ],sleep=TASK_COMPLETE_WAIT_TIME_SECONDS,verbose=True,retry=15):
+            log(' Server reprovision complete', logTime=True)
+        else:
+            raise Exception("Failed to reprovision DB Node")
+
 #-------------------------------------------------------------------------------------------
 
 def Get_Environment_info():
     env_dict = dict(YBA_HOST   = os.environ.get("YBA_HOST"),
                     API_TOKEN  = os.environ.get("API_TOKEN"),
-                    CUST_UUID  = os.environ.get("CUST_UUID"))
+                    CUST_UUID  = os.environ.get("CUST_UUID"),
+                    RUNNING_AS_ROOT = os.getuid() == 0)
     if None not in env_dict.values():
         return env_dict # We have all values specified 
     
@@ -1544,7 +1636,10 @@ def main():
     mxgroup.add_argument('-s', '--stop',
                          action='store_true',
                          help='Stop services for YB host prior to O/S patch')
-    mxgroup.add_argument('-r', '--resume',
+    mxgroup.add_argument('-p', '--reprovision',
+                         action='store_true',
+                         help='Re-Provision (dead) node before bringing it back to life')
+    mxgroup.add_argument('-r', '--resume','--start',
                          action='store_true',
                          help='Resume services for YB host after O/S patch')
     mxgroup.add_argument('-t', '--health',
@@ -1621,6 +1716,8 @@ def main():
     elif args.verify:
         action = 'verify'
         dry_run = True
+    elif args.reprovision:
+        action = 'reprovision'
     args.ACTION = action
     # Overwritting the EVN_FILE_PATH
     if args.ENV_FILE_PATH is not None:
@@ -1651,7 +1748,9 @@ def main():
     
     env_dict = Get_Environment_info()
     if env_dict is None:
-        raise Exception("ERROR: Did not get YBA API Info from enviornment")
+        raise Exception("ERROR: Failed to get YBA API Info from enviornment")
+    if not env_dict.get("RUNNING_AS_ROOT"):
+        raise Exception("ERROR: This program must be run as the ROOT user.")
 
     # ---- Mainline code -------
     YBA_API   = YBA_API_CLASS(env_dict,args) # Instantiated , but not Initialized yet

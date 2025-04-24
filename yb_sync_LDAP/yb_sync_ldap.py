@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright 2023 YugaByte, Inc. and Contributors
+# Copyright © 2024 YugaByte, Inc. and Contributors
 #
 # Licensed under the Polyform Free Trial License 1.0.0 (the "License"); you
 # may not use this file except in compliance with the License. You
@@ -10,7 +10,7 @@
 """
 LDAP Sync script for Yugabyte YCQL and YSQL.
 """
-
+import sys
 import os
 import re
 import argparse
@@ -35,7 +35,7 @@ from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 
 
-VERSION = "0.42"
+VERSION = "0.44"
 
 
 
@@ -55,9 +55,9 @@ YCQL_REVOKE_ROLE = "REVOKE \"{}\" FROM \"{}\";"
 YCQL_DROP_ROLE = "DROP ROLE IF EXISTS \"{}\";"
 YCQL_CREATE_NOLOGIN_ROLE = "CREATE ROLE \"{}\" WITH LOGIN=false;"
 YSQL_CREATE_ROLE = "CREATE ROLE \"{}\" WITH LOGIN PASSWORD '{}';"
-YSQL_CREATE_ROLE_IN_ROLES = "CREATE ROLE \"{}\" WITH LOGIN PASSWORD '{}' IN ROLE \"{}\";"
+YSQL_CREATE_ROLE_IN_ROLES = "CREATE ROLE \"{}\" WITH LOGIN PASSWORD '{}' IN ROLE {};" # Caller must quote role(s)
 YSQL_CREATE_NOLOGIN_ROLE = "CREATE ROLE \"{}\" WITH NOLOGIN;"
-YSQL_CREATE_NOLOGIN_ROLE_IN_ROLES = "CREATE ROLE \"{}\" WITH NOLOGIN IN ROLE \"{}\";"
+YSQL_CREATE_NOLOGIN_ROLE_IN_ROLES = "CREATE ROLE \"{}\" WITH NOLOGIN IN ROLE {};"
 YSQL_GRANT_ROLE = "GRANT \"{}\" TO \"{}\";"
 YSQL_REVOKE_ROLE = "REVOKE \"{}\" FROM \"{}\";"
 YSQL_DROP_ROLE = "DROP ROLE IF EXISTS \"{}\";"
@@ -754,19 +754,19 @@ class YBLDAPSync:
                         stmt_list.append(YCQL_GRANT_ROLE.format(grant_role, role_to_create))
                         stmt_type['GrantRole'] +=1
                 else:
-                    grant_roles = ','.join(['{0}'.format(role) for role in value])
+                    grant_roles = '"' + '","'.join(['{0}'.format(role) for role in value]) + '"'
                     for grant_role in value:
                         if not grant_role in db_nologin_role:
                            logging.debug("CREATing (non-login) role {} in DB, to assign to {}".format(grant_role, key))
-                           if grant_role == grant_roles:
+                           if grant_role == grant_roles.strip('"'):
                                stmt_list.append(YSQL_CREATE_NOLOGIN_ROLE.format(grant_role))
                            else:
                             stmt_list.append(YSQL_CREATE_NOLOGIN_ROLE_IN_ROLES.format(grant_role, grant_roles))
-                            stmt_list.append(YSQL_GRANT_ROLE.format(grant_role, grant_roles))
+                            stmt_list.append(YSQL_GRANT_ROLE.format(grant_role, grant_roles.strip('"')))
                             stmt_type['GrantRole'] += 1
                            db_nologin_role[grant_role] = 1
 
-                    if (role_to_create == grant_roles):
+                    if (role_to_create == grant_roles.strip('"')):
                         stmt_list.append(YSQL_CREATE_ROLE.format(role_to_create,
                                                             generate_random_password()))
                     else:
@@ -1169,10 +1169,12 @@ class YBLDAPSync:
             logging.info('Run complete.')
         except LDAPSyncException as ex:
             print(json.dumps({"error": "LDAP Sync exception: {}".format(str(ex))}))
+            sys.exit(2)
         except Exception as ex:
             print(json.dumps({"error": "Exception: {}".format(str(ex))}))
             traceback.print_exc()
             traceback.print_stack()
+            sys.exit(3)
 
 
 if __name__ == "__main__":
