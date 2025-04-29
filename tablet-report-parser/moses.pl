@@ -29,6 +29,9 @@ my $HELP_TEXT = << "__HELPTEXT__";
    --INDEX_NAME             [=] <idx-name> Optionally Used with WAIT_INDEX_BACKFILL, to specify WHICH idx to wait for.
    --SLEEP_INTERVAL_SEC     [=] nn  Number of seconds to sleep between check for backfill; default 30.
 
+\x1b[1;33;100mData Movement Monitoring related options\x1b[0m
+   --LOAD_BALANCER_MONITOR | --LBM   if specified, the program reports tablet load balancing/data movement info
+
     If \x1b[1;30;43mSTDOUT\x1b[0m is redirected, it can be sent to  a SQL file, or gzipped, and collected for offline analysis.
     You may abbreviate option names up to the minimum required for uniqueness.
     Options can be set via --cmd-line, or via environment, or both, or via a "config_file".
@@ -47,6 +50,7 @@ use POSIX;
  package JSON::Tiny;
  package DatabaseClass;
  package UniverseClass;
+ package Master::Log::Parser;
 }; # Pre-declare local modules 
 
 my %opt = (
@@ -79,6 +83,8 @@ my %opt = (
    INDEX_NAME           => undef,
    SLEEP_INTERVAL_SEC   => 30,
    OMNIVERSE            => 0,  # If set, capture ALL universe's JSON
+   LOAD_BALANCER_MONITOR=> 0,  # If set, report on data movement and quit
+   TEST_MASTER          => undef, # Use this as filename for master log for load balancer test
 );
 
 #---- Start ---
@@ -91,6 +97,12 @@ if ($opt{WAIT_INDEX_BACKFILL}){
        sleep $opt{SLEEP_INTERVAL_SEC};
    }
    warn TimeDelta("Index backfill wait COMPLETED. Exiting.");
+   exit 0;
+}
+
+if ($opt{LOAD_BALANCER_MONITOR}){
+   Load_Balancer_Monitor();
+   warn TimeDelta("Data Movement Monitor report COMPLETED. Exiting.");
    exit 0;
 }
 
@@ -111,6 +123,43 @@ $opt{DBFILE}=~/sqlite$/ and warn "\t RUN: sqlite3 -header -column $opt{DBFILE}\n
 $opt{DBFILE}=~/gz$/ and warn "\t To process into a DB, RUN: gunzip -c $opt{DBFILE} | sqlite3 "
                       . substr($opt{DBFILE},0,-7) . ".sqlite\n";
 exit 0;
+#----------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------
+sub Get_tablets_from_node_scraping_html_unused{
+  # This should be called by "Get_and_Parse_tablets_from_tservers" (to avoid duplicated code there)
+  my ($n, $error_callback) = @_;
+
+  my $html_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/tablets?raw","BASE_URL_UNIVERSE",1); # RAW
+
+  # Open the html text as a file . Read it using "</tr>\n" as the line ending, to get one <tr>(tablet) at a time 
+  open my $f,"<",\$html_raw or die $!;
+
+  local $/="</tr>\n";
+  my $row=0;
+  my (%leaders, @tablets);
+  my $header =<$f>;
+  $header or die "ERROR: Cant read header from node/tablet  HTML";
+  #print "HDR: $header";
+  my @fields = map{tr/ -/_/;uc } $header=~m{<th>([^<]+)</th>}sg;
+
+  Tablet::SetFieldNames(@fields);
+  
+  while (<$f>){
+      next unless m/<td>/;
+      my $t = Tablet::->new_from_tr($_);
+
+      $t->{LEADER} and $leaders{$t->{LEADER}} ++;
+      if ($t->{TABLET_UUID} eq "hash_split"){
+          # Something wierd about this line - report the error, and ignore line
+          $error_callback->("unexpected tablet line#$. for node $n->{private_ip}:$_");
+          next;
+      }
+      push @tablets,$t;
+  }
+  close $f;
+
+  return (\@tablets,\%leaders,\$html_raw);
+}
 #----------------------------------------------------------------------------------------------
 sub Get_and_Parse_tablets_from_tservers{
 
@@ -209,7 +258,8 @@ sub Initialize{
                         CONFIG_FILE_PATH=s CONFIG_FILE_NAME=s CUSTOMER=s
                         WAIT_INDEX_BACKFILL|WAITINDEXBACKFILL|WAITBACKFILL|WAIT_BACKFILL!
                         INDEX_NAME|INDEXNAME=s SLEEP_INTERVAL_SEC|INTERVAL=i
-                        OMNIVERSE|COSMOS|KRAMER!]
+                        OMNIVERSE|COSMOS|KRAMER! LOAD_BALANCER_MONITOR|DM|LBM|DATA_MOVEMENT! 
+                        TEST_MASTER=s]
                ) or die "ERROR: Invalid command line option(s). Try --help.";
 
     if ($opt{HELP}){
@@ -304,13 +354,13 @@ sub Initialize{
   }else{
      die "ERROR: Universe info not found \n";
   }
-  $universe->Check_Status(sub{warn "WARNING:$_[0]\n"});
+  $universe->Check_Status(sub{warn "WARNING: Node $_[0] is $_[1].\n"});
 
   if (! $universe->{MASTER_LEADER_NODE}){
      die "ERROR: Cannot find Master/Leader for this universe";
   }
 
-  if ($opt{WAIT_INDEX_BACKFILL}){
+  if ($opt{WAIT_INDEX_BACKFILL}  or  $opt{LOAD_BALANCER_MONITOR}){
      return; # No need to create output etc...
   }
 
@@ -419,7 +469,7 @@ sub Handle_ENTITIES_Data{
          . "');");
   }
   
-  my %node_by_ip;
+  ##my %node_by_ip;
     for my $t (@{ $bj->{tablets} }){
      my $replicas = $t->{replicas} ; # AOH
      my $l        = $t->{leader} || "";
@@ -428,21 +478,21 @@ sub Handle_ENTITIES_Data{
            . join("','", $t->{tablet_id}, $t->{table_id}, $t->{state}, $r->{type}, $r->{server_uuid},$r->{addr},$l )
          . "');");
            my ($node_ip) = $r->{addr} =~/([\d\.]+)/ or next;
-           next if $node_by_ip{$node_ip}; # Already setup 
-           $node_by_ip{$node_ip} = $r->{server_uuid}; # Tserver UUID 
+           ##next if $node_by_ip{$node_ip}; # Already setup 
+           ##$node_by_ip{$node_ip} = $r->{server_uuid}; # Tserver UUID 
     }
   }
   $opt{DEBUG} and printf "--DEBUG: %d Keyspaces, %d tables, %d tablets\n", 
                        scalar(@{ $bj->{keyspaces} }),scalar(@{ $bj->{tables} }), scalar(@{ $bj->{tablets} });
     
     # Fixup Node UUIDs : The ones in the Universe JSON are useless - so we update from tablets with TSERVER uuid 
-    for my $n (@{ $universe->{NODES} }){
-       $n->{Tserver_UUID} = $node_by_ip{$n->{private_ip}}; # update in-mem info
-    }
-    $db->putsql( "UPDATE NODE "
-               . "SET nodeUuid=(select server_uuid FROM ent_tablets "
-              # . "WHERE  substr(addr,1,instr(addr,\":\")-1) = private_ip limit 1);\n");
-               . "WHERE substr(addr,1,length(addr) - 5) = private_ip limit 1);\n");
+    ##for my $n (@{ $universe->{NODES} }){
+    ##   $n->{Tserver_UUID} = $node_by_ip{$n->{private_ip}}; # update in-mem info
+    ##}
+    ##$db->putsql( "UPDATE NODE "
+    ##           . "SET nodeUuid=(select server_uuid FROM ent_tablets "
+    ##          # . "WHERE  substr(addr,1,instr(addr,\":\")-1) = private_ip limit 1);\n");
+    ##           . "WHERE substr(addr,1,length(addr) - 5) = private_ip limit 1);\n");
     $db->putsql("END TRANSACTION; -- Entities");
 }
 
@@ -569,6 +619,72 @@ sub Check_Index_Backfill_complete{
   return $active_backfills;
 }
 #------------------------------------------------------------------------------------------------
+
+sub Load_Balancer_Monitor{
+
+  # Find Blacklisted nodes...
+  my @blacklisted_nodes = #  Array of Node objects 
+     grep {$_->{blacklisted}} @{ $universe->{NODES} }; 
+  if ($#blacklisted_nodes < 0){
+      print "There are NO blacklisted nodes. \n";
+  }
+
+  for my $n (@blacklisted_nodes){
+      my %tot;
+
+      print "BLACKLIST: Getting tablets for $n->{nodeName} ($n->{Tserver_UUID}) $n->{private_ip}:\n  ";
+      for ('user_tablets_total' , 'user_tablets_leaders',  'num_sst_files' ,'total_sst_file_size' ,'uncompressed_sst_file_size' ){
+        print " $_=",$n->{details}{$_},"; ";
+      }
+      print "\n";
+      next unless $opt{DEBUG}; # Debug invokes actual tablet counts from tserver
+      $universe->Get_Tablets_for_node($n);
+      ##$n->{TABLETS} =  $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/api/v1/tablets","BASE_URL_UNIVERSE",0);
+      while (my ($uuid,$t) = each %{ $n->{TABLETS} } ){
+         next unless $t->{state} eq "RUNNING";
+         $tot{tablet_count} ++;
+         $tot{$_} += $t->{$_} for qw|num_sst_files |;
+         $tot{$_} += $t->{on_disk_size}{$_} for qw|sst_files_size_bytes uncompressed_sst_files_size_bytes|;
+      }
+      print "    DEBUG:";
+      print "\[TOT] $_ = $tot{$_}\n" for sort keys %tot;
+      print "\n";
+  }
+  # Print tablet counts on ALL nodes (show tablet balance)
+  printf "%15s %5s %15s %5s/%5s  %10s\n","TSERVER","[IDX]","IP","User","Leadr","Status";
+  for my $n ( @{ $universe->{NODES} } ){
+     next unless $n->{isTserver};
+     my $status = "";
+     $status .=  "Blacklist" if $n->{blacklisted} ;
+     $status .= ($status ? ",":"") . "Master/Leader" if $n == $universe->{MASTER_LEADER_NODE}; 
+     printf "%15s [%3d] %15s %5d/%5d  %20s\n",  substr($n->{nodeName},-15), $n->{nodeIdx}, $n->{private_ip}
+            ,$n->{details}{user_tablets_total}, $n->{details}{user_tablets_leaders},
+            $status;
+  }
+  # Show load balancer gflags
+  if ($opt{DEBUG}){
+    for my $flag (sort keys %{ $universe->{LOAD_BALANCER_FLAGS} }){
+      print "DEBUG:LOAD BALANCER: $flag\t= ",$universe->{LOAD_BALANCER_FLAGS}{$flag},"\n";
+    }
+  }
+  # Get master LOG and parse it for Tablet Load balance info
+  my $ml_log_html = "";
+  if ($opt{TEST_MASTER}){
+    open my $f,"<", $opt{TEST_MASTER} or die $!;
+    while (<$f>){
+      chomp;
+      $ml_log_html .= $_ . "<br/>";
+    }
+    close $f;
+  }else{
+    $ml_log_html = $universe->Get_Master_leader_Endpoint_data("/logs?raw","RAW");
+  }
+  # Open the html text as a file . Read it using "</tr>\n" as the line ending, to get one <tr>(tablet) at a time 
+  my $ml_parser = Master::Log::Parser::->new(LOGREF=>\$ml_log_html, UNIVERSE=>$universe);
+  $ml_parser -> Parse_Master_leader_log();
+  $ml_parser -> Print_Stats();
+}
+#------------------------------------------------------------------------------------------------
 sub Capture_All_UNiverses_JSON{ # Handles $opt{OMNIVERSE}
   warn TimeDelta("Getting JSON for " 
              . scalar(@{$opt{UNIVERSE_LIST}}) . " Universes..."), "\n";
@@ -604,19 +720,19 @@ sub Read_this_buffer_HTML_Table_w_callback{
    local $/= "</tr>\n"; # "Line" separator 
    my $row=0;
 
-   my @fields; # = map{tr/ -/_/;uc } $header=~m{<th>([^<]+)</th>}sg;
+   my @fields; # = map{tr/ -<>/_/;uc } $header=~m{<th>(.+?)</th>}sg;
 
    while(<$f>){
       if (m{</?table[^>]+>}){
           @fields=();
           $row = 0;
       }
-      if (0 == scalar(@fields)  and  m{<tr><th>}m){
-         @fields = map{tr/ -/_/;uc } m{<th>([^<]+)</th>}gm;
+      if (0 == scalar(@fields)  and  m{<tr>\s*<th>}m){
+         @fields = map{tr/ -<>/_&&/;uc } m{<th>(.+?)</th>}gm;
          next;
       }
       my $h=0;
-      my %val = map{$fields[$h++] => defined $_?$_:''} $_=~m{<t[hd]>(.*?)</t[hd]>}gm; # Can have empty <td>'s
+      my %val = map{$fields[$h++] => defined $_?$_:''} $_=~m{<t[hd].*?>(.*?)</t[hd]>}gm; # Can have empty <td>'s
       $callback->(\%val,\@fields,$_,++$row);
    }
    close $f;
@@ -670,7 +786,156 @@ sub TimeDelta{
 ###############################################################################
 ############### C L A S S E S                             #####################
 ###############################################################################
+BEGIN{
+package Master::Log::Parser;
+use strict;
+use warnings;
+use Time::Piece;
+use Time::Local qw( timelocal_posix timegm_posix );
 
+sub new{
+  my ($class,%attr) = @_;
+  # $logref is a reference to a string containing all log records to be parsed
+  return my $self = bless { LINES_TO_KEEP=>15 , STATS_ROUNDING_MINUTES => 5,
+                            %attr, # attr MUST include "LOGREF","UNIVERSE"
+                            CURRENT_YEAR => (localtime(time))[5] , # =(Year - 1900)
+                          } , $class;
+}
+
+
+# Dispatch table mapping patterns to handler subroutines
+my %dispatch_handlers = (
+    "cluster_balance.cc"           => \&handle_cluster_balance,
+    "catalog_manager.cc"           => \&handle_catalog_manager,
+    "master_heartbeat_service.cc"  => \&handle_catalog_manager,
+);
+
+sub Update_Node_moving_tablets_state{
+  my ($self,$timestamp,$tablet_uuid,$src_tserver_uuid,$dst_tserver_uuid,$move_state) = @_;
+  # Set tablet movement state for the node, print state if debug..
+  $src_tserver_uuid ||= $self->{TABLETS}{$tablet_uuid}{SRC_NODE} || "*UNKNOWN*";
+  ($self->{TABLETS}{$tablet_uuid}{SRC_OBJ} ) = grep {$_->{Tserver_UUID} eq $src_tserver_uuid} @{ $self->{UNIVERSE}{NODES} };
+  ($self->{TABLETS}{$tablet_uuid}{DST_OBJ} ) = grep {$_->{Tserver_UUID} eq $dst_tserver_uuid} @{ $self->{UNIVERSE}{NODES} };
+  
+  return unless $opt{DEBUG}; 
+  print $timestamp->datetime," Move tablet $tablet_uuid $move_state from [",
+    ($self->{TABLETS}{$tablet_uuid}{SRC_OBJ} 
+         ? $self->{TABLETS}{$tablet_uuid}{SRC_OBJ}->{nodeIdx} 
+         : $src_tserver_uuid), "] to [",
+    ($self->{TABLETS}{$tablet_uuid}{DST_OBJ}
+         ? $self->{TABLETS}{$tablet_uuid}{DST_OBJ}->{nodeIdx}
+         : $dst_tserver_uuid), "]",
+    ($self->{TABLETS}{$tablet_uuid}{BYTES} ? " (".$self->{TABLETS}{$tablet_uuid}{BYTES} ." bytes)":"")  
+    ,".\n";
+
+}
+
+sub handle_cluster_balance { # Move START
+  my ($self) = @_;
+
+  return unless my ($tablet_uuid,$source,$dest) 
+                   = $self->{LINEVALUE}{rest} =~ /Moving (?:tablet|replica) (\w+) from (\w+) to (\w+)/;
+  my $timestamp = Time::Piece->new(
+                    timegm_posix(  #$sec, $min, $hour, $mday, $mon, $year );
+      @{$self->{LINEVALUE}}{qw| ss mm hh day|}, $self->{LINEVALUE}{month} - 1, $self->{CURRENT_YEAR}));
+  #print $timestamp->datetime," Move tablet $tablet_uuid STARTED from $source to $dest.\n";
+  $self->Update_Node_moving_tablets_state($timestamp,$tablet_uuid,$source,$dest,"START");
+  $self->{TABLETS}{$tablet_uuid} ||= {};
+  $self->{TABLETS}{$tablet_uuid}{SRC_NODE} = $source; 
+  $self->{TABLETS}{$tablet_uuid}{TGT_NODE} = $dest;
+  $self->{TABLETS}{$tablet_uuid}{MOVE_TS}  = $timestamp;
+  my $node = $self->{TABLETS}{$tablet_uuid}{SRC_OBJ};
+  $node->{TABLETS} or $self->{UNIVERSE}->Get_Tablets_for_node($node);
+  $self->{TABLETS}{$tablet_uuid}{BYTES}    = $node->{TABLETS}{$tablet_uuid}{on_disk_size}{total_size_bytes};
+  $self->{TABLETS}{$tablet_uuid}{TABLENAME}= $node->{TABLETS}{$tablet_uuid}{table_name};
+}
+
+sub handle_catalog_manager { # Move COMPLETE
+  my ($self) = @_;
+
+  return unless my ($tserver_uuid, $tablet_uuid) 
+                   = $self->{LINEVALUE}{rest} =~ /Tablet server (\w+) sent incremental report for (\w+)/;
+  return unless my $tab = $self->{TABLETS}{$tablet_uuid};
+  return unless $tab->{TGT_NODE} eq $tserver_uuid;
+  my $timestamp = Time::Piece->new(
+                    timegm_posix(  #$sec, $min, $hour, $mday, $mon, $year );
+      @{$self->{LINEVALUE}}{qw| ss mm hh day|}, $self->{LINEVALUE}{month} - 1, $self->{CURRENT_YEAR}));
+  #print $timestamp->datetime," Move tablet $tablet_uuid COMPLETED to $tserver_uuid.\n";
+  $self->Update_Node_moving_tablets_state($timestamp,$tablet_uuid,undef,$tserver_uuid,"COMPLETE");
+  # Update stats for completed tablet
+  my $rounded_starttime = $self->{TABLETS}{$tablet_uuid}{MOVE_TS}->epoch();
+  $rounded_starttime    = int($rounded_starttime  / ($self->{STATS_ROUNDING_MINUTES} * 60)) * ($self->{STATS_ROUNDING_MINUTES} * 60);
+  my $rounded_endttime  = int($timestamp->epoch() / ($self->{STATS_ROUNDING_MINUTES} * 60)) * ($self->{STATS_ROUNDING_MINUTES} * 60);
+  # Distribute collected bytes/tablets across all timeslots
+  my $slots =  int( ($rounded_endttime - $rounded_starttime + $self->{STATS_ROUNDING_MINUTES} * 60  ) / ($self->{STATS_ROUNDING_MINUTES} * 60) );
+  for (my $t=$rounded_starttime; $t <= $rounded_endttime; $t += $self->{STATS_ROUNDING_MINUTES} * 60){
+    $self->{STATS}{$t}{TABLET_COUNT}++;
+    $self->{STATS}{$t}{BYTES}   += $self->{TABLETS}{$tablet_uuid}{BYTES} / $slots;
+    $self->{STATS}{$t}{SECONDS} += ($timestamp->epoch() - $self->{TABLETS}{$tablet_uuid}{MOVE_TS}->epoch())  / $slots;
+    $self->{STATS}{$t}{TABLENAMES_HASH}{ $self->{TABLETS}{$tablet_uuid}{TABLENAME} }++;
+  }
+  delete  $self->{TABLETS}{$tablet_uuid}; # So we don't get repeated messages for this tablet.
+}
+
+sub Parse_Master_leader_log{
+  my ($self) = @_;
+
+  open my $filehandle,"<",$self->{LOGREF}  or die $!;
+
+  local $/="<br/>";
+  $self->{LINECOUNT} = 0;
+  
+  $self->{HEADER} =<$filehandle>;
+  $self->{HEADER} or die "ERROR: Cant read header from Master/Leader Log  HTML";
+  $opt{DEBUG} and print "DEBUG: Master-leader Log HDR: $self->{HEADER}\n";
+  $self->{BUF} = []; # Holds last n lines of the log
+  my $log_regex = qr/^\w(\d{2})(\d{2}) (\d{2}):(\d{2}):(\d{2})[\.\d]+\s+(\d+) ([\w\.]+):\d+\]?\s(.+)/;
+  while ($self->{LINE} = <$filehandle>){
+      $self->{LINECOUNT}++;
+      $self->{BUF}[$self->{LINECOUNT} % $self->{LINES_TO_KEEP}] = "[$self->{LINECOUNT}]$self->{LINE}"; # Store last 10 lines
+      @{$self->{LINEVALUE}}{qw| month day hh mm ss pid codefile rest|} = $self->{LINE}=~ $log_regex or next;
+      my $handler = $dispatch_handlers{ $self->{LINEVALUE}{codefile} } or next;
+      $handler->($self);
+      #print ($processed_data);
+  }
+  close $filehandle;
+  
+  return unless $opt{DEBUG};
+  print "DEBUG:Master leader log had $self->{LINECOUNT} lines:\n";
+  print "DEBUG:$_\n" for sort @{ $self->{BUF} };
+}
+
+sub format_kilo {
+        my $bytes = shift;
+
+        my @variations = map { sprintf '%.3g%s', $bytes/1024 ** $_->[1], $_->[0] }
+            [ " bytes" => 0 ],
+            [ KB => 1 ],
+            [ MB => 2 ],
+            [ GB => 3 ],
+            [ TB => 4 ];
+
+        return ( sort { length $a <=> length $b } @variations ) [0];
+}
+
+sub Print_Stats{
+  my ($self) = @_;
+  for my $ts (sort keys %{ $self->{STATS} }){
+    my $print_time= Time::Piece::->new($ts) -> datetime();
+    $self->{STATS}{$ts}{TABLENAMES} = join(",",sort keys %{$self->{STATS}{$ts}{TABLENAMES_HASH}});
+    delete $self->{STATS}{$ts}{TABLENAMES_HASH};
+    $self->{STATS}{$ts}{BYTESPERSEC} = $self->{STATS}{$ts}{BYTES} / ($self->{STATS}{$ts}{SECONDS} || 0.01);
+    for (qw|BYTES BYTESPERSEC|){
+       $self->{STATS}{$ts}{$_} = format_kilo($self->{STATS}{$ts}{$_});
+    }
+    for my $item (sort keys %{ $self->{STATS}{$ts} }){
+      print "STATS [$print_time]: $item\t = ", $self->{STATS}{$ts}{$item},"\n";
+    }
+    print "\n";
+  }
+}
+
+}
 ######################################################################################
 BEGIN{
 package DatabaseClass;
@@ -774,11 +1039,11 @@ sub CreateTable{
 }
 sub Insert_nodes{
   my ($self,$nodes) = @_;
-  $self->CreateTable("NODE", sort keys %{$nodes->[0]} );
-  $self->putsql("-- NOTE: nodeUUID value is later updated to be TSERVER_UUID");
+  $self->CreateTable("NODE",grep {$_ ne "details"} sort keys %{$nodes->[0]} );
+  #$self->putsql("-- NOTE: nodeUUID value is later updated to be TSERVER_UUID");
   for my $n(@$nodes){
     $self->putsql("INSERT INTO NODE VALUES('" .
-                 join("','", map{$n->{$_}} sort keys %$n ). "');");
+                 join("','", map{$n->{$_}} grep {$_ ne "details"} sort keys %$n ). "');");
   }
 }
 
@@ -903,63 +1168,6 @@ sub Create_Views{
     GROUP BY NAMESPACE) D 
   WHERE t.NAMESPACE=d.NAMESPACE 
   GROUP BY T.NAMESPACE;
--- tablet_view with isLeader
-CREATE VIEW tablet_view AS
-SELECT
-    t.node_uuid,
-    t.TABLET_UUID,
-    t.NAMESPACE,
-    t.TABLE_NAME,
-    t.TABLE_UUID,
-    t.STATE,
-    t.HIDDEN,
-    t.LEADER,
-    t.FOLLOWERS,
-    t.NUM_SST_FILES,
-    t.PARTITION,
-    t.LAST_STATUS,
-    t.SST_FILES,
-    t.SST_FILES_UNCOMPRESSED,
-    t.TOTAL,
-    t.WAL_FILES,
-    CASE 
-        WHEN t.LEADER = n.private_ip THEN 1
-        ELSE 0
-    END AS is_leader
-FROM
-    tablet t,
-    node n
-WHERE
-    t.node_uuid = n.nodeUuid AND
-    t.state = 'RUNNING';
--- Tablet count per size range per table
-CREATE VIEW tablet_count_per_size_range AS
-SELECT
-    TABLE_NAME,
-    CASE WHEN SUM(CASE WHEN TOTAL/1024/1024 < 2048 THEN 1 ELSE 0 END) = 0 THEN NULL ELSE SUM(CASE WHEN TOTAL/1024/1024 <2048 THEN 1 ELSE 0 END) END AS LT2GB,
-    CASE WHEN SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 2048 AND 3072 THEN 1 ELSE 0 END) = 0 THEN NULL ELSE SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 2048 AND 3072 THEN 1 ELSE 0 END) END AS s2GB_3GB,
-    CASE WHEN SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 3072 AND 4096 THEN 1 ELSE 0 END) = 0 THEN NULL ELSE SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 3072 AND 4096 THEN 1 ELSE 0 END) END AS s3GB_4GB,
-    CASE WHEN SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 4096 AND 6144 THEN 1 ELSE 0 END) = 0 THEN NULL ELSE SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 4096 AND 6144 THEN 1 ELSE 0 END) END AS s4GB_6GB,
-    CASE WHEN SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 6144 AND 8192 THEN 1 ELSE 0 END) = 0 THEN NULL ELSE SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 6144 AND 8192 THEN 1 ELSE 0 END) END AS s6GB_8GB,
-    CASE WHEN SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 8192 AND 10240 THEN 1 ELSE 0 END) = 0 THEN NULL ELSE SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 8192 AND 10240 THEN 1 ELSE 0 END) END AS s8GB_10GB,
-    CASE WHEN SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 10240 AND 12288 THEN 1 ELSE 0 END) = 0 THEN NULL ELSE SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 10240 AND 12288 THEN 1 ELSE 0 END) END AS s10GB_12GB,
-    CASE WHEN SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 12288 AND 14336 THEN 1 ELSE 0 END) = 0 THEN NULL ELSE SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 12288 AND 14336 THEN 1 ELSE 0 END) END AS s12GB_14GB,
-    CASE WHEN SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 14336 AND 16384 THEN 1 ELSE 0 END) = 0 THEN NULL ELSE SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 14336 AND 16384 THEN 1 ELSE 0 END) END AS s14GB_16GB,
-    CASE WHEN SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 16384 AND 20480 THEN 1 ELSE 0 END) = 0 THEN NULL ELSE SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 16384 AND 20480 THEN 1 ELSE 0 END) END AS s16GB_20GB,
-    CASE WHEN SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 20480 AND 24576 THEN 1 ELSE 0 END) = 0 THEN NULL ELSE SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 20480 AND 24576 THEN 1 ELSE 0 END) END AS s20GB_24GB,
-    CASE WHEN SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 24576 AND 28672 THEN 1 ELSE 0 END) = 0 THEN NULL ELSE SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 24576 AND 28672 THEN 1 ELSE 0 END) END AS s24GB_28GB,
-    CASE WHEN SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 28672 AND 32768 THEN 1 ELSE 0 END) = 0 THEN NULL ELSE SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 28672 AND 32768 THEN 1 ELSE 0 END) END AS s28GB_32GB,
-    CASE WHEN SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 32768 AND 36864 THEN 1 ELSE 0 END) = 0 THEN NULL ELSE SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 32768 AND 36864 THEN 1 ELSE 0 END) END AS s32GB_36GB,
-    CASE WHEN SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 36864 AND 40960 THEN 1 ELSE 0 END) = 0 THEN NULL ELSE SUM(CASE WHEN TOTAL/1024/1024 BETWEEN 36864 AND 40960 THEN 1 ELSE 0 END) END AS s36GB_40GB,
-    CASE WHEN SUM(CASE WHEN TOTAL/1024/1024 > 40960 THEN 1 ELSE 0 END) = 0 THEN NULL ELSE SUM(CASE WHEN TOTAL/1024/1024 > 40960 THEN 1 ELSE 0 END) END AS GT40GB
-FROM
-    tablet,node
-WHERE
-    nodeUuid = node_uuid AND private_ip = leader
-GROUP BY
-    TABLE_NAME
-ORDER BY
-    2 DESC;
 -- "list" mode ("|" delimited) for these single-line , ASCII highlighted output renders properly (Column mode does not)
 .mode list
  SELECT char(27) ||  '[1;40;36;4m-- The following reports are available --' || char(27) || '[0;2m' ; -- Cyan on Black,UL - then FAINT
@@ -1133,7 +1341,8 @@ sub new{
         (my $value=$opt{$_})=~tr/-_//d; # Extract and zap dashes
         my $len = length($value);
         next if $len == 32; # Expecting these to be exactly 32 bytes 
-        warn "WARNING: Expecting 32 valid bytes in Option $_=$opt{$_} but found $len bytes. \n";
+        next if $len >= 64; # "New" style
+        warn "WARNING: Expecting 32/64 valid bytes in Option $_=$opt{$_} but found $len bytes. \n";
         sleep 2;
     }   
     my $self =bless {map {$_ => $opt{$_}||""} qw|HTTPCONNECT UNIV_UUID API_TOKEN YBA_HOST CUST_UUID| }, $class;
@@ -1158,7 +1367,7 @@ sub new{
     if ($self->{HTTP_PREFIX}=~/^https/i){
        my ($ok, $why) = eval { HTTP::Tiny->can_ssl() };
        if ($@ or not $ok){
-             print "--WARNING: HTTP::Tiny does not support SSL.  Switching to curl.\n:";
+             print "--WARNING: HTTP::Tiny does not support SSL.  Switching to curl.\n";
              $opt{HTTPCONNECT} = "curl";
              return $class->new(); # recurse
        }
@@ -1229,6 +1438,9 @@ sub new{
   $opt{DEBUG} and print "--DEBUG:UNIV: $_\t","=>",$self->{$_},"\n" for qw|name creationDate universeUUID version |;
   _Extract_nodes($self);
   _Get_Master_Leader($self);
+  _Get_tserver_and_cluster_from_Master_Leader($self);
+  _Get_Load_Balancer_Gflags_from_Master_Leader($self);
+
   for my $region (@{ $self->{universeDetails} {clusters} [0]{placementInfo}{cloudList}[0]{regionList} }){
       my $preferred = 0;
       my $az_node_count = 0;
@@ -1254,7 +1466,7 @@ sub Check_Status{
   for my $node_name(keys %{ $self->{UNIV_STATUS} }){
       next if $node_name eq "universe_uuid"; # We already know this
       next if (my $node_status = $self->{UNIV_STATUS}{$node_name}{node_status}) eq "Live";
-      $error_callback->("Node $node_name node_status=$node_status");
+      $error_callback->( $node_name ,$node_status);
       $bad_nodes++;
   }
   return $bad_nodes;
@@ -1284,6 +1496,8 @@ sub _Extract_nodes{
                      tserverRpcPort masterHttpPort masterRpcPort nodeExporterPort|),
                                 map({$_=>$n->{cloudInfo}{$_}} qw|private_ip public_ip az region |) };
        $thisnode->{$_} =~tr/-//d for grep {/uuid/i} keys %$thisnode;
+       $thisnode->{Tserver_UUID} = undef;
+       $thisnode->{blacklisted}  = 0;
        $count++;
     }
     return $self->{NODES};  
@@ -1310,6 +1524,47 @@ sub Get_Master_leader_Endpoint_data{
   return $self->{YBA_API}->Get("/proxy/$self->{MASTER_LEADER_NODE}->{private_ip}:$master_http_port$endpoint","BASE_URL_UNIVERSE",$RAW); # Get RAW data
 }
 
+sub _Get_tserver_and_cluster_from_Master_Leader{
+  my ($self) = @_;
+  my $tserver_json = Get_Master_leader_Endpoint_data($self,"/api/v1/tablet-servers");
+  
+  $self->{CLUSTER_UUID} =  (keys(%$tserver_json))[0] ; # First key should be "Primary Cluster UUID"
+
+  while (my ($ip_port, $details) = each %{ $tserver_json->{$self->{CLUSTER_UUID}} }) {
+    # Handle this tserver info
+    $opt{DEBUG} and print "DEBUG: Processing tserver $ip_port...\n";
+    my ($node) = grep { $_->{private_ip}.":".$_->{tserverHttpPort} eq $ip_port} @{ $self->{NODES} };
+    $node or die "ERROR: Could not find node $ip_port in the universe $self->{name}.";
+    $node->{Tserver_UUID} = $node->{nodeUuid} =  $details->{permanent_uuid};
+    $node->{details}      = $details; # "status": "ALIVE", "uptime_seconds": 2452985, "ram_used": "223.20 MB", 
+    #     "ram_used_bytes": 223199232, "num_sst_files": 4, "total_sst_file_size": "2.79 MB",  "total_sst_file_size_bytes": ,  "uncompressed_sst_file_size": "6.84 MB",    "uncompressed_sst_file_size_bytes": 6837499,
+  }
+  
+  # Get cluster info (to check blacklist)
+  $self->{CLUSTER_INFO} = Get_Master_leader_Endpoint_data($self,"/api/v1/cluster-config");
+
+  my $blacklist = $self->{CLUSTER_INFO}{server_blacklist};
+  for my $blacklisted_hostinfo ( @{ $blacklist->{hosts} }){
+      my ($node) = grep { $_->{private_ip} eq $blacklisted_hostinfo->{host} } @{ $self->{NODES} };
+      $node or die "ERROR: Could not find blacklisted node $blacklisted_hostinfo->{host} in the universe $self->{name}.";
+      $node->{blacklisted} = 1;
+  }
+}
+
+sub _Get_Load_Balancer_Gflags_from_Master_Leader{
+  my ($self) = @_;
+  my $gflag_json = Get_Master_leader_Endpoint_data($self,"/api/v1/varz");
+  
+  $self->{LOAD_BALANCER_FLAGS} = { map { $_->{name} => $_->{value} }
+                                     grep { $_->{name} =~ m/load_bal/ and $_->{name} !~/^TEST/} 
+                                            @{$gflag_json->{flags}}  };
+
+}
+
+sub Get_Tablets_for_node{
+  my ($self,$node) = @_;
+  $node->{TABLETS} =  $self->{YBA_API}->Get("/proxy/$node->{private_ip}:$node->{tserverHttpPort}/api/v1/tablets","BASE_URL_UNIVERSE",0);
+}
 
 #------------------------------------------------------------------------------------------------
 sub Extract_gflags_into_DB{
