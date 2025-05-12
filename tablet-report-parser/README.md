@@ -1,6 +1,6 @@
 # Tablet Report Parser
 
-* Reads a tablet report that was created by **yugatool**
+* Reads a tablet report that was created by **yugatool** or **support-bundle**
 * Can process **dump-entities** output
 * Can process **tablet_info** created by yugatool
 * outputs a *sqlite* database (or SQL stream) that contains parsed data + analysis info
