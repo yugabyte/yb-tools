@@ -71,6 +71,12 @@ parser.add_argument(
     "--rebuild", action="store_true",
     help=colorama.Fore.YELLOW + "Rebuild the log files metadata" + colorama.Style.RESET_ALL
 )
+
+parser.add_argument(
+    "--full-command", action="store_true",
+    help=colorama.Fore.YELLOW + "Print the full command to run" + colorama.Style.RESET_ALL
+)
+
 parser.add_argument(
     "--debug", action="store_true",
     help=colorama.Fore.YELLOW + "Print debug messages" + colorama.Style.RESET_ALL
@@ -139,7 +145,7 @@ def getLogFilesFromCurrentDir():
     logDirectory = os.getcwd()
     for root, dirs, files in os.walk(logDirectory):
         for file in files:
-            if file.__contains__("log") or file.__contains__("postgres") or file.__contains__("controller") and file[0] != ".":
+            if file.__contains__("INFO") or file.__contains__("postgres") and file[0] != ".":
                 logFiles.append(os.path.join(root, file))
     return logFiles
 
@@ -219,7 +225,7 @@ def getFileMetadata(logFile):
         
     # Get the node name
     # /Users/pgyogesh/logs/log_analyzer_tests/yb-support-bundle-ybu-p01-bpay-20240412151237.872-logs/yb-prod-ybu-p01-bpay-n8/master/logs/yb-master.danpvvy00002.yugabyte.log.INFO.20230521-030902.3601
-    nodeNameRegex = r"/(yb-[^/]*n\d+)/"
+    nodeNameRegex = r"/(yb-[^/]*n\d+|yb-(master|tserver)-\d+_[^/]+)/"
     nodeName = re.search(nodeNameRegex, logFile)
     if nodeName:
         nodeName = nodeName.group().replace("/","")
@@ -228,6 +234,9 @@ def getFileMetadata(logFile):
     
     logger.debug(f"Metadata for file: {logFile} - {logStartsAt} - {logEndsAt} - {logType} - {nodeName}")
     return {"logStartsAt": logStartsAt, "logEndsAt": logEndsAt, "logType": logType, "nodeName": nodeName}
+
+def getTabletListPerNode(logFileMetadata):
+    
 
 def filterLogFilesByType(logFileList, logFileMetadata, types):
     filteredLogFiles = []
@@ -407,7 +416,11 @@ if __name__ == "__main__":
             mainCommand += f" -c ':goto {context_time.strftime('%Y-%m-%d %H:%M:%S')}'"
         Command.append(mainCommand)
         Command.extend(logFilesToProcess)
-        print(colorama.Fore.GREEN + ' '.join(Command)[:1000] + "...[truncated]")
+        # Add the command to run
+        if args.full_command:
+            print(colorama.Fore.GREEN + ' '.join(Command))
+        else:
+            print(colorama.Fore.GREEN + ' '.join(Command)[:1000] + "...[truncated]")
         try:
             print('')
             input("Press Enter to run the command or Ctrl+C to exit")
