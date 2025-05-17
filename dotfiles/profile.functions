@@ -84,6 +84,15 @@ function get_master_leader_change_time() {
 
 # Get the tablet leader change time
 function get_tablet_leader_change_time() {
+# ------------------------------------------------------------------------------
+# get_tablet_leader_change_time <tablet-id>
+#
+# This function retrieves the leader change time for a specific tablet ID from
+# the tserver logs. It searches for log entries indicating a change in the
+# active role of the tablet from FOLLOWER to LEADER.
+# The output is saved in a file named tablet_leader_change_time in the current
+# directory. The output is sorted by time for better readability.
+# ------------------------------------------------------------------------------
     # Add help message
     if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]; then
         echo "Run this function in the directory which contains the node directories"
@@ -108,6 +117,23 @@ function get_tablet_leader_change_time() {
 
 # Get count of pattern per minute
 get_count_per_minute() {
+# ------------------------------------------------------------------------------
+# get_count_per_minute
+#
+# This function processes the standard output of a command (e.g., grep) and counts
+# the occurrences of a specific pattern per minute. It uses awk to parse the input
+# and extract the timestamp and count. The output is sorted and displayed in a
+# user-friendly format.
+#
+# Usage:
+#   grep -r 'pattern' . | get_count_per_minute
+#
+# Features:
+# - Parses the input to extract timestamps and counts.
+# - Outputs the count of occurrences per minute.
+# - Sorts the output for better readability.
+# - Provides a help message for usage instructions.
+# ------------------------------------------------------------------------------
     # Add help message
     if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]; then
         echo "USAGE: Use this function to get the count of a pattern per minute against the standard output"
