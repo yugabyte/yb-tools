@@ -277,6 +277,10 @@ get_tablet_consensus_state_change() {
     return 1
   fi
 
+  local datetime
+  datetime=$(date +"%Y-%m-%d_%H%M%S")
+  local outfile="tablet_consensus_state_change_${tablet_uuid}_${datetime}.log"
+
   grep "Tablet: $tablet_uuid reported consensus state change" "${files[@]}" | \
   python3 -c "
 import sys
@@ -360,5 +364,6 @@ if observed_terms:
         print(f\"\\n⚠️  Missing term(s): {', '.join(str(t) for t in missing_terms)}\\n\")
         print(\"Note: Missing terms could be due to master logs not being available when leader election for these terms happened.\")
         print(\"Ensure you are checking the logs of all N masters, where N is the replication factor.\")
-"
+" | tee "$outfile"
+  echo "Result saved to $outfile"
 }
