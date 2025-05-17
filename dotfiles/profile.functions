@@ -130,6 +130,22 @@ get_count_per_minute() {
 
 # Get the node information
 get_node_info() {
+# ------------------------------------------------------------------------------
+# get_node_info
+#
+# This function retrieves node information from the log files of a YugabyteDB cluster.
+# It extracts the following details:
+# - Nodename
+# - Type (master or tserver)
+# - Hostname
+# - RPC IP
+# - Webserver IP
+# - UUID
+#
+# The output is saved in a file named node_info.txt in the current directory.
+# The function assumes that the log files are located in directories named with a prefix 'yb'.
+# The output is formatted in a table for better readability.
+# ------------------------------------------------------------------------------
     if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]; then
         echo "Run this function in the directory which contains the node directories"
     fi
