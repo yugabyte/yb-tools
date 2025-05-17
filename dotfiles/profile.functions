@@ -1,4 +1,4 @@
-cat .bash_functions
+# cat .bash_functions
 # change ticket
 ct() {
     if [[ $# -eq 0 ]] ; then
@@ -196,4 +196,127 @@ function run_lnav() {
         $rebuild \
         $debug \
         $help
+}
+
+# Get tablet consensus state change
+get_tablet_consensus_state_change() {
+  # ------------------------------------------------------------------------------
+  # get_tablet_consensus_state_change <tablet_uuid> <logfile1> [logfile2 ...]
+  #
+  # Parses YugabyteDB master logs for consensus state changes for a specific tablet.
+  #
+  # Features:
+  # - Filters log lines for the given tablet UUID.
+  # - Supports multiple log files.
+  # - Extracts:
+  #     - Timestamp (MM-DD HH:MM:SS from log prefix)
+  #     - Consensus term
+  #     - Leader UUID (used to sort peers)
+  #     - Config JSON (peer uuid + host, leader peer listed first)
+  # - Displays results in a table using Python's `tabulate` module.
+  # - Outputs valid JSON for config_json column.
+  #
+  # Intelligent Processing:
+  # - Deduplicates entries per term, keeping only the latest by full timestamp as multiple peers can report the state change.
+  # - Detects and reports missing terms in the consensus history (e.g., skipped term 7).
+  # - Handles malformed lines gracefully without breaking.
+  #
+  # Notes:
+  # - Requires Python 3 and `tabulate` (`pip install tabulate`)
+  # - Output is sorted in descending timestamp order for easy inspection.
+  # - Helpful for debugging leader elections, instability.
+  # ------------------------------------------------------------------------------
+  local tablet_uuid="$1"
+  shift
+  local files=("$@")
+
+  if [[ -z "$tablet_uuid" || ${#files[@]} -eq 0 ]]; then
+    echo "Usage: get_tablet_consensus_state_change <tablet_uuid> <logfile1> [logfile2 ...]"
+    return 1
+  fi
+
+  grep "Tablet: $tablet_uuid reported consensus state change" "${files[@]}" | \
+  python3 -c "
+import sys
+import re
+import json
+from datetime import datetime
+from tabulate import tabulate
+
+lines = sys.stdin.readlines()
+entries = []
+
+for line in lines:
+    try:
+        # Extract full timestamp (MMDD + HH:MM:SS.microseconds)
+        ts_match = re.search(r'I(\d{4}) (\d{2}:\d{2}:\d{2}\.\d+)', line)
+        if not ts_match:
+            continue
+        mmdd = ts_match.group(1)
+        time_part = ts_match.group(2)
+        month, day = int(mmdd[:2]), int(mmdd[2:])
+        now = datetime.now()
+        year = now.year  # assume logs are from the current year
+        full_ts_str = f'{year}-{month:02d}-{day:02d} {time_part}'
+        full_ts = datetime.strptime(full_ts_str, '%Y-%m-%d %H:%M:%S.%f')
+
+        # Extract consensus term
+        current_term = re.search(r'current_term: (\d+)', line).group(1)
+
+        # Extract leader UUID
+        leader_uuid = re.search(r'leader_uuid: \"([^\"]+)\"', line).group(1)
+
+        # Extract peer UUIDs and hosts
+        peer_pattern = re.compile(
+            r'permanent_uuid: \"([^\"]+)\".*?host: \"([^\"]+)\"',
+            re.DOTALL)
+        peers = []
+        for uuid, host in peer_pattern.findall(line):
+            peers.append({\"uuid\": uuid, \"host\": host})
+
+        # Move leader to the beginning of the peer list
+        peers.sort(key=lambda p: 0 if p['uuid'] == leader_uuid else 1)
+
+        entries.append({
+            \"timestamp\": full_ts,                                # for deduplication and sorting
+            \"display_ts\": full_ts.strftime('%m-%d %H:%M:%S'),    # user-friendly timestamp
+            \"term\": current_term,
+            \"config_json\": peers
+        })
+
+    except Exception:
+        continue  # skip lines that can't be parsed
+
+# Dedupe: keep only the latest report per term
+# Reason: multiple followers can report the same leader election around the same time,
+#         resulting in duplicate entries for the same term. We retain only the most
+#         recent (latest timestamp) report for each term to reflect the final consensus
+#         state seen by the master for that term.
+latest_by_term = {}
+for e in entries:
+    term = e['term']
+    if term not in latest_by_term or e['timestamp'] > latest_by_term[term]['timestamp']:
+        latest_by_term[term] = e
+
+# Sort deduplicated entries in descending timestamp order
+deduped = list(latest_by_term.values())
+deduped.sort(key=lambda x: x['timestamp'], reverse=True)
+
+# Print the main table
+print(tabulate(
+    [(e['display_ts'], e['term'], json.dumps(e['config_json'], ensure_ascii=False)) for e in deduped],
+    headers=[\"Time\", \"Term\", \"config_json (first is leader)\"],
+    tablefmt=\"github\"
+))
+
+# Detect and print missing terms
+observed_terms = sorted(int(e['term']) for e in deduped)
+if observed_terms:
+    expected_terms = set(range(min(observed_terms), max(observed_terms) + 1))
+    missing_terms = sorted(expected_terms - set(observed_terms))
+    if missing_terms:
+        print(f\"\\n⚠️  Missing term(s): {', '.join(str(t) for t in missing_terms)}\\n\")
+        print(\"Note: Missing terms could be due to master logs not being available when leader election for these terms happened.\")
+        print(\"Ensure you are checking the logs of all N masters, where N is the replication factor.\")
+"
 }
