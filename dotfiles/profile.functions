@@ -243,13 +243,13 @@ function run_lnav() {
 # Get tablet consensus state change
 get_tablet_consensus_state_change() {
   # ------------------------------------------------------------------------------
-  # get_tablet_consensus_state_change <tablet_uuid> <logfile1> [logfile2 ...]
+  # get_tablet_consensus_state_change <tablet_uuid>
   #
   # Parses YugabyteDB master logs for consensus state changes for a specific tablet.
+  # Finds all files in the current directory (recursively) with 'yb-master' in their name.
   #
   # Features:
   # - Filters log lines for the given tablet UUID.
-  # - Supports multiple log files.
   # - Extracts:
   #     - Timestamp (MM-DD HH:MM:SS from log prefix)
   #     - Consensus term
@@ -269,11 +269,17 @@ get_tablet_consensus_state_change() {
   # - Helpful for debugging leader elections, instability.
   # ------------------------------------------------------------------------------
   local tablet_uuid="$1"
-  shift
-  local files=("$@")
 
-  if [[ -z "$tablet_uuid" || ${#files[@]} -eq 0 ]]; then
-    echo "Usage: get_tablet_consensus_state_change <tablet_uuid> <logfile1> [logfile2 ...]"
+  if [[ -z "$tablet_uuid" ]]; then
+    echo "Usage: get_tablet_consensus_state_change <tablet_uuid>"
+    return 1
+  fi
+
+  # Find all files with 'yb-master' in their name in the current directory (recursively)
+  local files=($(find . -type f -name "*yb-master*INFO*" 2>/dev/null))
+
+  if [[ ${#files[@]} -eq 0 ]]; then
+    echo "No files with 'yb-master' in their name found in the current directory."
     return 1
   fi
 
@@ -281,7 +287,7 @@ get_tablet_consensus_state_change() {
   datetime=$(date +"%Y-%m-%d_%H%M%S")
   local outfile="tablet_consensus_state_change_${tablet_uuid}_${datetime}.log"
 
-  grep "Tablet: $tablet_uuid reported consensus state change" "${files[@]}" | \
+  zgrep "Tablet: $tablet_uuid reported consensus state change" "${files[@]}" | \
   python3 -c "
 import sys
 import re
@@ -334,10 +340,6 @@ for line in lines:
         continue  # skip lines that can't be parsed
 
 # Dedupe: keep only the latest report per term
-# Reason: multiple followers can report the same leader election around the same time,
-#         resulting in duplicate entries for the same term. We retain only the most
-#         recent (latest timestamp) report for each term to reflect the final consensus
-#         state seen by the master for that term.
 latest_by_term = {}
 for e in entries:
     term = e['term']
