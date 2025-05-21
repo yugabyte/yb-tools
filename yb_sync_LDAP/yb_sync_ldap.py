@@ -35,7 +35,7 @@ from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 import subprocess
 
-VERSION = "0.46"
+VERSION = "0.47"
 
 
 
@@ -138,7 +138,7 @@ class EXTERNAL_PLUGIN:
         logging.debug("Getting External plugin User List..")
         try:
             user_json_str, errs = self.process.communicate(input='["LISTUSERS"]',timeout=10)
-            logging.debug("User list:"+str(user_json_str)[0:120] + "...; ERRORS:"+str(errs))
+            logging.debug("Ext User list:"+str(user_json_str)[0:250] + "...; ERRORS:"+str(errs))
             if errs is not None:
                 raise ValueError("External process communication error:"+str(errs))
             user_list = json.loads(user_json_str)
@@ -159,10 +159,18 @@ class EXTERNAL_PLUGIN:
 
     #@classmethod
     def __Get_Change_List(self,ldap_data:dict):
-        logging.debug("Getting External plugin Change List..")
-        self.change_list = {"ADDUSERS":{},"DELETEUSERS":{}}
-        print("LDAP Users:" + str(ldap_data.keys()))
-        print("External Users:" + str(self.external_user_dict.keys()))
+        logging.debug("Calculating External plugin Change List..")
+        self.change_list = {"ADDUSERS":{},"DELETEUSERS":[]}
+        logging.debug("LDAP Users:" + str(ldap_data.keys()))
+        for userField,group_list in ldap_data.items():
+            logging.debug("LDAP Usr "+ self.args.ldap_userfield + "="+userField+" Groups:"+group_list[0])
+            if self.external_user_dict.get(userField) == None:
+                self.change_list["ADDUSERS"].update({userField:group_list})
+                continue
+        for email in self.external_user_dict.keys():
+            if ldap_data.get(email) is None:
+                 self.change_list["DELETEUSERS"].append(email)
+        logging.debug("External Users: ADD:" + str(self.change_list["ADDUSERS"].keys()) +"; DELETE:"+str(self.change_list["DELETEUSERS"]))
 
 
 ##############################################################################################################
