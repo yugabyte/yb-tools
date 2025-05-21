@@ -130,8 +130,13 @@ class EXTERNAL_PLUGIN:
         self.__Get_current_users() # Populates self.external_user_dict 
 
         # Code needed to diff with existing LDAP users
-        self.change_list = self.__Get_Change_List(ldap_data)
-        # Then send command to add/delete users as needed to sync
+        if self.__Get_Change_List(ldap_data) > 0  and not self.args.dryrun:
+            # Then send command to add/delete users as needed to sync
+            user_json_str, errs = self.process.communicate(input=self.change_list,timeout=10)
+            logging.debug("Ext User update:"+str(user_json_str)[0:250] + "...; ERRORS:"+str(errs))
+            if errs is not None:
+                raise ValueError("External process communication error:"+str(errs))
+
 
     #@classmethod
     def __Get_current_users(self):
@@ -160,17 +165,24 @@ class EXTERNAL_PLUGIN:
     #@classmethod
     def __Get_Change_List(self,ldap_data:dict):
         logging.debug("Calculating External plugin Change List..")
+        change_count = 0
         self.change_list = {"ADDUSERS":{},"DELETEUSERS":[]}
         logging.debug("LDAP Users:" + str(ldap_data.keys()))
         for userField,group_list in ldap_data.items():
             logging.debug("LDAP Usr "+ self.args.ldap_userfield + "="+userField+" Groups:"+group_list[0])
             if self.external_user_dict.get(userField) == None:
                 self.change_list["ADDUSERS"].update({userField:group_list})
+                change_count += 1
                 continue
         for email in self.external_user_dict.keys():
+            if self.external_user_dict[email]["role"] == "SuperAdmin":
+                continue # We do not want to, and cannot delete super admins
             if ldap_data.get(email) is None:
                  self.change_list["DELETEUSERS"].append(email)
+                 change_count += 1
+
         logging.debug("External Users: ADD:" + str(self.change_list["ADDUSERS"].keys()) +"; DELETE:"+str(self.change_list["DELETEUSERS"]))
+        return change_count
 
 
 ##############################################################################################################

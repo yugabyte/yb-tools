@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # YBA User list/creation/Deletion
-version = "0.10"
+version = "0.11"
 from ast import Dict, parse
 import requests
 import urllib3
@@ -14,7 +14,9 @@ from dataclasses import dataclass,field
 from typing import List
 from json import JSONDecoder, JSONEncoder
 from pprint import pprint
-from datetime import datetime
+from pprint import pformat
+from datetime import datetime, timezone
+import logging
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -52,8 +54,7 @@ class YBA_API():
         self.customer_uuid = customer_list[0]['uuid']
 
     def Get(self, targeturl="", raw=False):
-        if self.debug:
-            print("DEBUG: API Get:"+targeturl + " (RAW="+str(raw)+")")
+        logging.debug("DEBUG: API Get:"+targeturl + " (RAW="+str(raw)+")")
         self.raw_response = self.session.get(targeturl, headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.auth_token},
                                          verify=False)
         self.raw_response.raise_for_status()
@@ -73,8 +74,7 @@ class YBA_API():
     def Post(self, url:str, data, extra_headers=None, timeout:int=2):
         # avoids no CSRF token error by emptying the cookie jar
         # session.cookies = requests.cookies.RequestsCookieJar()
-        if self.debug:
-            print("DEBUG: API Post:"+url)
+        logging.debug("DEBUG: API Post:"+url)
         headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.auth_token}
         if extra_headers is not None:
             headers.update(extra_headers)
@@ -82,23 +82,20 @@ class YBA_API():
         self.session.cookies = requests.cookies.RequestsCookieJar()
         self.raw_response = self.session.post(url, json=data, headers=headers, timeout=timeout, verify=False)
         if self.raw_response.status_code == 200:
-            if self.debug:
-                print('DEBUG: API Request successful')
+            logging.debug('DEBUG: API Request successful')
         else:
             print(self.raw_response.json())
             self.raw_response.raise_for_status()
         return self.raw_response.text
     
     def Delete(self, url:str, timeout:int=2):
-        if self.debug:
-            print("DEBUG: API Delete:"+url)
+        logging.debug("DEBUG: API Delete:"+url)
         headers={'Content-Type': 'application/json', 'X-AUTH-YW-API-TOKEN': self.auth_token}
         # avoids no CSRF token error by emptying the cookie jar
         self.session.cookies = requests.cookies.RequestsCookieJar()
         self.raw_response = self.session.delete(url, headers=headers, timeout=timeout, verify=False)
         if self.raw_response.status_code == 200:
-            if self.debug:
-                print('DEBUG: API Request successful')
+            logging.debug('DEBUG: API Request successful')
         else:
             print(self.raw_response.json())
             self.raw_response.raise_for_status()
@@ -125,8 +122,7 @@ class RoleManagement:
     def __post_init__(self):
         self.yba_api.roleManagement = self
         self.use_new_authz = self.Fine_grained_RBAC()
-        if self.yba_api.debug:
-            print("DEBUG: RoleManagement: use_new_authz="+str(self.use_new_authz))
+        logging.debug("DEBUG: RoleManagement: use_new_authz="+str(self.use_new_authz))
         self.role_by_name  = {}
         if self.use_new_authz:
             role_list = self.yba_api.Get(y.cust_url + "/rbac/role")
@@ -135,8 +131,7 @@ class RoleManagement:
     def Get_or_create_role_by_name(self,name:str,allow_create:bool=True) -> Role:
         if self.role_by_name.get(name) is None:
             if allow_create:
-                if self.yba_api.debug:
-                    print("DEBUG: RoleManagement: Creating Role object for "+name)
+                logging.debug("DEBUG: RoleManagement: Creating Role object for "+name)
                 self.role_by_name[name] = Role(mgt=self,yba_api=self.yba_api,name=name) # Returns new object 
             else:
                 raise  ValueError('No such role:'+name)
@@ -178,8 +173,7 @@ class User():
 
     def Create_in_YBA(self):
         y = self.role.mgt.yba_api
-        if y.debug:
-            print ("DEBUG: Creating User "+ self.email +" in YBA")
+        logging.debug("DEBUG: Creating User "+ self.email +" in YBA")
         if self.role.mgt.use_new_authz:
             raise ValueError("Create user with new authz is not implemented")
 
@@ -191,20 +185,17 @@ class User():
             "timezone":  "America/New_York" # Fake it out 
         }
         response = y.Post(y.cust_url + "/users", data=payload)
-        if y.debug:
-            pprint(response)
+        logging.debug(response)
         self.uuid = y.raw_response.json()["uuid"]
         self.creationDate = y.raw_response.json()["creationDate"]
 
 
     def Delete_from_YBA(self):
         y = self.role.mgt.yba_api
-        if y.debug:
-            print ("DEBUG: Deleting User "+ self.email +" in YBA")
+        logging.debug ("DEBUG: Deleting User "+ self.email +" in YBA")
         
         response = y.Delete(y.cust_url + "/users/" + self.uuid)
-        if y.debug:
-            pprint(response)
+        logging.debug (pformat(response))
 
 #=====================================================================================================
 @dataclass
@@ -212,8 +203,7 @@ class STDIN_Json_Stream_Processor():
     yba:YBA_API
 
     def Process_str_cmd(self,cmd:str):
-        if self.yba.debug:
-            print("DEBUG:Processing string command:"+cmd)
+        logging.debug ("DEBUG:Processing string command:"+cmd)
         if cmd == "LISTUSERS":
             print ("[")
             count = 0
@@ -227,8 +217,7 @@ class STDIN_Json_Stream_Processor():
         
 
     def Process_dict_part(self,cmd:dict):
-        if self.yba.debug:
-            print("DEBUG:Processing dict command:"+str(cmd))
+        logging.debug ("DEBUG:Processing dict command:"+str(cmd))
         if cmd.get("ADDUSERS") is not None:
             if not isinstance(cmd["ADDUSERS"],list):
                 raise ValueError("ERROR:ADDUSERS: Could not find user list to add")
@@ -276,8 +265,7 @@ class STDIN_Json_Stream_Processor():
             # parsed_json, number of bytes used
             parsed_json, consumed = decoder.raw_decode(stdin)
             # Remove bytes that were consumed in this object ^ 
-            if self.yba.debug:
-                print("DEBUG:json piece:"+ str(parsed_json) + " ["+ str(type(parsed_json)) + " " + str(consumed) + " bytes]")
+            logging.debug ("DEBUG:json piece:"+ str(parsed_json) + " ["+ str(type(parsed_json)) + " " + str(consumed) + " bytes]")
             stdin = stdin[consumed:]
             # Process what we just got ..
             if isinstance(parsed_json, str):
@@ -297,9 +285,8 @@ class STDIN_Json_Stream_Processor():
             # Remove any whitespace before the next JSON object
             stdin = stdin.lstrip()
 
-        if self.yba.debug:
-            print("DEBUG:ACCUMULATED JSON FROM STDIN:=====")
-            print(json_found)
+        logging.debug ("DEBUG:ACCUMULATED JSON FROM STDIN:=====")
+        logging.debug (pformat(json_found))
 
 #=====================================================================================================
 #=====================================================================================================
@@ -332,15 +319,17 @@ def parse_arguments():
     parser.add_argument('-p','--password',help="Password for new user (>=8 ch, Upcase+num+special)")
     parser.add_argument("-s","--stdin",action='store_true',help="Read JSON stream from stdin")
     args = parser.parse_args()
-    if args.debug:
-        print("DEBUG: "+datetime.today().isoformat()+" Debugging Enabled")
     
     return args
 #=====================================================================================================
 #=====================================================================================================
 #  M  A  I  N
 #=====================================================================================================
-args = parse_arguments() 
+args = parse_arguments()
+logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', datefmt='%H:%M:%S',
+                    level= logging.DEBUG if args.debug else  logging.WARNING)
+logging.info(datetime.now(timezone.utc).astimezone().isoformat() + " YBA User admin : v "+version)
+logging.debug("Debugging Enabled")
 
 y = YBA_API(yba_url=args.yba_url, auth_token=args.auth_token, customer_uuid=args.customer_uuid, debug=args.debug)
 
