@@ -1,5 +1,5 @@
 /*
-Copyright © 2021 Yugabyte Support
+Copyright © 2025 Yugabyte Support
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,9 +19,9 @@ package yugatool.healthcheck;
 
 option java_package = "org.yugatool.healthcheck";
 
-import "yb/master/master.proto";
-import "yb/common/common.proto";
-import "yb/util/opid.proto";
+import "yb/master/master_types.proto";
+import "yb/common/common_net.proto";
+import "yb/common/opid.proto";
 
 message CDCProducerStreamReportPB {
   required yb.master.TableIdentifierPB table = 1;

@@ -1,5 +1,5 @@
 /*
-Copyright © 2021 Yugabyte Support
+Copyright © 2025 Yugabyte Support
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ package yugatool.config;
 
 option java_package = "org.yugatool.config";
 
-import "yb/common/common.proto";
+import "yb/common/common_net.proto";
 
 
 message TlsOptionsPB {
