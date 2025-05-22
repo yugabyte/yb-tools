@@ -157,3 +157,51 @@ func (m *PingResponsePB) MarshalJSON() ([]byte, error) {
 func (m *PingResponsePB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
+
+func (m *ReloadCertificatesRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *ReloadCertificatesRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *ReloadCertificatesResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *ReloadCertificatesResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *GetAutoFlagsConfigVersionRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *GetAutoFlagsConfigVersionRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *GetAutoFlagsConfigVersionResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *GetAutoFlagsConfigVersionResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *ValidateFlagValueRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *ValidateFlagValueRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *ValidateFlagValueResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *ValidateFlagValueResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}

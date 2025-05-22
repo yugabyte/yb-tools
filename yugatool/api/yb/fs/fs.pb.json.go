@@ -46,6 +46,14 @@ func (m *InstanceMetadataPB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
 
+func (m *TserverInstanceMetadataPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *TserverInstanceMetadataPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
 func (m *PathSetPB) MarshalJSON() ([]byte, error) {
 	return protojson.MarshalOptions{}.Marshal(m)
 }

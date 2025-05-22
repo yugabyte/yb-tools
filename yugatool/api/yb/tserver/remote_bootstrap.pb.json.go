@@ -62,6 +62,22 @@ func (m *BeginRemoteBootstrapSessionResponsePB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
 
+func (m *BeginRemoteSnapshotTransferSessionRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *BeginRemoteSnapshotTransferSessionRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *BeginRemoteSnapshotTransferSessionResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *BeginRemoteSnapshotTransferSessionResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
 func (m *CheckRemoteBootstrapSessionActiveRequestPB) MarshalJSON() ([]byte, error) {
 	return protojson.MarshalOptions{}.Marshal(m)
 }
@@ -126,18 +142,98 @@ func (m *EndRemoteBootstrapSessionResponsePB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
 
-func (m *RemoveSessionRequestPB) MarshalJSON() ([]byte, error) {
+func (m *RemoveRemoteBootstrapSessionRequestPB) MarshalJSON() ([]byte, error) {
 	return protojson.MarshalOptions{}.Marshal(m)
 }
 
-func (m *RemoveSessionRequestPB) UnmarshalJSON(b []byte) error {
+func (m *RemoveRemoteBootstrapSessionRequestPB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
 
-func (m *RemoveSessionResponsePB) MarshalJSON() ([]byte, error) {
+func (m *RemoveRemoteBootstrapSessionResponsePB) MarshalJSON() ([]byte, error) {
 	return protojson.MarshalOptions{}.Marshal(m)
 }
 
-func (m *RemoveSessionResponsePB) UnmarshalJSON(b []byte) error {
+func (m *RemoveRemoteBootstrapSessionResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *RegisterLogAnchorRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *RegisterLogAnchorRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *RegisterLogAnchorResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *RegisterLogAnchorResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *UpdateLogAnchorRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *UpdateLogAnchorRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *UpdateLogAnchorResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *UpdateLogAnchorResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *UnregisterLogAnchorRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *UnregisterLogAnchorRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *UnregisterLogAnchorResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *UnregisterLogAnchorResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *KeepLogAnchorAliveRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *KeepLogAnchorAliveRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *KeepLogAnchorAliveResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *KeepLogAnchorAliveResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *ChangePeerRoleRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *ChangePeerRoleRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *ChangePeerRoleResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *ChangePeerRoleResponsePB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }

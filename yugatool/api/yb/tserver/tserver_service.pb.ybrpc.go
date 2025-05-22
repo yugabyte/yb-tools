@@ -44,6 +44,7 @@ import (
 type TabletServerService interface {
 	Write(request *WriteRequestPB) (*WriteResponsePB, error)
 	Read(request *ReadRequestPB) (*ReadResponsePB, error)
+	VerifyTableRowRange(request *VerifyTableRowRangeRequestPB) (*VerifyTableRowRangeResponsePB, error)
 	NoOp(request *NoOpRequestPB) (*NoOpResponsePB, error)
 	ListTablets(request *ListTabletsRequestPB) (*ListTabletsResponsePB, error)
 	GetLogLocation(request *GetLogLocationRequestPB) (*GetLogLocationResponsePB, error)
@@ -52,14 +53,36 @@ type TabletServerService interface {
 	ImportData(request *ImportDataRequestPB) (*ImportDataResponsePB, error)
 	UpdateTransaction(request *UpdateTransactionRequestPB) (*UpdateTransactionResponsePB, error)
 	GetTransactionStatus(request *GetTransactionStatusRequestPB) (*GetTransactionStatusResponsePB, error)
+	GetOldTransactions(request *GetOldTransactionsRequestPB) (*GetOldTransactionsResponsePB, error)
+	GetOldSingleShardWaiters(request *GetOldSingleShardWaitersRequestPB) (*GetOldSingleShardWaitersResponsePB, error)
 	GetTransactionStatusAtParticipant(request *GetTransactionStatusAtParticipantRequestPB) (*GetTransactionStatusAtParticipantResponsePB, error)
 	AbortTransaction(request *AbortTransactionRequestPB) (*AbortTransactionResponsePB, error)
+	UpdateTransactionStatusLocation(request *UpdateTransactionStatusLocationRequestPB) (*UpdateTransactionStatusLocationResponsePB, error)
+	UpdateTransactionWaitingForStatus(request *UpdateTransactionWaitingForStatusRequestPB) (*UpdateTransactionWaitingForStatusResponsePB, error)
+	ProbeTransactionDeadlock(request *ProbeTransactionDeadlockRequestPB) (*ProbeTransactionDeadlockResponsePB, error)
 	Truncate(request *TruncateRequestPB) (*TruncateResponsePB, error)
 	GetTabletStatus(request *GetTabletStatusRequestPB) (*GetTabletStatusResponsePB, error)
 	GetMasterAddresses(request *GetMasterAddressesRequestPB) (*GetMasterAddressesResponsePB, error)
 	Publish(request *PublishRequestPB) (*PublishResponsePB, error)
 	IsTabletServerReady(request *IsTabletServerReadyRequestPB) (*IsTabletServerReadyResponsePB, error)
-	TakeTransaction(request *TakeTransactionRequestPB) (*TakeTransactionResponsePB, error)
+	GetSplitKey(request *GetSplitKeyRequestPB) (*GetSplitKeyResponsePB, error)
+	GetSharedData(request *GetSharedDataRequestPB) (*GetSharedDataResponsePB, error)
+	GetTserverCatalogVersionInfo(request *GetTserverCatalogVersionInfoRequestPB) (*GetTserverCatalogVersionInfoResponsePB, error)
+	ListMasterServers(request *ListMasterServersRequestPB) (*ListMasterServersResponsePB, error)
+	GetLockStatus(request *GetLockStatusRequestPB) (*GetLockStatusResponsePB, error)
+	CancelTransaction(request *CancelTransactionRequestPB) (*CancelTransactionResponsePB, error)
+	GetCompatibleSchemaVersion(request *GetCompatibleSchemaVersionRequestPB) (*GetCompatibleSchemaVersionResponsePB, error)
+	StartRemoteSnapshotTransfer(request *StartRemoteSnapshotTransferRequestPB) (*StartRemoteSnapshotTransferResponsePB, error)
+	GetTabletKeyRanges(request *GetTabletKeyRangesRequestPB) (*GetTabletKeyRangesResponsePB, error)
+	CheckTserverTabletHealth(request *CheckTserverTabletHealthRequestPB) (*CheckTserverTabletHealthResponsePB, error)
+	ClearAllMetaCachesOnServer(request *ClearAllMetaCachesOnServerRequestPB) (*ClearAllMetaCachesOnServerResponsePB, error)
+	ClearMetacache(request *ClearMetacacheRequestPB) (*ClearMetacacheResponsePB, error)
+	ClearUniverseUuid(request *ClearUniverseUuidRequestPB) (*ClearUniverseUuidResponsePB, error)
+	AcquireObjectLocks(request *AcquireObjectLockRequestPB) (*AcquireObjectLockResponsePB, error)
+	ReleaseObjectLocks(request *ReleaseObjectLockRequestPB) (*ReleaseObjectLockResponsePB, error)
+	AdminExecutePgsql(request *AdminExecutePgsqlRequestPB) (*AdminExecutePgsqlResponsePB, error)
+	GetLocalPgTxnSnapshot(request *GetLocalPgTxnSnapshotRequestPB) (*GetLocalPgTxnSnapshotResponsePB, error)
+	GetMetrics(request *GetMetricsRequestPB) (*GetMetricsResponsePB, error)
 }
 
 type TabletServerServiceImpl struct {
@@ -91,6 +114,20 @@ func (s *TabletServerServiceImpl) Read(request *ReadRequestPB) (*ReadResponsePB,
 	}
 
 	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "Read", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) VerifyTableRowRange(request *VerifyTableRowRangeRequestPB) (*VerifyTableRowRangeResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "VerifyTableRowRange", "request", request)
+	response := &VerifyTableRowRangeResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "VerifyTableRowRange", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "VerifyTableRowRange", "response", response)
 
 	return response, nil
 }
@@ -214,6 +251,39 @@ func (s *TabletServerServiceImpl) GetTransactionStatus(request *GetTransactionSt
 	return response, nil
 }
 
+// Returns the oldest transactions (older than a specified age) from a specified status tablet.
+
+func (s *TabletServerServiceImpl) GetOldTransactions(request *GetOldTransactionsRequestPB) (*GetOldTransactionsResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "GetOldTransactions", "request", request)
+	response := &GetOldTransactionsResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "GetOldTransactions", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetOldTransactions", "response", response)
+
+	return response, nil
+}
+
+// Returns the oldest single shard waiters (older than a specified age) by querying the
+// waiting transaction registry at the Tablet Server.
+
+func (s *TabletServerServiceImpl) GetOldSingleShardWaiters(request *GetOldSingleShardWaitersRequestPB) (*GetOldSingleShardWaitersResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "GetOldSingleShardWaiters", "request", request)
+	response := &GetOldSingleShardWaitersResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "GetOldSingleShardWaiters", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetOldSingleShardWaiters", "response", response)
+
+	return response, nil
+}
+
 // Returns transaction status at participant, i.e. number of replicated batches or whether it was
 // aborted.
 
@@ -241,6 +311,50 @@ func (s *TabletServerServiceImpl) AbortTransaction(request *AbortTransactionRequ
 	}
 
 	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "AbortTransaction", "response", response)
+
+	return response, nil
+}
+
+// Change the status tablet id used for a transaction.
+
+func (s *TabletServerServiceImpl) UpdateTransactionStatusLocation(request *UpdateTransactionStatusLocationRequestPB) (*UpdateTransactionStatusLocationResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "UpdateTransactionStatusLocation", "request", request)
+	response := &UpdateTransactionStatusLocationResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "UpdateTransactionStatusLocation", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "UpdateTransactionStatusLocation", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) UpdateTransactionWaitingForStatus(request *UpdateTransactionWaitingForStatusRequestPB) (*UpdateTransactionWaitingForStatusResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "UpdateTransactionWaitingForStatus", "request", request)
+	response := &UpdateTransactionWaitingForStatusResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "UpdateTransactionWaitingForStatus", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "UpdateTransactionWaitingForStatus", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) ProbeTransactionDeadlock(request *ProbeTransactionDeadlockRequestPB) (*ProbeTransactionDeadlockResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "ProbeTransactionDeadlock", "request", request)
+	response := &ProbeTransactionDeadlockResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "ProbeTransactionDeadlock", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "ProbeTransactionDeadlock", "response", response)
 
 	return response, nil
 }
@@ -315,18 +429,262 @@ func (s *TabletServerServiceImpl) IsTabletServerReady(request *IsTabletServerRea
 	return response, nil
 }
 
-// Takes precreated transaction from this tserver.
+func (s *TabletServerServiceImpl) GetSplitKey(request *GetSplitKeyRequestPB) (*GetSplitKeyResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "GetSplitKey", "request", request)
+	response := &GetSplitKeyResponsePB{}
 
-func (s *TabletServerServiceImpl) TakeTransaction(request *TakeTransactionRequestPB) (*TakeTransactionResponsePB, error) {
-	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "TakeTransaction", "request", request)
-	response := &TakeTransactionResponsePB{}
-
-	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "TakeTransaction", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "GetSplitKey", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
 	if err != nil {
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "TakeTransaction", "response", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetSplitKey", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) GetSharedData(request *GetSharedDataRequestPB) (*GetSharedDataResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "GetSharedData", "request", request)
+	response := &GetSharedDataResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "GetSharedData", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetSharedData", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) GetTserverCatalogVersionInfo(request *GetTserverCatalogVersionInfoRequestPB) (*GetTserverCatalogVersionInfoResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "GetTserverCatalogVersionInfo", "request", request)
+	response := &GetTserverCatalogVersionInfoResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "GetTserverCatalogVersionInfo", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetTserverCatalogVersionInfo", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) ListMasterServers(request *ListMasterServersRequestPB) (*ListMasterServersResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "ListMasterServers", "request", request)
+	response := &ListMasterServersResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "ListMasterServers", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "ListMasterServers", "response", response)
+
+	return response, nil
+}
+
+// Returns all lock information requested, based on persisted intents and any requests waiting on
+// a persisted intent. These intents may correspond to explicit or implicit locks.
+
+func (s *TabletServerServiceImpl) GetLockStatus(request *GetLockStatusRequestPB) (*GetLockStatusResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "GetLockStatus", "request", request)
+	response := &GetLockStatusResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "GetLockStatus", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetLockStatus", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) CancelTransaction(request *CancelTransactionRequestPB) (*CancelTransactionResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "CancelTransaction", "request", request)
+	response := &CancelTransactionResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "CancelTransaction", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "CancelTransaction", "response", response)
+
+	return response, nil
+}
+
+// Returns the schema version on the XCluster consumer side that is
+// compatible with the schema provided in the request.
+
+func (s *TabletServerServiceImpl) GetCompatibleSchemaVersion(request *GetCompatibleSchemaVersionRequestPB) (*GetCompatibleSchemaVersionResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "GetCompatibleSchemaVersion", "request", request)
+	response := &GetCompatibleSchemaVersionResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "GetCompatibleSchemaVersion", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetCompatibleSchemaVersion", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) StartRemoteSnapshotTransfer(request *StartRemoteSnapshotTransferRequestPB) (*StartRemoteSnapshotTransferResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "StartRemoteSnapshotTransfer", "request", request)
+	response := &StartRemoteSnapshotTransferResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "StartRemoteSnapshotTransfer", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "StartRemoteSnapshotTransfer", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) GetTabletKeyRanges(request *GetTabletKeyRangesRequestPB) (*GetTabletKeyRangesResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "GetTabletKeyRanges", "request", request)
+	response := &GetTabletKeyRangesResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "GetTabletKeyRanges", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetTabletKeyRanges", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) CheckTserverTabletHealth(request *CheckTserverTabletHealthRequestPB) (*CheckTserverTabletHealthResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "CheckTserverTabletHealth", "request", request)
+	response := &CheckTserverTabletHealthResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "CheckTserverTabletHealth", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "CheckTserverTabletHealth", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) ClearAllMetaCachesOnServer(request *ClearAllMetaCachesOnServerRequestPB) (*ClearAllMetaCachesOnServerResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "ClearAllMetaCachesOnServer", "request", request)
+	response := &ClearAllMetaCachesOnServerResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "ClearAllMetaCachesOnServer", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "ClearAllMetaCachesOnServer", "response", response)
+
+	return response, nil
+}
+
+// Clear metacache entries (tables and tablets) that belong to the provided namespace.
+
+func (s *TabletServerServiceImpl) ClearMetacache(request *ClearMetacacheRequestPB) (*ClearMetacacheResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "ClearMetacache", "request", request)
+	response := &ClearMetacacheResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "ClearMetacache", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "ClearMetacache", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) ClearUniverseUuid(request *ClearUniverseUuidRequestPB) (*ClearUniverseUuidResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "ClearUniverseUuid", "request", request)
+	response := &ClearUniverseUuidResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "ClearUniverseUuid", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "ClearUniverseUuid", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) AcquireObjectLocks(request *AcquireObjectLockRequestPB) (*AcquireObjectLockResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "AcquireObjectLocks", "request", request)
+	response := &AcquireObjectLockResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "AcquireObjectLocks", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "AcquireObjectLocks", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) ReleaseObjectLocks(request *ReleaseObjectLockRequestPB) (*ReleaseObjectLockResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "ReleaseObjectLocks", "request", request)
+	response := &ReleaseObjectLockResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "ReleaseObjectLocks", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "ReleaseObjectLocks", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) AdminExecutePgsql(request *AdminExecutePgsqlRequestPB) (*AdminExecutePgsqlResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "AdminExecutePgsql", "request", request)
+	response := &AdminExecutePgsqlResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "AdminExecutePgsql", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "AdminExecutePgsql", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) GetLocalPgTxnSnapshot(request *GetLocalPgTxnSnapshotRequestPB) (*GetLocalPgTxnSnapshotResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "GetLocalPgTxnSnapshot", "request", request)
+	response := &GetLocalPgTxnSnapshotResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "GetLocalPgTxnSnapshot", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetLocalPgTxnSnapshot", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerServiceImpl) GetMetrics(request *GetMetricsRequestPB) (*GetMetricsResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerService", "method", "GetMetrics", "request", request)
+	response := &GetMetricsResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerService", "GetMetrics", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerService", "method", "GetMetrics", "response", response)
 
 	return response, nil
 }

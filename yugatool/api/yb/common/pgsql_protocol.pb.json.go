@@ -59,6 +59,14 @@ func (m *PgsqlColumnRefsPB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
 
+func (m *PgsqlColRefPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *PgsqlColRefPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
 func (m *PgsqlColumnValuePB) MarshalJSON() ([]byte, error) {
 	return protojson.MarshalOptions{}.Marshal(m)
 }
@@ -91,6 +99,22 @@ func (m *PgsqlPartitionBound) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
 
+func (m *PgsqlSamplingStatePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *PgsqlSamplingStatePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *PgsqlFetchSequenceParamsPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *PgsqlFetchSequenceParamsPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
 func (m *PgsqlWriteRequestPB) MarshalJSON() ([]byte, error) {
 	return protojson.MarshalOptions{}.Marshal(m)
 }
@@ -107,6 +131,22 @@ func (m *PgsqlPagingStatePB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
 
+func (m *PgsqlBackfillSpecPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *PgsqlBackfillSpecPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *GetTabletKeyRangesEmbeddedRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *GetTabletKeyRangesEmbeddedRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
 func (m *PgsqlReadRequestPB) MarshalJSON() ([]byte, error) {
 	return protojson.MarshalOptions{}.Marshal(m)
 }
@@ -115,10 +155,50 @@ func (m *PgsqlReadRequestPB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
 
+func (m *PgsqlRequestGaugeMetricPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *PgsqlRequestGaugeMetricPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *PgsqlRequestCounterMetricPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *PgsqlRequestCounterMetricPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *PgsqlRequestEventMetricPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *PgsqlRequestEventMetricPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *PgsqlRequestMetricsPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *PgsqlRequestMetricsPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
 func (m *PgsqlResponsePB) MarshalJSON() ([]byte, error) {
 	return protojson.MarshalOptions{}.Marshal(m)
 }
 
 func (m *PgsqlResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *PgTxnSnapshotPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *PgTxnSnapshotPB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }

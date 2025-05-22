@@ -61,3 +61,19 @@ func (m *TestStringRepeatedPB) MarshalJSON() ([]byte, error) {
 func (m *TestStringRepeatedPB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
+
+func (m *TestStringOptionalPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *TestStringOptionalPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *UnsignedIntSetTestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *UnsignedIntSetTestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}

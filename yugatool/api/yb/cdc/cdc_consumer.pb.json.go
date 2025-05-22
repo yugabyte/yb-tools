@@ -45,6 +45,14 @@ func (m *ProducerTabletListPB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
 
+func (m *SchemaVersionsPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *SchemaVersionsPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
 func (m *StreamEntryPB) MarshalJSON() ([]byte, error) {
 	return protojson.MarshalOptions{}.Marshal(m)
 }

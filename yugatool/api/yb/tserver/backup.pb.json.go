@@ -19,6 +19,14 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
+func (m *TableMetadataPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *TableMetadataPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
 func (m *TabletSnapshotOpRequestPB) MarshalJSON() ([]byte, error) {
 	return protojson.MarshalOptions{}.Marshal(m)
 }

@@ -44,11 +44,14 @@ import (
 type GenericService interface {
 	SetFlag(request *SetFlagRequestPB) (*SetFlagResponsePB, error)
 	GetFlag(request *GetFlagRequestPB) (*GetFlagResponsePB, error)
+	ValidateFlagValue(request *ValidateFlagValueRequestPB) (*ValidateFlagValueResponsePB, error)
 	RefreshFlags(request *RefreshFlagsRequestPB) (*RefreshFlagsResponsePB, error)
+	GetAutoFlagsConfigVersion(request *GetAutoFlagsConfigVersionRequestPB) (*GetAutoFlagsConfigVersionResponsePB, error)
 	FlushCoverage(request *FlushCoverageRequestPB) (*FlushCoverageResponsePB, error)
 	ServerClock(request *ServerClockRequestPB) (*ServerClockResponsePB, error)
 	GetStatus(request *GetStatusRequestPB) (*GetStatusResponsePB, error)
 	Ping(request *PingRequestPB) (*PingResponsePB, error)
+	ReloadCertificates(request *ReloadCertificatesRequestPB) (*ReloadCertificatesResponsePB, error)
 }
 
 type GenericServiceImpl struct {
@@ -84,6 +87,20 @@ func (s *GenericServiceImpl) GetFlag(request *GetFlagRequestPB) (*GetFlagRespons
 	return response, nil
 }
 
+func (s *GenericServiceImpl) ValidateFlagValue(request *ValidateFlagValueRequestPB) (*ValidateFlagValueResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.server.GenericService", "method", "ValidateFlagValue", "request", request)
+	response := &ValidateFlagValueResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.server.GenericService", "ValidateFlagValue", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "ValidateFlagValue", "response", response)
+
+	return response, nil
+}
+
 func (s *GenericServiceImpl) RefreshFlags(request *RefreshFlagsRequestPB) (*RefreshFlagsResponsePB, error) {
 	s.Log.V(1).Info("sending RPC request", "service", "yb.server.GenericService", "method", "RefreshFlags", "request", request)
 	response := &RefreshFlagsResponsePB{}
@@ -94,6 +111,20 @@ func (s *GenericServiceImpl) RefreshFlags(request *RefreshFlagsRequestPB) (*Refr
 	}
 
 	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "RefreshFlags", "response", response)
+
+	return response, nil
+}
+
+func (s *GenericServiceImpl) GetAutoFlagsConfigVersion(request *GetAutoFlagsConfigVersionRequestPB) (*GetAutoFlagsConfigVersionResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.server.GenericService", "method", "GetAutoFlagsConfigVersion", "request", request)
+	response := &GetAutoFlagsConfigVersionResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.server.GenericService", "GetAutoFlagsConfigVersion", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "GetAutoFlagsConfigVersion", "response", response)
 
 	return response, nil
 }
@@ -150,6 +181,20 @@ func (s *GenericServiceImpl) Ping(request *PingRequestPB) (*PingResponsePB, erro
 	}
 
 	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "Ping", "response", response)
+
+	return response, nil
+}
+
+func (s *GenericServiceImpl) ReloadCertificates(request *ReloadCertificatesRequestPB) (*ReloadCertificatesResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.server.GenericService", "method", "ReloadCertificates", "request", request)
+	response := &ReloadCertificatesResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.server.GenericService", "ReloadCertificates", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.server.GenericService", "method", "ReloadCertificates", "response", response)
 
 	return response, nil
 }

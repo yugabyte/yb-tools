@@ -46,12 +46,16 @@ type CalculatorService interface {
 	Add(request *AddRequestPB) (*AddResponsePB, error)
 	Sleep(request *SleepRequestPB) (*SleepResponsePB, error)
 	Echo(request *EchoRequestPB) (*EchoResponsePB, error)
+	RepeatedEcho(request *RepeatedEchoRequestPB) (*RepeatedEchoResponsePB, error)
 	WhoAmI(request *WhoAmIRequestPB) (*WhoAmIResponsePB, error)
 	TestArgumentsInDiffPackage(request *ReqDiffPackagePB) (*RespDiffPackagePB, error)
 	Panic(request *PanicRequestPB) (*PanicResponsePB, error)
 	Ping(request *PingRequestPB) (*PingResponsePB, error)
 	Disconnect(request *DisconnectRequestPB) (*DisconnectResponsePB, error)
 	Forward(request *ForwardRequestPB) (*ForwardResponsePB, error)
+	Lightweight(request *LightweightRequestPB) (*LightweightResponsePB, error)
+	Trivial(request *TrivialRequestPB) (*TrivialResponsePB, error)
+	Sidecar(request *SidecarRequestPB) (*SidecarResponsePB, error)
 }
 
 type CalculatorServiceImpl struct {
@@ -97,6 +101,20 @@ func (s *CalculatorServiceImpl) Echo(request *EchoRequestPB) (*EchoResponsePB, e
 	}
 
 	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Echo", "response", response)
+
+	return response, nil
+}
+
+func (s *CalculatorServiceImpl) RepeatedEcho(request *RepeatedEchoRequestPB) (*RepeatedEchoResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "RepeatedEcho", "request", request)
+	response := &RepeatedEchoResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "RepeatedEcho", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "RepeatedEcho", "response", response)
 
 	return response, nil
 }
@@ -181,6 +199,73 @@ func (s *CalculatorServiceImpl) Forward(request *ForwardRequestPB) (*ForwardResp
 	}
 
 	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Forward", "response", response)
+
+	return response, nil
+}
+
+func (s *CalculatorServiceImpl) Lightweight(request *LightweightRequestPB) (*LightweightResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "Lightweight", "request", request)
+	response := &LightweightResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "Lightweight", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Lightweight", "response", response)
+
+	return response, nil
+}
+
+func (s *CalculatorServiceImpl) Trivial(request *TrivialRequestPB) (*TrivialResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "Trivial", "request", request)
+	response := &TrivialResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "Trivial", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Trivial", "response", response)
+
+	return response, nil
+}
+
+func (s *CalculatorServiceImpl) Sidecar(request *SidecarRequestPB) (*SidecarResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.CalculatorService", "method", "Sidecar", "request", request)
+	response := &SidecarResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.rpc_test.CalculatorService", "Sidecar", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.CalculatorService", "method", "Sidecar", "response", response)
+
+	return response, nil
+}
+
+// service: yb.rpc_test.AbacusService
+// service: AbacusService
+type AbacusService interface {
+	Concat(request *ConcatRequestPB) (*ConcatResponsePB, error)
+}
+
+type AbacusServiceImpl struct {
+	Log       logr.Logger
+	Messenger message.Messenger
+}
+
+func (s *AbacusServiceImpl) Concat(request *ConcatRequestPB) (*ConcatResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.rpc_test.AbacusService", "method", "Concat", "request", request)
+	response := &ConcatResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.rpc_test.AbacusService", "Concat", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.rpc_test.AbacusService", "method", "Concat", "response", response)
 
 	return response, nil
 }

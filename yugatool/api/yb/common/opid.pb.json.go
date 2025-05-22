@@ -38,42 +38,10 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-func (m *TableInfoPB) MarshalJSON() ([]byte, error) {
+func (m *OpIdPB) MarshalJSON() ([]byte, error) {
 	return protojson.MarshalOptions{}.Marshal(m)
 }
 
-func (m *TableInfoPB) UnmarshalJSON(b []byte) error {
-	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
-}
-
-func (m *KvStoreInfoPB) MarshalJSON() ([]byte, error) {
-	return protojson.MarshalOptions{}.Marshal(m)
-}
-
-func (m *KvStoreInfoPB) UnmarshalJSON(b []byte) error {
-	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
-}
-
-func (m *RaftGroupReplicaSuperBlockPB) MarshalJSON() ([]byte, error) {
-	return protojson.MarshalOptions{}.Marshal(m)
-}
-
-func (m *RaftGroupReplicaSuperBlockPB) UnmarshalJSON(b []byte) error {
-	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
-}
-
-func (m *FilePB) MarshalJSON() ([]byte, error) {
-	return protojson.MarshalOptions{}.Marshal(m)
-}
-
-func (m *FilePB) UnmarshalJSON(b []byte) error {
-	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
-}
-
-func (m *SnapshotFilePB) MarshalJSON() ([]byte, error) {
-	return protojson.MarshalOptions{}.Marshal(m)
-}
-
-func (m *SnapshotFilePB) UnmarshalJSON(b []byte) error {
+func (m *OpIdPB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }

@@ -70,6 +70,22 @@ func (m *ColocatedTableIdentifierPB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
 
+func (m *PgVectorIdxOptionsPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *PgVectorIdxOptionsPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *PgVectorReadOptionsPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *PgVectorReadOptionsPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
 func (m *TablePropertiesPB) MarshalJSON() ([]byte, error) {
 	return protojson.MarshalOptions{}.Marshal(m)
 }
@@ -91,14 +107,6 @@ func (m *IndexInfoPB) MarshalJSON() ([]byte, error) {
 }
 
 func (m *IndexInfoPB) UnmarshalJSON(b []byte) error {
-	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
-}
-
-func (m *HostPortPB) MarshalJSON() ([]byte, error) {
-	return protojson.MarshalOptions{}.Marshal(m)
-}
-
-func (m *HostPortPB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
 
@@ -166,38 +174,6 @@ func (m *DeletedColumnPB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
 
-func (m *CloudInfoPB) MarshalJSON() ([]byte, error) {
-	return protojson.MarshalOptions{}.Marshal(m)
-}
-
-func (m *CloudInfoPB) UnmarshalJSON(b []byte) error {
-	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
-}
-
-func (m *QLValuePB) MarshalJSON() ([]byte, error) {
-	return protojson.MarshalOptions{}.Marshal(m)
-}
-
-func (m *QLValuePB) UnmarshalJSON(b []byte) error {
-	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
-}
-
-func (m *QLSeqValuePB) MarshalJSON() ([]byte, error) {
-	return protojson.MarshalOptions{}.Marshal(m)
-}
-
-func (m *QLSeqValuePB) UnmarshalJSON(b []byte) error {
-	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
-}
-
-func (m *QLMapValuePB) MarshalJSON() ([]byte, error) {
-	return protojson.MarshalOptions{}.Marshal(m)
-}
-
-func (m *QLMapValuePB) UnmarshalJSON(b []byte) error {
-	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
-}
-
 func (m *QLSubscriptedColPB) MarshalJSON() ([]byte, error) {
 	return protojson.MarshalOptions{}.Marshal(m)
 }
@@ -219,6 +195,14 @@ func (m *QLJsonOperationPB) MarshalJSON() ([]byte, error) {
 }
 
 func (m *QLJsonOperationPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *QLTupleExpressionPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *QLTupleExpressionPB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
 
@@ -283,5 +267,69 @@ func (m *DeletePlanPB) MarshalJSON() ([]byte, error) {
 }
 
 func (m *DeletePlanPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *TServerDBCatalogVersionInfo) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *TServerDBCatalogVersionInfo) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *DatumMessagePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *DatumMessagePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *PgDatumPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *PgDatumPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *AshMetadataPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *AshMetadataPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *AshAuxDataPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *AshAuxDataPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *WaitStateInfoPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *WaitStateInfoPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *CDCSDKStreamCreateOptionsPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *CDCSDKStreamCreateOptionsPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *TserverMetricsInfoPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *TserverMetricsInfoPB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }

@@ -39,14 +39,6 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-func (m *ConsensusErrorPB) MarshalJSON() ([]byte, error) {
-	return protojson.MarshalOptions{}.Marshal(m)
-}
-
-func (m *ConsensusErrorPB) UnmarshalJSON(b []byte) error {
-	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
-}
-
 func (m *ChangeConfigRecordPB) MarshalJSON() ([]byte, error) {
 	return protojson.MarshalOptions{}.Marshal(m)
 }
@@ -148,6 +140,22 @@ func (m *ConsensusResponsePB) MarshalJSON() ([]byte, error) {
 }
 
 func (m *ConsensusResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *MultiRaftConsensusRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *MultiRaftConsensusRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *MultiRaftConsensusResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *MultiRaftConsensusResponsePB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
 
@@ -268,5 +276,53 @@ func (m *StartRemoteBootstrapResponsePB) MarshalJSON() ([]byte, error) {
 }
 
 func (m *StartRemoteBootstrapResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *UnsafeChangeConfigRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *UnsafeChangeConfigRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *UnsafeChangeConfigResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *UnsafeChangeConfigResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *ChangeAutoFlagsConfigOpResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *ChangeAutoFlagsConfigOpResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *ReplicatedRetryableRequestRangePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *ReplicatedRetryableRequestRangePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *ClientReplicatedRetryableRequestRangesPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *ClientReplicatedRetryableRequestRangesPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *TabletBootstrapStatePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *TabletBootstrapStatePB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }

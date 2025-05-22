@@ -45,10 +45,16 @@ import (
 
 type RemoteBootstrapService interface {
 	BeginRemoteBootstrapSession(request *BeginRemoteBootstrapSessionRequestPB) (*BeginRemoteBootstrapSessionResponsePB, error)
-	CheckSessionActive(request *CheckRemoteBootstrapSessionActiveRequestPB) (*CheckRemoteBootstrapSessionActiveResponsePB, error)
+	BeginRemoteSnapshotTransferSession(request *BeginRemoteSnapshotTransferSessionRequestPB) (*BeginRemoteSnapshotTransferSessionResponsePB, error)
+	CheckRemoteBootstrapSessionActive(request *CheckRemoteBootstrapSessionActiveRequestPB) (*CheckRemoteBootstrapSessionActiveResponsePB, error)
 	FetchData(request *FetchDataRequestPB) (*FetchDataResponsePB, error)
 	EndRemoteBootstrapSession(request *EndRemoteBootstrapSessionRequestPB) (*EndRemoteBootstrapSessionResponsePB, error)
-	RemoveSession(request *RemoveSessionRequestPB) (*RemoveSessionResponsePB, error)
+	RemoveRemoteBootstrapSession(request *RemoveRemoteBootstrapSessionRequestPB) (*RemoveRemoteBootstrapSessionResponsePB, error)
+	RegisterLogAnchor(request *RegisterLogAnchorRequestPB) (*RegisterLogAnchorResponsePB, error)
+	UpdateLogAnchor(request *UpdateLogAnchorRequestPB) (*UpdateLogAnchorResponsePB, error)
+	UnregisterLogAnchor(request *UnregisterLogAnchorRequestPB) (*UnregisterLogAnchorResponsePB, error)
+	KeepLogAnchorAlive(request *KeepLogAnchorAliveRequestPB) (*KeepLogAnchorAliveResponsePB, error)
+	ChangePeerRole(request *ChangePeerRoleRequestPB) (*ChangePeerRoleResponsePB, error)
 }
 
 type RemoteBootstrapServiceImpl struct {
@@ -72,18 +78,34 @@ func (s *RemoteBootstrapServiceImpl) BeginRemoteBootstrapSession(request *BeginR
 	return response, nil
 }
 
-// Check whether the specified session is active.
+// Establish a remote snapshot transfer session.
 
-func (s *RemoteBootstrapServiceImpl) CheckSessionActive(request *CheckRemoteBootstrapSessionActiveRequestPB) (*CheckRemoteBootstrapSessionActiveResponsePB, error) {
-	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.RemoteBootstrapService", "method", "CheckSessionActive", "request", request)
-	response := &CheckRemoteBootstrapSessionActiveResponsePB{}
+func (s *RemoteBootstrapServiceImpl) BeginRemoteSnapshotTransferSession(request *BeginRemoteSnapshotTransferSessionRequestPB) (*BeginRemoteSnapshotTransferSessionResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.RemoteBootstrapService", "method", "BeginRemoteSnapshotTransferSession", "request", request)
+	response := &BeginRemoteSnapshotTransferSessionResponsePB{}
 
-	err := s.Messenger.SendMessage("yb.tserver.RemoteBootstrapService", "CheckSessionActive", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	err := s.Messenger.SendMessage("yb.tserver.RemoteBootstrapService", "BeginRemoteSnapshotTransferSession", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
 	if err != nil {
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "CheckSessionActive", "response", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "BeginRemoteSnapshotTransferSession", "response", response)
+
+	return response, nil
+}
+
+// Check whether the specified session is active.
+
+func (s *RemoteBootstrapServiceImpl) CheckRemoteBootstrapSessionActive(request *CheckRemoteBootstrapSessionActiveRequestPB) (*CheckRemoteBootstrapSessionActiveResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.RemoteBootstrapService", "method", "CheckRemoteBootstrapSessionActive", "request", request)
+	response := &CheckRemoteBootstrapSessionActiveResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.RemoteBootstrapService", "CheckRemoteBootstrapSessionActive", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "CheckRemoteBootstrapSessionActive", "response", response)
 
 	return response, nil
 }
@@ -120,16 +142,99 @@ func (s *RemoteBootstrapServiceImpl) EndRemoteBootstrapSession(request *EndRemot
 	return response, nil
 }
 
-func (s *RemoteBootstrapServiceImpl) RemoveSession(request *RemoveSessionRequestPB) (*RemoveSessionResponsePB, error) {
-	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.RemoteBootstrapService", "method", "RemoveSession", "request", request)
-	response := &RemoveSessionResponsePB{}
+func (s *RemoteBootstrapServiceImpl) RemoveRemoteBootstrapSession(request *RemoveRemoteBootstrapSessionRequestPB) (*RemoveRemoteBootstrapSessionResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.RemoteBootstrapService", "method", "RemoveRemoteBootstrapSession", "request", request)
+	response := &RemoveRemoteBootstrapSessionResponsePB{}
 
-	err := s.Messenger.SendMessage("yb.tserver.RemoteBootstrapService", "RemoveSession", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	err := s.Messenger.SendMessage("yb.tserver.RemoteBootstrapService", "RemoveRemoteBootstrapSession", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
 	if err != nil {
 		return nil, err
 	}
 
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "RemoveSession", "response", response)
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "RemoveRemoteBootstrapSession", "response", response)
+
+	return response, nil
+}
+
+// Register Log Anchor on the leader. RBS source calls this function on the
+// tablet leader while beginning the RemoteBootstrapSession
+
+func (s *RemoteBootstrapServiceImpl) RegisterLogAnchor(request *RegisterLogAnchorRequestPB) (*RegisterLogAnchorResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.RemoteBootstrapService", "method", "RegisterLogAnchor", "request", request)
+	response := &RegisterLogAnchorResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.RemoteBootstrapService", "RegisterLogAnchor", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "RegisterLogAnchor", "response", response)
+
+	return response, nil
+}
+
+// Updates the Log Anchor on the tablet leader. RBS source calls the function
+// whenever the LogAnchor is being updated locally.
+
+func (s *RemoteBootstrapServiceImpl) UpdateLogAnchor(request *UpdateLogAnchorRequestPB) (*UpdateLogAnchorResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.RemoteBootstrapService", "method", "UpdateLogAnchor", "request", request)
+	response := &UpdateLogAnchorResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.RemoteBootstrapService", "UpdateLogAnchor", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "UpdateLogAnchor", "response", response)
+
+	return response, nil
+}
+
+// Unregisters the Log Anchor on the leader, called by RBS source.
+
+func (s *RemoteBootstrapServiceImpl) UnregisterLogAnchor(request *UnregisterLogAnchorRequestPB) (*UnregisterLogAnchorResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.RemoteBootstrapService", "method", "UnregisterLogAnchor", "request", request)
+	response := &UnregisterLogAnchorResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.RemoteBootstrapService", "UnregisterLogAnchor", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "UnregisterLogAnchor", "response", response)
+
+	return response, nil
+}
+
+// Request to refresh the Log Anchor Session, called by RBS source.
+
+func (s *RemoteBootstrapServiceImpl) KeepLogAnchorAlive(request *KeepLogAnchorAliveRequestPB) (*KeepLogAnchorAliveResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.RemoteBootstrapService", "method", "KeepLogAnchorAlive", "request", request)
+	response := &KeepLogAnchorAliveResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.RemoteBootstrapService", "KeepLogAnchorAlive", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "KeepLogAnchorAlive", "response", response)
+
+	return response, nil
+}
+
+// RBS source asks the leader to change the role of the new peer post
+// bootstrap.
+
+func (s *RemoteBootstrapServiceImpl) ChangePeerRole(request *ChangePeerRoleRequestPB) (*ChangePeerRoleResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.RemoteBootstrapService", "method", "ChangePeerRole", "request", request)
+	response := &ChangePeerRoleResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.RemoteBootstrapService", "ChangePeerRole", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.RemoteBootstrapService", "method", "ChangePeerRole", "response", response)
 
 	return response, nil
 }

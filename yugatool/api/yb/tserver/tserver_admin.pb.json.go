@@ -38,14 +38,6 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-func (m *ChangeMetadataRequestPB) MarshalJSON() ([]byte, error) {
-	return protojson.MarshalOptions{}.Marshal(m)
-}
-
-func (m *ChangeMetadataRequestPB) UnmarshalJSON(b []byte) error {
-	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
-}
-
 func (m *ExportedTabletMetadataChanges) MarshalJSON() ([]byte, error) {
 	return protojson.MarshalOptions{}.Marshal(m)
 }
@@ -94,22 +86,6 @@ func (m *BackfillIndexResponsePB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
 
-func (m *CopartitionTableRequestPB) MarshalJSON() ([]byte, error) {
-	return protojson.MarshalOptions{}.Marshal(m)
-}
-
-func (m *CopartitionTableRequestPB) UnmarshalJSON(b []byte) error {
-	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
-}
-
-func (m *CopartitionTableResponsePB) MarshalJSON() ([]byte, error) {
-	return protojson.MarshalOptions{}.Marshal(m)
-}
-
-func (m *CopartitionTableResponsePB) UnmarshalJSON(b []byte) error {
-	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
-}
-
 func (m *CreateTabletRequestPB) MarshalJSON() ([]byte, error) {
 	return protojson.MarshalOptions{}.Marshal(m)
 }
@@ -123,6 +99,22 @@ func (m *CreateTabletResponsePB) MarshalJSON() ([]byte, error) {
 }
 
 func (m *CreateTabletResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *PrepareDeleteTransactionTabletRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *PrepareDeleteTransactionTabletRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *PrepareDeleteTransactionTabletResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *PrepareDeleteTransactionTabletResponsePB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
 
@@ -206,18 +198,114 @@ func (m *RemoveTableFromTabletResponsePB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }
 
-func (m *SplitTabletRequestPB) MarshalJSON() ([]byte, error) {
-	return protojson.MarshalOptions{}.Marshal(m)
-}
-
-func (m *SplitTabletRequestPB) UnmarshalJSON(b []byte) error {
-	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
-}
-
 func (m *SplitTabletResponsePB) MarshalJSON() ([]byte, error) {
 	return protojson.MarshalOptions{}.Marshal(m)
 }
 
 func (m *SplitTabletResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *UpgradeYsqlRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *UpgradeYsqlRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *UpgradeYsqlResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *UpgradeYsqlResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *WaitForYsqlBackendsCatalogVersionRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *WaitForYsqlBackendsCatalogVersionRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *WaitForYsqlBackendsCatalogVersionResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *WaitForYsqlBackendsCatalogVersionResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *TestRetryRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *TestRetryRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *TestRetryResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *TestRetryResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *UpdateTransactionTablesVersionRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *UpdateTransactionTablesVersionRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *UpdateTransactionTablesVersionResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *UpdateTransactionTablesVersionResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *CloneTabletResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *CloneTabletResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *ClonePgSchemaRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *ClonePgSchemaRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *ClonePgSchemaResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *ClonePgSchemaResponsePB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *EnableDbConnsRequestPB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *EnableDbConnsRequestPB) UnmarshalJSON(b []byte) error {
+	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
+}
+
+func (m *EnableDbConnsResponsePB) MarshalJSON() ([]byte, error) {
+	return protojson.MarshalOptions{}.Marshal(m)
+}
+
+func (m *EnableDbConnsResponsePB) UnmarshalJSON(b []byte) error {
 	return protojson.UnmarshalOptions{}.Unmarshal(b, m)
 }

@@ -46,8 +46,10 @@ import (
 
 type ConsensusService interface {
 	UpdateConsensus(request *ConsensusRequestPB) (*ConsensusResponsePB, error)
+	MultiRaftUpdateConsensus(request *MultiRaftConsensusRequestPB) (*MultiRaftConsensusResponsePB, error)
 	RequestConsensusVote(request *VoteRequestPB) (*VoteResponsePB, error)
 	ChangeConfig(request *ChangeConfigRequestPB) (*ChangeConfigResponsePB, error)
+	UnsafeChangeConfig(request *UnsafeChangeConfigRequestPB) (*UnsafeChangeConfigResponsePB, error)
 	GetNodeInstance(request *GetNodeInstanceRequestPB) (*GetNodeInstanceResponsePB, error)
 	RunLeaderElection(request *RunLeaderElectionRequestPB) (*RunLeaderElectionResponsePB, error)
 	LeaderElectionLost(request *LeaderElectionLostRequestPB) (*LeaderElectionLostResponsePB, error)
@@ -74,6 +76,23 @@ func (s *ConsensusServiceImpl) UpdateConsensus(request *ConsensusRequestPB) (*Co
 	}
 
 	s.Log.V(1).Info("received RPC response", "service", "yb.consensus.ConsensusService", "method", "UpdateConsensus", "response", response)
+
+	return response, nil
+}
+
+// Similar to UpdateConsensus but takes a batch of ConsensusRequestPB
+// and returns a batch of ConsensusResponsePB.
+
+func (s *ConsensusServiceImpl) MultiRaftUpdateConsensus(request *MultiRaftConsensusRequestPB) (*MultiRaftConsensusResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.consensus.ConsensusService", "method", "MultiRaftUpdateConsensus", "request", request)
+	response := &MultiRaftConsensusResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.consensus.ConsensusService", "MultiRaftUpdateConsensus", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.consensus.ConsensusService", "method", "MultiRaftUpdateConsensus", "response", response)
 
 	return response, nil
 }
@@ -109,6 +128,22 @@ func (s *ConsensusServiceImpl) ChangeConfig(request *ChangeConfigRequestPB) (*Ch
 	}
 
 	s.Log.V(1).Info("received RPC response", "service", "yb.consensus.ConsensusService", "method", "ChangeConfig", "response", response)
+
+	return response, nil
+}
+
+// Implements unsafe config change operation for manual recovery use cases.
+
+func (s *ConsensusServiceImpl) UnsafeChangeConfig(request *UnsafeChangeConfigRequestPB) (*UnsafeChangeConfigResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.consensus.ConsensusService", "method", "UnsafeChangeConfig", "request", request)
+	response := &UnsafeChangeConfigResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.consensus.ConsensusService", "UnsafeChangeConfig", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.consensus.ConsensusService", "method", "UnsafeChangeConfig", "response", response)
 
 	return response, nil
 }

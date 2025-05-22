@@ -43,17 +43,24 @@ import (
 // service: TabletServerAdminService
 type TabletServerAdminService interface {
 	CreateTablet(request *CreateTabletRequestPB) (*CreateTabletResponsePB, error)
+	PrepareDeleteTransactionTablet(request *PrepareDeleteTransactionTabletRequestPB) (*PrepareDeleteTransactionTabletResponsePB, error)
 	DeleteTablet(request *DeleteTabletRequestPB) (*DeleteTabletResponsePB, error)
 	AlterSchema(request *ChangeMetadataRequestPB) (*ChangeMetadataResponsePB, error)
 	GetSafeTime(request *GetSafeTimeRequestPB) (*GetSafeTimeResponsePB, error)
 	BackfillIndex(request *BackfillIndexRequestPB) (*BackfillIndexResponsePB, error)
 	BackfillDone(request *ChangeMetadataRequestPB) (*ChangeMetadataResponsePB, error)
-	CopartitionTable(request *CopartitionTableRequestPB) (*CopartitionTableResponsePB, error)
 	FlushTablets(request *FlushTabletsRequestPB) (*FlushTabletsResponsePB, error)
 	CountIntents(request *CountIntentsRequestPB) (*CountIntentsResponsePB, error)
 	AddTableToTablet(request *AddTableToTabletRequestPB) (*AddTableToTabletResponsePB, error)
 	RemoveTableFromTablet(request *RemoveTableFromTabletRequestPB) (*RemoveTableFromTabletResponsePB, error)
 	SplitTablet(request *SplitTabletRequestPB) (*SplitTabletResponsePB, error)
+	UpgradeYsql(request *UpgradeYsqlRequestPB) (*UpgradeYsqlResponsePB, error)
+	WaitForYsqlBackendsCatalogVersion(request *WaitForYsqlBackendsCatalogVersionRequestPB) (*WaitForYsqlBackendsCatalogVersionResponsePB, error)
+	UpdateTransactionTablesVersion(request *UpdateTransactionTablesVersionRequestPB) (*UpdateTransactionTablesVersionResponsePB, error)
+	CloneTablet(request *CloneTabletRequestPB) (*CloneTabletResponsePB, error)
+	ClonePgSchema(request *ClonePgSchemaRequestPB) (*ClonePgSchemaResponsePB, error)
+	EnableDbConns(request *EnableDbConnsRequestPB) (*EnableDbConnsResponsePB, error)
+	TestRetry(request *TestRetryRequestPB) (*TestRetryResponsePB, error)
 }
 
 type TabletServerAdminServiceImpl struct {
@@ -74,6 +81,23 @@ func (s *TabletServerAdminServiceImpl) CreateTablet(request *CreateTabletRequest
 	}
 
 	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "CreateTablet", "response", response)
+
+	return response, nil
+}
+
+// Prepare a transasction tablet for deletion. This waits for all relevant intents
+// to be applied and cleaned up.
+
+func (s *TabletServerAdminServiceImpl) PrepareDeleteTransactionTablet(request *PrepareDeleteTransactionTabletRequestPB) (*PrepareDeleteTransactionTabletResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerAdminService", "method", "PrepareDeleteTransactionTablet", "request", request)
+	response := &PrepareDeleteTransactionTabletResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "PrepareDeleteTransactionTablet", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "PrepareDeleteTransactionTablet", "response", response)
 
 	return response, nil
 }
@@ -159,22 +183,6 @@ func (s *TabletServerAdminServiceImpl) BackfillDone(request *ChangeMetadataReque
 	return response, nil
 }
 
-// Create a co-partitioned table in an existing tablet
-
-func (s *TabletServerAdminServiceImpl) CopartitionTable(request *CopartitionTableRequestPB) (*CopartitionTableResponsePB, error) {
-	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerAdminService", "method", "CopartitionTable", "request", request)
-	response := &CopartitionTableResponsePB{}
-
-	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "CopartitionTable", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
-	if err != nil {
-		return nil, err
-	}
-
-	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "CopartitionTable", "response", response)
-
-	return response, nil
-}
-
 func (s *TabletServerAdminServiceImpl) FlushTablets(request *FlushTabletsRequestPB) (*FlushTabletsResponsePB, error) {
 	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerAdminService", "method", "FlushTablets", "request", request)
 	response := &FlushTabletsResponsePB{}
@@ -241,6 +249,108 @@ func (s *TabletServerAdminServiceImpl) SplitTablet(request *SplitTabletRequestPB
 	}
 
 	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "SplitTablet", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerAdminServiceImpl) UpgradeYsql(request *UpgradeYsqlRequestPB) (*UpgradeYsqlResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerAdminService", "method", "UpgradeYsql", "request", request)
+	response := &UpgradeYsqlResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "UpgradeYsql", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "UpgradeYsql", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerAdminServiceImpl) WaitForYsqlBackendsCatalogVersion(request *WaitForYsqlBackendsCatalogVersionRequestPB) (*WaitForYsqlBackendsCatalogVersionResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerAdminService", "method", "WaitForYsqlBackendsCatalogVersion", "request", request)
+	response := &WaitForYsqlBackendsCatalogVersionResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "WaitForYsqlBackendsCatalogVersion", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "WaitForYsqlBackendsCatalogVersion", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerAdminServiceImpl) UpdateTransactionTablesVersion(request *UpdateTransactionTablesVersionRequestPB) (*UpdateTransactionTablesVersionResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerAdminService", "method", "UpdateTransactionTablesVersion", "request", request)
+	response := &UpdateTransactionTablesVersionResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "UpdateTransactionTablesVersion", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "UpdateTransactionTablesVersion", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerAdminServiceImpl) CloneTablet(request *CloneTabletRequestPB) (*CloneTabletResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerAdminService", "method", "CloneTablet", "request", request)
+	response := &CloneTabletResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "CloneTablet", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "CloneTablet", "response", response)
+
+	return response, nil
+}
+
+// Create PG objects (database, tables and indexes) of the clone database.
+
+func (s *TabletServerAdminServiceImpl) ClonePgSchema(request *ClonePgSchemaRequestPB) (*ClonePgSchemaResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerAdminService", "method", "ClonePgSchema", "request", request)
+	response := &ClonePgSchemaResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "ClonePgSchema", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "ClonePgSchema", "response", response)
+
+	return response, nil
+}
+
+func (s *TabletServerAdminServiceImpl) EnableDbConns(request *EnableDbConnsRequestPB) (*EnableDbConnsResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerAdminService", "method", "EnableDbConns", "request", request)
+	response := &EnableDbConnsResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "EnableDbConns", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "EnableDbConns", "response", response)
+
+	return response, nil
+}
+
+// For test purposes: returns TryAgain error until specified number of calls is done.
+
+func (s *TabletServerAdminServiceImpl) TestRetry(request *TestRetryRequestPB) (*TestRetryResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.tserver.TabletServerAdminService", "method", "TestRetry", "request", request)
+	response := &TestRetryResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.tserver.TabletServerAdminService", "TestRetry", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.tserver.TabletServerAdminService", "method", "TestRetry", "response", response)
 
 	return response, nil
 }

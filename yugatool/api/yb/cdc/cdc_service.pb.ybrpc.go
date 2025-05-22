@@ -49,6 +49,16 @@ type CDCService interface {
 	UpdateCdcReplicatedIndex(request *UpdateCdcReplicatedIndexRequestPB) (*UpdateCdcReplicatedIndexResponsePB, error)
 	BootstrapProducer(request *BootstrapProducerRequestPB) (*BootstrapProducerResponsePB, error)
 	GetLatestEntryOpId(request *GetLatestEntryOpIdRequestPB) (*GetLatestEntryOpIdResponsePB, error)
+	GetCDCDBStreamInfo(request *GetCDCDBStreamInfoRequestPB) (*GetCDCDBStreamInfoResponsePB, error)
+	SetCDCCheckpoint(request *SetCDCCheckpointRequestPB) (*SetCDCCheckpointResponsePB, error)
+	GetTabletListToPollForCDC(request *GetTabletListToPollForCDCRequestPB) (*GetTabletListToPollForCDCResponsePB, error)
+	IsBootstrapRequired(request *IsBootstrapRequiredRequestPB) (*IsBootstrapRequiredResponsePB, error)
+	CheckReplicationDrain(request *CheckReplicationDrainRequestPB) (*CheckReplicationDrainResponsePB, error)
+	InitVirtualWALForCDC(request *InitVirtualWALForCDCRequestPB) (*InitVirtualWALForCDCResponsePB, error)
+	GetConsistentChanges(request *GetConsistentChangesRequestPB) (*GetConsistentChangesResponsePB, error)
+	DestroyVirtualWALForCDC(request *DestroyVirtualWALForCDCRequestPB) (*DestroyVirtualWALForCDCResponsePB, error)
+	UpdateAndPersistLSN(request *UpdateAndPersistLSNRequestPB) (*UpdateAndPersistLSNResponsePB, error)
+	UpdatePublicationTableList(request *UpdatePublicationTableListRequestPB) (*UpdatePublicationTableListResponsePB, error)
 }
 
 type CDCServiceImpl struct {
@@ -164,6 +174,146 @@ func (s *CDCServiceImpl) GetLatestEntryOpId(request *GetLatestEntryOpIdRequestPB
 	}
 
 	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "GetLatestEntryOpId", "response", response)
+
+	return response, nil
+}
+
+func (s *CDCServiceImpl) GetCDCDBStreamInfo(request *GetCDCDBStreamInfoRequestPB) (*GetCDCDBStreamInfoResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.cdc.CDCService", "method", "GetCDCDBStreamInfo", "request", request)
+	response := &GetCDCDBStreamInfoResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.cdc.CDCService", "GetCDCDBStreamInfo", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "GetCDCDBStreamInfo", "response", response)
+
+	return response, nil
+}
+
+func (s *CDCServiceImpl) SetCDCCheckpoint(request *SetCDCCheckpointRequestPB) (*SetCDCCheckpointResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.cdc.CDCService", "method", "SetCDCCheckpoint", "request", request)
+	response := &SetCDCCheckpointResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.cdc.CDCService", "SetCDCCheckpoint", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "SetCDCCheckpoint", "response", response)
+
+	return response, nil
+}
+
+func (s *CDCServiceImpl) GetTabletListToPollForCDC(request *GetTabletListToPollForCDCRequestPB) (*GetTabletListToPollForCDCResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.cdc.CDCService", "method", "GetTabletListToPollForCDC", "request", request)
+	response := &GetTabletListToPollForCDCResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.cdc.CDCService", "GetTabletListToPollForCDC", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "GetTabletListToPollForCDC", "response", response)
+
+	return response, nil
+}
+
+func (s *CDCServiceImpl) IsBootstrapRequired(request *IsBootstrapRequiredRequestPB) (*IsBootstrapRequiredResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.cdc.CDCService", "method", "IsBootstrapRequired", "request", request)
+	response := &IsBootstrapRequiredResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.cdc.CDCService", "IsBootstrapRequired", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "IsBootstrapRequired", "response", response)
+
+	return response, nil
+}
+
+func (s *CDCServiceImpl) CheckReplicationDrain(request *CheckReplicationDrainRequestPB) (*CheckReplicationDrainResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.cdc.CDCService", "method", "CheckReplicationDrain", "request", request)
+	response := &CheckReplicationDrainResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.cdc.CDCService", "CheckReplicationDrain", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "CheckReplicationDrain", "response", response)
+
+	return response, nil
+}
+
+func (s *CDCServiceImpl) InitVirtualWALForCDC(request *InitVirtualWALForCDCRequestPB) (*InitVirtualWALForCDCResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.cdc.CDCService", "method", "InitVirtualWALForCDC", "request", request)
+	response := &InitVirtualWALForCDCResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.cdc.CDCService", "InitVirtualWALForCDC", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "InitVirtualWALForCDC", "response", response)
+
+	return response, nil
+}
+
+func (s *CDCServiceImpl) GetConsistentChanges(request *GetConsistentChangesRequestPB) (*GetConsistentChangesResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.cdc.CDCService", "method", "GetConsistentChanges", "request", request)
+	response := &GetConsistentChangesResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.cdc.CDCService", "GetConsistentChanges", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "GetConsistentChanges", "response", response)
+
+	return response, nil
+}
+
+func (s *CDCServiceImpl) DestroyVirtualWALForCDC(request *DestroyVirtualWALForCDCRequestPB) (*DestroyVirtualWALForCDCResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.cdc.CDCService", "method", "DestroyVirtualWALForCDC", "request", request)
+	response := &DestroyVirtualWALForCDCResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.cdc.CDCService", "DestroyVirtualWALForCDC", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "DestroyVirtualWALForCDC", "response", response)
+
+	return response, nil
+}
+
+func (s *CDCServiceImpl) UpdateAndPersistLSN(request *UpdateAndPersistLSNRequestPB) (*UpdateAndPersistLSNResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.cdc.CDCService", "method", "UpdateAndPersistLSN", "request", request)
+	response := &UpdateAndPersistLSNResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.cdc.CDCService", "UpdateAndPersistLSN", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "UpdateAndPersistLSN", "response", response)
+
+	return response, nil
+}
+
+func (s *CDCServiceImpl) UpdatePublicationTableList(request *UpdatePublicationTableListRequestPB) (*UpdatePublicationTableListResponsePB, error) {
+	s.Log.V(1).Info("sending RPC request", "service", "yb.cdc.CDCService", "method", "UpdatePublicationTableList", "request", request)
+	response := &UpdatePublicationTableListResponsePB{}
+
+	err := s.Messenger.SendMessage("yb.cdc.CDCService", "UpdatePublicationTableList", request.ProtoReflect().Interface(), response.ProtoReflect().Interface())
+	if err != nil {
+		return nil, err
+	}
+
+	s.Log.V(1).Info("received RPC response", "service", "yb.cdc.CDCService", "method", "UpdatePublicationTableList", "response", response)
 
 	return response, nil
 }
