@@ -35,7 +35,7 @@ from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 import subprocess
 
-VERSION = "0.47"
+VERSION = "0.48"
 
 
 
@@ -128,21 +128,40 @@ class EXTERNAL_PLUGIN:
                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                       text=True)
         self.__Get_current_users() # Populates self.external_user_dict 
+        self.process.terminate() # we'll start a new one if necessary 
+        self.process.wait()
 
-        # Code needed to diff with existing LDAP users
-        if self.__Get_Change_List(ldap_data) > 0  and not self.args.dryrun:
-            # Then send command to add/delete users as needed to sync
-            user_json_str, errs = self.process.communicate(input=self.change_list,timeout=10)
-            logging.debug("Ext User update:"+str(user_json_str)[0:250] + "...; ERRORS:"+str(errs))
-            if errs is not None:
-                raise ValueError("External process communication error:"+str(errs))
+        change_count =  self.__Get_Change_List(ldap_data)
+        
+        if change_count == 0:
+            print ("External plugin: LDAP ALready in sync. No changes.")
+            return
+        
+        print ("External plugin: Will apply " + str(change_count) + " changes.")
 
+        if self.args.dryrun:
+            print("DRY RUN. No changes made.")
+            return
+        
+        # Send command to add/delete users as needed to sync
+        self.process = subprocess.Popen(self.commandline, shell=True,
+                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                  text=True)
+        user_json_str, errs = self.process.communicate(input=json.dumps(self.change_list),timeout=10)
+        print ("External plugin:" + str(user_json_str))
+        if errs is not None:
+            print( "External Plugin ERRORS:"+str(errs))
+            raise ValueError("External process communication error:"+str(errs))
+        user_json = json.loads(user_json_str)
+        if user_json.get("success"):
+            return # All is well
+        raise ValueError("External Plugin returned an error(See above)")
 
     #@classmethod
     def __Get_current_users(self):
         logging.debug("Getting External plugin User List..")
         try:
-            user_json_str, errs = self.process.communicate(input='["LISTUSERS"]',timeout=10)
+            user_json_str, errs = self.process.communicate(input='["LISTUSERS"]',timeout=2)
             logging.debug("Ext User list:"+str(user_json_str)[0:250] + "...; ERRORS:"+str(errs))
             if errs is not None:
                 raise ValueError("External process communication error:"+str(errs))
@@ -162,16 +181,29 @@ class EXTERNAL_PLUGIN:
 
         logging.debug("Got "+str(len(self.external_user_dict))+" users from external process")
 
+    def map_group_name(self,gname):
+        # Use args.member_map to return the mapped name for the specified group
+        if self.args.mmap is None:
+            return gname # Nothing to map
+        for mapping in self.args.mmap:
+            regex,target = mapping[0],mapping[1]
+            if re.search(regex, gname) is None:
+               continue
+            return target # Matched !
+        # IF we get here, nothing matched
+        return gname
+
+
     #@classmethod
     def __Get_Change_List(self,ldap_data:dict):
         logging.debug("Calculating External plugin Change List..")
         change_count = 0
-        self.change_list = {"ADDUSERS":{},"DELETEUSERS":[]}
+        self.change_list = {"ADDUSERS":{},"DELETEUSERS":[],"PASSWORD":"Ldap_1234"}
         logging.debug("LDAP Users:" + str(ldap_data.keys()))
         for userField,group_list in ldap_data.items():
             logging.debug("LDAP Usr "+ self.args.ldap_userfield + "="+userField+" Groups:"+group_list[0])
-            if self.external_user_dict.get(userField) == None:
-                self.change_list["ADDUSERS"].update({userField:group_list})
+            if self.external_user_dict.get(userField.lower()) == None:
+                self.change_list["ADDUSERS"].update({userField.lower():self.map_group_name(group_list[0])})
                 change_count += 1
                 continue
         for email in self.external_user_dict.keys():
@@ -181,7 +213,7 @@ class EXTERNAL_PLUGIN:
                  self.change_list["DELETEUSERS"].append(email)
                  change_count += 1
 
-        logging.debug("External Users: ADD:" + str(self.change_list["ADDUSERS"].keys()) +"; DELETE:"+str(self.change_list["DELETEUSERS"]))
+        logging.info("External Users: ADD:" + str(self.change_list["ADDUSERS"].keys()) +"; DELETE:"+str(self.change_list["DELETEUSERS"]))
         return change_count
 
 

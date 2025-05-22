@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # YBA User list/creation/Deletion
-version = "0.11"
+version = "0.12"
 from ast import Dict, parse
 import requests
 import urllib3
@@ -214,42 +214,50 @@ class STDIN_Json_Stream_Processor():
             return
 
 
-        
-
     def Process_dict_part(self,cmd:dict):
         logging.debug ("DEBUG:Processing dict command:"+str(cmd))
+        adduser_count = 0
+        deleteuser_count = 0
+
         if cmd.get("ADDUSERS") is not None:
-            if not isinstance(cmd["ADDUSERS"],list):
-                raise ValueError("ERROR:ADDUSERS: Could not find user list to add")
-            print ('[')
-            for u_json in cmd["ADDUSERS"]:
-                if u_json.get("email") is None:
-                    raise ValueError("ERROR: You must specify email when adding a user")
-                if u_json.get("role") is None:
-                    raise ValueError("ERROR: You must specify role when adding a user="+u_json["email"])
-                role = self.yba.roleManagement.Get_or_create_role_by_name(u_json["role"],allow_create=True)
-                usr=User(uuid=None,email=u_json["email"],creationDate=datetime.today().isoformat(),role=role,password=u_json["password"])
+            if not isinstance(cmd["ADDUSERS"],dict):
+                raise ValueError("ERROR:ADDUSERS: Could not find user dict to add")
+
+            for email in cmd["ADDUSERS"].keys():
+                role = cmd["ADDUSERS"][email]
+                if role is None:
+                    raise ValueError("ERROR: You must specify role when adding a user="+ email)
+                if isinstance(role,list):
+                    raise ValueError("ERROR: Attempt to add a role LIST, instead of a simple value for user "+email)
+                YBArole = self.yba.roleManagement.Get_or_create_role_by_name(role,allow_create=True)
+                new_password = cmd.get("PASSWORD")
+                if new_password is None:
+                    new_password = "*UnSpecified*123" 
+                usr=User(uuid=None,email=email,creationDate=datetime.today().isoformat(),role=YBArole,password=new_password)
                 usr.Create_in_YBA()
-                usr.Print(json=True)
-            print (']')
+                logging.debug("Added user "+email)
+                #usr.Print(json=True)
+                adduser_count+=1
+
 
         if cmd.get("DELETEUSERS") is not None:
             if not isinstance(cmd["DELETEUSERS"],list):
                 raise ValueError("ERROR:DELETEUSERS: Could not find user list to delete")
-            delete_count = 0
-            for u_json in cmd["DELETEUSERS"]:
-                if u_json.get("email") is None:
+
+            for email in cmd["DELETEUSERS"]:
+                if email is None:
                     raise ValueError("ERROR: You must specify email when deleting a user")
                 for u in self.yba.Get_User_List():
-                    if u.email != u_json["email"]:
+                    if u.email != email:
                         continue
-                    delete_count += 1
+                    deleteuser_count += 1
                     u.Delete_from_YBA()
+                    logging.debug("Deleted user "+email)
                     break
-            if delete_count == 0:
-                print ('{"success":false,"Operation":"delete","msg":"Nothing deleted"}')
+            if (deleteuser_count + adduser_count) == 0:
+                print('{"success":false,"added":'+ adduser_count + ',"deleted":'+deleteuser_count +'}' )
             else:
-                print('{"success":true,"Operation":"delete","msg":"' + str(delete_count)+' users deleted"}')
+                print('{"success":true,"added":'+ str(adduser_count) + ',"deleted":'+str(deleteuser_count) +'}' )
             
     #============ R U N   M e t h o d ===
     def Run(self):
@@ -262,6 +270,7 @@ class STDIN_Json_Stream_Processor():
         decoder = JSONDecoder()
 
         while len(stdin) > 0:
+            logging.debug ("DEBUG:input json string:"+ stdin)
             # parsed_json, number of bytes used
             parsed_json, consumed = decoder.raw_decode(stdin)
             # Remove bytes that were consumed in this object ^ 
