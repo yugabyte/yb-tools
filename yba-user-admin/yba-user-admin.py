@@ -1,6 +1,20 @@
 #!/usr/bin/python3
 # YBA User list/creation/Deletion
-version = "0.12"
+version = "0.13"
+"""
+Command-line management of YBA users
+====================================
+
+You can CREATE, DELETE, LIST users by passing the arguments:
+        -mk     -rm     -ls
+use --help to get more useful info.
+
+This uses the YBA API to manage users, so you need the following:
+* API_TOKEN  : You can get/generate this  from the "user profile" in the UI
+* YBA_HOST   : THE URL used to access the YBA .. includes http:// or https://
+
+This requires @dataclass decorators. See https://docs.python.org/3/library/dataclasses.html 
+"""
 from ast import Dict, parse
 import requests
 import urllib3
@@ -117,16 +131,18 @@ class RoleManagement:
     role_by_name: Dict = field(init=False)
     use_new_authz: bool = False
     new_authz_uri:str = "/runtime_config/00000000-0000-0000-0000-000000000000/key/yb.rbac.use_new_authz"
-    role_list = []
+
 
     def __post_init__(self):
         self.yba_api.roleManagement = self
         self.use_new_authz = self.Fine_grained_RBAC()
         logging.debug("DEBUG: RoleManagement: use_new_authz="+str(self.use_new_authz))
         self.role_by_name  = {}
-        if self.use_new_authz:
-            role_list = self.yba_api.Get(y.cust_url + "/rbac/role")
-            # Populate role_by_name once we know what this looks like 
+        #if self.use_new_authz:
+        role_list = self.yba_api.Get(self.yba_api.cust_url + "/rbac/role")
+        for r in role_list:
+            self.role_by_name[ r["name"] ] = Role(mgt=self,yba_api=self.yba_api,name=r["name"],uuid=r["roleUUID"])
+
 
     def Get_or_create_role_by_name(self,name:str,allow_create:bool=True) -> Role:
         if self.role_by_name.get(name) is None:

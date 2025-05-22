@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright © 2024 YugaByte, Inc. and Contributors
+# Copyright © 2025 YugaByte, Inc. and Contributors
 #
 # Licensed under the Polyform Free Trial License 1.0.0 (the "License"); you
 # may not use this file except in compliance with the License. You
@@ -8,7 +8,7 @@
 #
 # https://github.com/YugaByte/yugabyte-db/blob/master/licenses/POLYFORM-FREE-TRIAL-LICENSE-1.0.0.txt
 """
-LDAP Sync script for Yugabyte YCQL and YSQL.
+LDAP Sync script for Yugabyte YCQL,YSQL, and external accounts(YBA)
 """
 import sys
 import os
@@ -35,7 +35,7 @@ from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 import subprocess
 
-VERSION = "0.48"
+VERSION = "0.50"
 
 
 
@@ -181,35 +181,43 @@ class EXTERNAL_PLUGIN:
 
         logging.debug("Got "+str(len(self.external_user_dict))+" users from external process")
 
-    def map_group_name(self,gname):
+    def map_name(self,orig_name):
         # Use args.member_map to return the mapped name for the specified group
         if self.args.mmap is None:
-            return gname # Nothing to map
+            return orig_name # Nothing to map
         for mapping in self.args.mmap:
-            regex,target = mapping[0],mapping[1]
-            if re.search(regex, gname) is None:
+            regex = re.compile(mapping[0])
+            if regex.search(orig_name) is None:
                continue
-            return target # Matched !
+            if '\\' in mapping[1]:
+                return regex.sub(mapping[1],orig_name) # Matched and substituted
+            else:
+                return mapping[1]
         # IF we get here, nothing matched
-        return gname
+        return orig_name
 
 
     #@classmethod
     def __Get_Change_List(self,ldap_data:dict):
         logging.debug("Calculating External plugin Change List..")
         change_count = 0
+        ldap_mapped_user_dict = {}
         self.change_list = {"ADDUSERS":{},"DELETEUSERS":[],"PASSWORD":"Ldap_1234"}
         logging.debug("LDAP Users:" + str(ldap_data.keys()))
         for userField,group_list in ldap_data.items():
-            logging.debug("LDAP Usr "+ self.args.ldap_userfield + "="+userField+" Groups:"+group_list[0])
-            if self.external_user_dict.get(userField.lower()) == None:
-                self.change_list["ADDUSERS"].update({userField.lower():self.map_group_name(group_list[0])})
+            mapped_user = self.map_name(userField.lower())
+            mapped_group= self.map_name(group_list[0])
+            logging.debug("LDAP Usr "+ self.args.ldap_userfield + "=" + userField
+                          + "=>" + mapped_user+"; Group[0]:"+group_list[0] +"=>"+mapped_group)
+            ldap_mapped_user_dict[mapped_user]=1
+            if self.external_user_dict.get(mapped_user) == None:
+                self.change_list["ADDUSERS"].update({mapped_user:mapped_group})
                 change_count += 1
                 continue
         for email in self.external_user_dict.keys():
             if self.external_user_dict[email]["role"] == "SuperAdmin":
                 continue # We do not want to, and cannot delete super admins
-            if ldap_data.get(email) is None:
+            if ldap_mapped_user_dict.get(email) is None:
                  self.change_list["DELETEUSERS"].append(email)
                  change_count += 1
 
