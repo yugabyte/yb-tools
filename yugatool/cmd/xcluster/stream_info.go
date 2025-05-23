@@ -65,7 +65,7 @@ func streamInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) error
 	c := ctx.Client
 
 	// TODO: set tableId if requested
-	listCDCStreamsResponse, err := c.Master.MasterService.ListCDCStreams(&master.ListCDCStreamsRequestPB{
+	listCDCStreamsResponse, err := c.Master.MasterReplicationService.ListCDCStreams(&master.ListCDCStreamsRequestPB{
 		TableId: nil,
 	})
 	if err != nil {
@@ -89,25 +89,27 @@ func streamInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) error
 		}
 
 		if stream.GetTableId() == nil {
-			ctx.Log.Error(nil, "stream does not have a TableID", "stream", stream)
+			ctx.Log.Error(nil, "stream has no TableIDs", "stream", stream)
 			appendStreamReport(stream, nil)
 			continue
 		}
 
-		tableSchemaResponse, err := c.Master.MasterService.GetTableSchema(&master.GetTableSchemaRequestPB{
-			Table: &master.TableIdentifierPB{
-				TableId: stream.GetTableId(),
-			},
-		})
-		if err != nil {
-			ctx.Log.Error(err, "failed to get table schema", "stream", stream)
-		}
+		for _, table := range stream.GetTableId() {
+			tableSchemaResponse, err := c.Master.MasterDDLService.GetTableSchema(&master.GetTableSchemaRequestPB{
+				Table: &master.TableIdentifierPB{
+					TableId: table,
+				},
+			})
+			if err != nil {
+				ctx.Log.Error(err, "failed to get table schema", "stream", stream)
+			}
 
-		if tableSchemaResponse.GetError() != nil {
-			ctx.Log.Error(fmt.Errorf("%s", tableSchemaResponse.GetError()), "failed to get table schema")
-		}
+			if tableSchemaResponse.GetError() != nil {
+				ctx.Log.Error(fmt.Errorf("%s", tableSchemaResponse.GetError()), "failed to get table schema")
+			}
 
-		appendStreamReport(stream, tableSchemaResponse)
+			appendStreamReport(stream, tableSchemaResponse)
+		}
 	}
 
 	cdcStreamReport := format.Output{

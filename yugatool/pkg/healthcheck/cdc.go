@@ -102,7 +102,7 @@ type CDCProducerStreamReport struct {
 }
 
 func NewCDCProducerStreamReport(log logr.Logger, consumerClient *client.YBClient, producerClient *client.YBClient, streamID string, streamEntry *cdc.StreamEntryPB) (*CDCProducerStreamReport, error) {
-	consumerTableSchema, err := consumerClient.Master.MasterService.GetTableSchema(&master.GetTableSchemaRequestPB{
+	consumerTableSchema, err := consumerClient.Master.MasterDDLService.GetTableSchema(&master.GetTableSchemaRequestPB{
 		Table: &master.TableIdentifierPB{
 			TableId: []byte(streamEntry.ConsumerTableId),
 		},
@@ -111,7 +111,7 @@ func NewCDCProducerStreamReport(log logr.Logger, consumerClient *client.YBClient
 		return nil, err
 	}
 
-	producerTableSchema, err := producerClient.Master.MasterService.GetTableSchema(&master.GetTableSchemaRequestPB{
+	producerTableSchema, err := producerClient.Master.MasterDDLService.GetTableSchema(&master.GetTableSchemaRequestPB{
 		Table: &master.TableIdentifierPB{
 			TableId: []byte(streamEntry.ProducerTableId),
 		},
@@ -267,7 +267,7 @@ func GetMissingTablets(client *client.YBClient, tablets []string) ([]string, err
 	for _, tablet := range tablets {
 		tabletBytes = append(tabletBytes, []byte(tablet))
 	}
-	response, err := client.Master.MasterService.GetTabletLocations(&master.GetTabletLocationsRequestPB{
+	response, err := client.Master.MasterClientService.GetTabletLocations(&master.GetTabletLocationsRequestPB{
 		TabletIds: tabletBytes,
 	})
 	if err != nil {
@@ -299,16 +299,16 @@ func GetReplicatedIndexes(log logr.Logger, client *client.YBClient, streamID str
 		tabletBytes = append(tabletBytes, []byte(tablet))
 	}
 
-	response, err := client.Master.MasterService.GetTabletLocations(&master.GetTabletLocationsRequestPB{
+	response, err := client.Master.MasterClientService.GetTabletLocations(&master.GetTabletLocationsRequestPB{
 		TabletIds: tabletBytes,
 	})
 	if err != nil {
 		return replicatedIndexes, err
 	}
-	for _, tablet := range response.TabletLocations {
-		if len(tablet.Replicas) > 0 {
-			for _, replica := range tablet.Replicas {
-				if replica.GetRole() == common.RaftPeerPB_LEADER {
+	for _, tabletInstance := range response.TabletLocations {
+		if len(tabletInstance.Replicas) > 0 {
+			for _, replica := range tabletInstance.Replicas {
+				if replica.GetRole() == common.PeerRole_LEADER {
 					host, err := client.GetHostByUUID(replica.GetTsInfo().GetPermanentUuid())
 					if err != nil {
 						return replicatedIndexes, err
@@ -316,19 +316,19 @@ func GetReplicatedIndexes(log logr.Logger, client *client.YBClient, streamID str
 
 					checkpoint, err := host.CDCService.GetCheckpoint(&cdc.GetCheckpointRequestPB{
 						StreamId: []byte(streamID),
-						TabletId: tablet.TabletId,
+						TabletId: tabletInstance.TabletId,
 					})
 					if err != nil {
 						return replicatedIndexes, err
 					}
 					// The checkpoint location of the stream will only show up on the producer
 					if checkpoint.Error == nil {
-						latestOpID, err := host.CDCService.GetLatestEntryOpId(&cdc.GetLatestEntryOpIdRequestPB{TabletId: tablet.TabletId})
+						latestOpID, err := host.CDCService.GetLatestEntryOpId(&cdc.GetLatestEntryOpIdRequestPB{TabletId: tabletInstance.TabletId})
 						if err != nil {
 							return replicatedIndexes, err
 						}
 						replicatedIndexes.ReplicatedIndexList = append(replicatedIndexes.GetReplicatedIndexList(), &healthcheck.CDCReplicatedIndexPB{
-							Tablet:             NewString(string(tablet.GetTabletId())),
+							Tablet:             NewString(string(tabletInstance.GetTabletId())),
 							LatestOpid:         latestOpID.GetOpId(),
 							CheckpointLocation: checkpoint.GetCheckpoint().GetOpId(),
 						})

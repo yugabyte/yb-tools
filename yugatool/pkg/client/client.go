@@ -4,6 +4,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"github.com/yugabyte/yb-tools/yugatool/api/yb/master"
+	"github.com/yugabyte/yb-tools/yugatool/api/yugatool/config"
+	"github.com/yugabyte/yb-tools/yugatool/pkg/client/dial"
+	"github.com/yugabyte/yb-tools/yugatool/pkg/util"
 	"sync"
 
 	"github.com/blang/vfs"
@@ -11,10 +15,6 @@ import (
 	"github.com/google/uuid"
 	. "github.com/icza/gox/gox"
 	"github.com/pkg/errors"
-	"github.com/yugabyte/yb-tools/yugatool/api/yb/master"
-	"github.com/yugabyte/yb-tools/yugatool/api/yugatool/config"
-	"github.com/yugabyte/yb-tools/yugatool/pkg/client/dial"
-	"github.com/yugabyte/yb-tools/yugatool/pkg/util"
 )
 
 const DefaultMasterPort = 7100
@@ -58,7 +58,7 @@ func (c *YBClient) Connect() error {
 			c.Log.V(1).Info("could not connect", "host", m, "error", err)
 			continue
 		}
-		tabletServers, err := hostState.MasterService.ListTabletServers(&master.ListTabletServersRequestPB{PrimaryOnly: NewBool(false)})
+		tabletServers, err := hostState.MasterClusterService.ListTabletServers(&master.ListTabletServersRequestPB{PrimaryOnly: NewBool(false)})
 		if err != nil {
 			return err
 		}

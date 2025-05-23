@@ -75,7 +75,7 @@ func getTablesToBootstrap(ctx *cmdutil.YugatoolContext, keyspaceName string) (*m
 		}
 	}
 
-	tables, err := ctx.Client.Master.MasterService.ListTables(&master.ListTablesRequestPB{
+	tables, err := ctx.Client.Master.MasterDDLService.ListTables(&master.ListTablesRequestPB{
 		Namespace:           namespacevar,
 		ExcludeSystemTables: NewBool(true),
 		RelationTypeFilter: []master.RelationType{

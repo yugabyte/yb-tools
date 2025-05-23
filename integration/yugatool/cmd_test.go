@@ -2,6 +2,7 @@ package yugatool_test
 
 import (
 	"encoding/json"
+	"github.com/yugabyte/yb-tools/yugatool/api/yb/tablet"
 
 	"github.com/google/uuid"
 	. "github.com/icza/gox/gox"
@@ -160,7 +161,7 @@ var _ = Describe("Yugatool Integration Tests", func() {
 
 						universe = CreateTestUniverseIfNotExists()
 
-						resp, err := universe.Master.MasterService.ChangeLoadBalancerState(&master.ChangeLoadBalancerStateRequestPB{
+						resp, err := universe.Master.MasterClusterService.ChangeLoadBalancerState(&master.ChangeLoadBalancerStateRequestPB{
 							IsEnabled: NewBool(false),
 						})
 						Expect(err).NotTo(HaveOccurred())
@@ -198,13 +199,13 @@ var _ = Describe("Yugatool Integration Tests", func() {
 						Expect(follower).NotTo(BeNil())
 
 						changeConfigType := consensus.ChangeConfigType_REMOVE_SERVER
-						deleteType := common.TabletDataState_TABLET_DATA_TOMBSTONED
+						deleteType := tablet.TabletDataState_TABLET_DATA_TOMBSTONED
 
 						changeConfigResp, err := leader.ConsensusService.ChangeConfig(&consensus.ChangeConfigRequestPB{
 							DestUuid: leader.Status.NodeInstance.PermanentUuid,
 							TabletId: tabletToDelete,
 							Type:     &changeConfigType,
-							Server:   &common.RaftPeerPB{PermanentUuid: follower.Status.NodeInstance.PermanentUuid},
+							Server:   &consensus.RaftPeerPB{PermanentUuid: follower.Status.NodeInstance.PermanentUuid},
 						})
 						Expect(err).NotTo(HaveOccurred())
 						Expect(changeConfigResp.Error).To(BeNil())
@@ -222,7 +223,7 @@ var _ = Describe("Yugatool Integration Tests", func() {
 
 					})
 					JustBeforeEach(func() {
-						resp, err := universe.Master.MasterService.ChangeLoadBalancerState(&master.ChangeLoadBalancerStateRequestPB{
+						resp, err := universe.Master.MasterClusterService.ChangeLoadBalancerState(&master.ChangeLoadBalancerStateRequestPB{
 							IsEnabled: NewBool(true),
 						})
 						Expect(err).NotTo(HaveOccurred())
@@ -231,8 +232,8 @@ var _ = Describe("Yugatool Integration Tests", func() {
 					It("returns tombstoned tablets", func() {
 						hasTombstoned := false
 						for _, report := range tabletReports {
-							for _, tablet := range report.Content {
-								if tablet.Tablet.GetTabletStatus().GetTabletDataState() == common.TabletDataState_TABLET_DATA_TOMBSTONED {
+							for _, tabletInstance := range report.Content {
+								if tabletInstance.Tablet.GetTabletStatus().GetTabletDataState() == tablet.TabletDataState_TABLET_DATA_TOMBSTONED {
 									hasTombstoned = true
 								}
 							}

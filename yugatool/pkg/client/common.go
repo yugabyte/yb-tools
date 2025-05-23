@@ -19,7 +19,10 @@ type HostState struct {
 
 	Status                   *server.ServerStatusPB
 	GenericService           server.GenericService
-	MasterService            master.MasterService
+	MasterClusterService     master.MasterCluster
+	MasterClientService      master.MasterClient
+	MasterDDLService         master.MasterDdl
+	MasterReplicationService master.MasterReplication
 	TabletServerService      tserver.TabletServerService
 	TabletServerAdminService tserver.TabletServerAdminService
 	ConsensusService         consensus.ConsensusService
@@ -41,7 +44,7 @@ func NewHostState(log logr.Logger, host *common.HostPortPB, dialer dial.Dialer) 
 		Messenger: &message.MessengerImpl{Session: s},
 	}
 
-	hostState.MasterService = &master.MasterServiceImpl{
+	hostState.MasterClusterService = &master.MasterClusterImpl{
 		Log:       log,
 		Messenger: &message.MessengerImpl{Session: s},
 	}

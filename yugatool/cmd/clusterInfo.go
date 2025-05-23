@@ -18,6 +18,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/yugabyte/yb-tools/yugatool/api/yb/tablet"
 	"os"
 	"strings"
 	"sync"
@@ -25,7 +26,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/yugabyte/yb-tools/pkg/format"
-	"github.com/yugabyte/yb-tools/yugatool/api/yb/common"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/consensus"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/master"
 	"github.com/yugabyte/yb-tools/yugatool/api/yb/tserver"
@@ -119,7 +119,7 @@ func clusterInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) erro
 		return err
 	}
 
-	masterClusterConfig, err := c.Master.MasterService.GetMasterClusterConfig(&master.GetMasterClusterConfigRequestPB{})
+	masterClusterConfig, err := c.Master.MasterClusterService.GetMasterClusterConfig(&master.GetMasterClusterConfigRequestPB{})
 	if err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func clusterInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) erro
 		return err
 	}
 
-	listMasters, err := c.Master.MasterService.ListMasters(&master.ListMastersRequestPB{})
+	listMasters, err := c.Master.MasterClusterService.ListMasters(&master.ListMastersRequestPB{})
 	if err != nil {
 		return err
 	}
@@ -172,7 +172,7 @@ func clusterInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) erro
 		return err
 	}
 
-	tabletServers, err := c.Master.MasterService.ListTabletServers(&master.ListTabletServersRequestPB{})
+	tabletServers, err := c.Master.MasterClusterService.ListTabletServers(&master.ListTabletServersRequestPB{})
 	if err != nil {
 		return err
 	}
@@ -237,11 +237,11 @@ func clusterInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) erro
 				}
 
 				var tabletinfos []*TabletInfo
-				for _, tablet := range tablets.GetStatusAndSchema() {
+				for _, tabletInstance := range tablets.GetStatusAndSchema() {
 					pb := consensus.GetConsensusStateRequestPB{
 						DestUuid: host.Status.GetNodeInstance().GetPermanentUuid(),
-						TabletId: []byte(tablet.GetTabletStatus().GetTabletId()),
-						Type:     common.ConsensusConfigType_CONSENSUS_CONFIG_COMMITTED.Enum(),
+						TabletId: []byte(tabletInstance.GetTabletStatus().GetTabletId()),
+						Type:     consensus.ConsensusConfigType_CONSENSUS_CONFIG_COMMITTED.Enum(),
 					}
 					consensusState, err := host.ConsensusService.GetConsensusState(&pb)
 					if err != nil {
@@ -249,14 +249,14 @@ func clusterInfo(ctx *cmdutil.YugatoolContext, options *ClusterInfoOptions) erro
 						return
 					}
 					tabletinfos = append(tabletinfos, &TabletInfo{
-						Tablet:         tablet,
+						Tablet:         tabletInstance,
 						ConsensusState: consensusState,
 					})
 				}
 
 				filter := &strings.Builder{}
 				if !options.ShowTombstonedFilter {
-					addFilter(filter, fmt.Sprintf(`@.tablet.tablet_status.tabletDataState != "%s"`, common.TabletDataState_TABLET_DATA_TOMBSTONED.String()))
+					addFilter(filter, fmt.Sprintf(`@.tablet.tablet_status.tabletDataState != "%s"`, tablet.TabletDataState_TABLET_DATA_TOMBSTONED.String()))
 				}
 
 				if options.TableFilter != "" {

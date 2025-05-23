@@ -50,7 +50,7 @@ func XclusterConsumerCheck(ctx *cmdutil.YugatoolContext) *cobra.Command {
 }
 
 func runXClusterConsumerCheck(cmd *cobra.Command, log logr.Logger, consumerClient *client.YBClient) error {
-	clusterConfig, err := consumerClient.Master.MasterService.GetMasterClusterConfig(&master.GetMasterClusterConfigRequestPB{})
+	clusterConfig, err := consumerClient.Master.MasterClusterService.GetMasterClusterConfig(&master.GetMasterClusterConfigRequestPB{})
 	if err != nil {
 		return err
 	}

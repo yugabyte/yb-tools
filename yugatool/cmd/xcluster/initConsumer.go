@@ -76,7 +76,7 @@ func runInitConsumer(ctx *cmdutil.YugatoolContext, options *InitConsumerOptions)
 		return err
 	}
 
-	clusterInfoCmd, err := ctx.Client.Master.MasterService.GetMasterClusterConfig(&master.GetMasterClusterConfigRequestPB{})
+	clusterInfoCmd, err := ctx.Client.Master.MasterClusterService.GetMasterClusterConfig(&master.GetMasterClusterConfigRequestPB{})
 	if err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ func runInitConsumer(ctx *cmdutil.YugatoolContext, options *InitConsumerOptions)
 
 			for i, table := range batch {
 				if table.TableType.Number() == common.TableType_YQL_TABLE_TYPE.Number() {
-					streams, err := ctx.Client.Master.MasterService.ListCDCStreams(&master.ListCDCStreamsRequestPB{
+					streams, err := ctx.Client.Master.MasterReplicationService.ListCDCStreams(&master.ListCDCStreamsRequestPB{
 						TableId: NewString(string(table.GetId())),
 					})
 					if err != nil {
