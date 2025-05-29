@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.36";
+our $VERSION = "1.37";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -42,7 +42,7 @@ my %option_specs=( # Specifies info for globals saved in %opt. TYPE=>undef means
     DAEMON        =>{TYPE=>'!',  DEFAULT=> 1,HELP=>"Only for debugging(--NODAEMON)"},
     LOCKFILE      =>{TYPE=>'=s', DEFAULT=> "/var/lock/querymonitor.lock", HELP=>"Name of lock file"}, # UNIV_UUID will be appended
     LOCK_FH       =>{TYPE=>undef,DEFAULT=> undef,},
-    MAX_QUERY_LEN =>{TYPE=>'=i', DEFAULT=> 2048, ALT=>"MAXQL|MAXL",},
+    MAX_QUERY_LEN =>{TYPE=>'=i', DEFAULT=> 4096, ALT=>"MAXQL|MAXL",},
     MAX_ERRORS    =>{TYPE=>'=i', DEFAULT=> 10,},
     SANITIZE      =>{TYPE=>'!',  DEFAULT=> 0,   HELP=>"Remove PII by truncating to WHERE clause"},
     ANALYZE       =>{TYPE=>'=s', DEFAULT=> undef, ALT=>"PROCESS", HELP=>"ANALYSIS mode Input File-name ('..mime.gz' ) to process through sqlite"},
@@ -55,6 +55,7 @@ my %option_specs=( # Specifies info for globals saved in %opt. TYPE=>undef means
     RPCZ          =>{TYPE=>'!',  DEFAULT=> 1,     HELP=>"If set, get query from each node, instead of /live_queries"},
     MASTER_LEADER =>{TYPE=>undef,DEFAULT=>undef, },  # Obtained and Used internally
     DBINFO        =>{TYPE=>undef,DEFAULT=>undef, },  # Namespaces, tablespaces, tables, tablets .. Obtained and Used internally
+    COMPACT       =>{TYPE=>"!", DEFAULT=>0, HELP=>"Compact whitespace in the SQL query during collection ."},
 );
 my %opt = map {$_=> $option_specs{$_}{DEFAULT}} keys %option_specs;
 
@@ -130,6 +131,7 @@ sub Main_loop_Iteration{
 			 my $sanitized_query = $opt{SANITIZE} ? SQL_Sanitize($subquery) : $subquery;
 			 $sanitized_query=~s/^\s+//; # Zap leading spaces 
              #print join(",",$ts, $type,$q->{nodeName},$q->{id},$subquery),"\n";
+       $opt{COMPACT} and do {} while($sanitized_query =~s/\s\s/\s/g); # Compact whitespace
 			 $output->WriteQuery($ts, $type, $q, $sanitized_query);
 		   }
        }
@@ -1208,8 +1210,8 @@ sub new{
 	for(qw|API_TOKEN  CUST_UUID UNIV_UUID|){
         (my $value=$opt{$_})=~tr/-'"//d; # Extract and zap dashes,quotes
 		my $len = length($value);
-		next if $len == 32; # Expecting these to be exactly 32 bytes 
-        warn "WARNING: Expecting 32 valid bytes in Option $_=$opt{$_} but found $len bytes. \n";
+		next if $len >= 32; # Expecting something here
+    warn "WARNING: Expecting valid bytes in Option $_=$opt{$_} but found $len bytes. \n";
 		sleep 2;
     }	
 	my $self =bless {map {$_ => $opt{$_}} qw|HTTPCONNECT UNIV_UUID API_TOKEN YBA_HOST CUST_UUID| }, $class;
