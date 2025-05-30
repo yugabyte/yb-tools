@@ -1,11 +1,12 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.36";
+our $VERSION = "1.39";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
-# Monitor running queries
-# collect gzipped JSON file for offline analysis
+# Runs as a daemon, monitoring running queries and tserver metrics.
+# Collects gzipped mime.gz file for offline analysis
+# In --analysis mode, read the mime.gz file and creates a sqlie DB and produces reports.
 
 __HELPTEXT__
 use strict;
@@ -36,13 +37,13 @@ my %option_specs=( # Specifies info for globals saved in %opt. TYPE=>undef means
     CURL          =>{TYPE=>'=s', DEFAULT=> "curl", HELP=>"Full path to curl command"},
     FLAGFILE      =>{TYPE=>'=s', DEFAULT=> "querymonitor.defaultflags", HELP=>"Name of file containing this program's options (--xx)"},
     OUTPUT        =>{TYPE=>'=s', DEFAULT=> undef, HELP=>"Output File name. Defaults to queries.<YMD>.<Univ>.mime.gz. Can specify STDOUT in ANALYZE mode"},
-    DEBUG         =>{TYPE=>'!',  DEFAULT=> 0,},
+    DEBUG         =>{TYPE=>'!',  DEFAULT=> 0, HELP=>"Debug mode. Prints extra info."},
     HELP          =>{TYPE=>'!',  DEFAULT=> 0,},
     VERSION       =>{TYPE=>'!',  DEFAULT=> 0,},
-    DAEMON        =>{TYPE=>'!',  DEFAULT=> 1,HELP=>"Only for debugging(--NODAEMON)"},
+    DAEMON        =>{TYPE=>'!',  DEFAULT=> 1,HELP=>"Only for debugging(To turn off, use --NODAEMON)"},
     LOCKFILE      =>{TYPE=>'=s', DEFAULT=> "/var/lock/querymonitor.lock", HELP=>"Name of lock file"}, # UNIV_UUID will be appended
     LOCK_FH       =>{TYPE=>undef,DEFAULT=> undef,},
-    MAX_QUERY_LEN =>{TYPE=>'=i', DEFAULT=> 2048, ALT=>"MAXQL|MAXL",},
+    MAX_QUERY_LEN =>{TYPE=>'=i', DEFAULT=> 4096, ALT=>"MAXQL|MAXL", HELP=>"Maximum length of a query to capture."},
     MAX_ERRORS    =>{TYPE=>'=i', DEFAULT=> 10,},
     SANITIZE      =>{TYPE=>'!',  DEFAULT=> 0,   HELP=>"Remove PII by truncating to WHERE clause"},
     ANALYZE       =>{TYPE=>'=s', DEFAULT=> undef, ALT=>"PROCESS", HELP=>"ANALYSIS mode Input File-name ('..mime.gz' ) to process through sqlite"},
@@ -55,6 +56,7 @@ my %option_specs=( # Specifies info for globals saved in %opt. TYPE=>undef means
     RPCZ          =>{TYPE=>'!',  DEFAULT=> 1,     HELP=>"If set, get query from each node, instead of /live_queries"},
     MASTER_LEADER =>{TYPE=>undef,DEFAULT=>undef, },  # Obtained and Used internally
     DBINFO        =>{TYPE=>undef,DEFAULT=>undef, },  # Namespaces, tablespaces, tables, tablets .. Obtained and Used internally
+    COMPACT       =>{TYPE=>"!", DEFAULT=>0, HELP=>"Compact whitespace in the SQL query during collection ."},
 );
 my %opt = map {$_=> $option_specs{$_}{DEFAULT}} keys %option_specs;
 
@@ -611,7 +613,8 @@ sub Extract_nodes_From_Universe{ # CLASS method
        push @node, my $thisnode = {map({$_=>$n->{$_}||''} qw|nodeIdx nodeName nodeUuid azUuid isMaster
                                   	   isTserver ysqlServerHttpPort yqlServerHttpPort state tserverHttpPort 
 									   tserverRpcPort masterHttpPort masterRpcPort nodeExporterPort|),
-	                              map({$_=>$n->{cloudInfo}{$_}} qw|private_ip public_ip az region |) };
+	                              map({$_=>$n->{cloudInfo}{$_}} qw|private_ip public_ip az region |),
+                                map({$_=>""} qw|tserver_uuid master_uuid|) };
        $thisnode->{$_} =~tr/-//d for grep {/uuid/i} keys %$thisnode;
        $callback and $callback->($thisnode, $count);
        $count++;
@@ -778,9 +781,9 @@ sub Handle_ENTITIES_Data{
 	}
 	$opt{DEBUG} and printf "--DEBUG: %d Keyspaces, %d tables, %d tablets\n", 
 	                     scalar(@{ $bj->{keyspaces} }),scalar(@{ $bj->{tables} }), scalar(@{ $bj->{tablets} });
-    # Fixup Node UUIDs : These are not in the Universe JSON - so we update from tablets 
+    # Fixup tserver UUIDs : These are not in the Universe JSON - so we update from tablets 
 	print {$self->{OUTPUT_FH}} "UPDATE NODE ",
-       "SET nodeUuid=(select server_uuid FROM tablets ",
+       "SET tserver_uuid=(select server_uuid FROM tablets ",
            "WHERE  substr(addr,1,instr(addr,':')-1) = private_ip limit 1);\n";
 }
 
@@ -1208,14 +1211,15 @@ sub new{
 	for(qw|API_TOKEN  CUST_UUID UNIV_UUID|){
         (my $value=$opt{$_})=~tr/-'"//d; # Extract and zap dashes,quotes
 		my $len = length($value);
-		next if $len == 32; # Expecting these to be exactly 32 bytes 
-        warn "WARNING: Expecting 32 valid bytes in Option $_=$opt{$_} but found $len bytes. \n";
+    next if $len == 32  or  $len >= 64; # Expecting these to be exactly 32 or 64 bytes 
+    warn "WARNING: Expecting 32/64 valid bytes in Option $_=$opt{$_} but found $len bytes. \n";
 		sleep 2;
     }	
 	my $self =bless {map {$_ => $opt{$_}} qw|HTTPCONNECT UNIV_UUID API_TOKEN YBA_HOST CUST_UUID| }, $class;
 	my $http_prefix = $opt{YBA_HOST} =~m/^http/i ? "" : "HTTP://";
-    $self->{BASE_URL_API_CUSTOMER} = "${http_prefix}$opt{YBA_HOST}/api/customers/$opt{CUST_UUID}/universes/$opt{UNIV_UUID}";
-	$self->{BASE_URL_UNIVERSE}     = "${http_prefix}$opt{YBA_HOST}/universes/$opt{UNIV_UUID}";
+  $self->{YBA_HOST}=~s|/$||; # Zap trailing slash, if any 
+  $self->{BASE_URL_API_V1} = "$self->{YBA_HOST}/api/v1";
+	$self->{BASE_URL_UNIVERSE}     = "$self->{YBA_HOST}/universes/$opt{UNIV_UUID}";
 	$http_prefix ||= substr($opt{YBA_HOST},0,5); # HTTP: or HTTPS
 	if ($self->{HTTPCONNECT} eq "curl"){
 		  $self->{curl_base_cmd} = join " ", $opt{CURL}, 
@@ -1224,23 +1228,46 @@ sub new{
 		  if ($opt{DEBUG}){
 			 print "--DEBUG:CURL base CMD: $self->{curl_base_cmd}\n";
 		  }
-		  return $self;
+		  #return $self;
+  }else{
+      if ($http_prefix =~/^https/i){
+      my ($ok, $why) = HTTP::Tiny->can_ssl();
+        if (not $ok){
+            print "ERROR: HTTPS requested , but perl modules are insufficient:\n$why\n";
+        print "You can avoid this error, if you use the (less efficient) '--HTTPCONNECT=curl' option\n";
+        die "ERROR: HTTP::Tiny module dependencies not satisfied for HTTPS.";
+        }		   
     }
-    if ($http_prefix =~/^https/i){
-	   my ($ok, $why) = HTTP::Tiny->can_ssl();
-       if (not $ok){
-          print "ERROR: HTTPS requested , but perl modules are insufficient:\n$why\n";
-		  print "You can avoid this error, if you use the (less efficient) '--HTTPCONNECT=curl' option\n";
-		  die "ERROR: HTTP::Tiny module dependencies not satisfied for HTTPS.";
-       }		   
-	}
-	$self->{HT} = HTTP::Tiny->new( default_headers => {
+	  $self->{HT} = HTTP::Tiny->new( default_headers => {
                          'X-AUTH-YW-API-TOKEN' => $opt{API_TOKEN},
 						 'Content-Type'      => 'application/json',
 						 # 'max_size'        => 5*1024*1024, # 5MB 
 	                  });
+  }
 
-    return $self;
+  eval { $self->{YBA_JSON} = $self->Get("/customers","BASE_URL_API_V1") };
+  if ($@  or  (ref $self->{YBA_JSON} eq "HASH" and $self->{YBA_JSON}{error})){
+     die "ERROR:Unable to `get` YBA API customer info - Bad API_TOKEN?:$@"; 
+  }
+  ## All is well - we got the info in $opt{YBA_JSON}
+  if (scalar(@{ $self->{YBA_JSON} }) == 1){
+     $opt{CUST_UUID} = $self->{CUST_UUID} = $self->{YBA_JSON}[0]{uuid}; # Simple - single cust.
+  }elsif (not $opt{CUST_UUID}){
+      warn "WARNING: --CUST_UUID is not specified, and multiple customers exist .. selecting First(".$self->{YBA_JSON}[0]{name}.").\n";
+      $opt{CUST_UUID} = $self->{CUST_UUID} = $self->{YBA_JSON}[0]{uuid};
+  }else{
+     for my $c(@{ $self->{YBA_JSON} }){
+       $opt{DEBUG} and print "--DEBUG: CUSTOMER:$c->{uuid} = '$c->{name}'.\n";
+        next unless $c->{uuid} eq $opt{CUST_UUID} ;
+        $opt{CUST_UUID} = $c->{uuid};
+        last;
+     }
+     die "ERROR: Customer '$opt{CUST_UUID}' was not found (Run with --debug to list)" unless $opt{CUST_UUID}; 
+  }
+
+  $self->{BASE_URL_API_CUSTOMER} = "$self->{YBA_HOST}/api/customers/$opt{CUST_UUID}/universes/$opt{UNIV_UUID}";
+
+  return $self;
 }
 
 sub Get{
