@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "1.38";
+our $VERSION = "1.39";
 my $HELP_TEXT = << "__HELPTEXT__";
 #    querymonitor.pl  Version $VERSION
 #    ===============
@@ -37,13 +37,13 @@ my %option_specs=( # Specifies info for globals saved in %opt. TYPE=>undef means
     CURL          =>{TYPE=>'=s', DEFAULT=> "curl", HELP=>"Full path to curl command"},
     FLAGFILE      =>{TYPE=>'=s', DEFAULT=> "querymonitor.defaultflags", HELP=>"Name of file containing this program's options (--xx)"},
     OUTPUT        =>{TYPE=>'=s', DEFAULT=> undef, HELP=>"Output File name. Defaults to queries.<YMD>.<Univ>.mime.gz. Can specify STDOUT in ANALYZE mode"},
-    DEBUG         =>{TYPE=>'!',  DEFAULT=> 0,},
+    DEBUG         =>{TYPE=>'!',  DEFAULT=> 0, HELP=>"Debug mode. Prints extra info."},
     HELP          =>{TYPE=>'!',  DEFAULT=> 0,},
     VERSION       =>{TYPE=>'!',  DEFAULT=> 0,},
-    DAEMON        =>{TYPE=>'!',  DEFAULT=> 1,HELP=>"Only for debugging(--NODAEMON)"},
+    DAEMON        =>{TYPE=>'!',  DEFAULT=> 1,HELP=>"Only for debugging(To turn off, use --NODAEMON)"},
     LOCKFILE      =>{TYPE=>'=s', DEFAULT=> "/var/lock/querymonitor.lock", HELP=>"Name of lock file"}, # UNIV_UUID will be appended
     LOCK_FH       =>{TYPE=>undef,DEFAULT=> undef,},
-    MAX_QUERY_LEN =>{TYPE=>'=i', DEFAULT=> 2048, ALT=>"MAXQL|MAXL",},
+    MAX_QUERY_LEN =>{TYPE=>'=i', DEFAULT=> 4096, ALT=>"MAXQL|MAXL", HELP=>"Maximum length of a query to capture."},
     MAX_ERRORS    =>{TYPE=>'=i', DEFAULT=> 10,},
     SANITIZE      =>{TYPE=>'!',  DEFAULT=> 0,   HELP=>"Remove PII by truncating to WHERE clause"},
     ANALYZE       =>{TYPE=>'=s', DEFAULT=> undef, ALT=>"PROCESS", HELP=>"ANALYSIS mode Input File-name ('..mime.gz' ) to process through sqlite"},
@@ -56,6 +56,7 @@ my %option_specs=( # Specifies info for globals saved in %opt. TYPE=>undef means
     RPCZ          =>{TYPE=>'!',  DEFAULT=> 1,     HELP=>"If set, get query from each node, instead of /live_queries"},
     MASTER_LEADER =>{TYPE=>undef,DEFAULT=>undef, },  # Obtained and Used internally
     DBINFO        =>{TYPE=>undef,DEFAULT=>undef, },  # Namespaces, tablespaces, tables, tablets .. Obtained and Used internally
+    COMPACT       =>{TYPE=>"!", DEFAULT=>0, HELP=>"Compact whitespace in the SQL query during collection ."},
 );
 my %opt = map {$_=> $option_specs{$_}{DEFAULT}} keys %option_specs;
 
