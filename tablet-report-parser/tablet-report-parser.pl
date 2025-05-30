@@ -38,7 +38,7 @@
 #   * Files named "<tablet-uuid>.txt"  are assumed to be "tablet-info" files. These are created by:
 #         ./yugatool -m $MASTERS $TLS_CONFIG tablet_info $TABLET_UUID > $TABLET_UUID.txt 
 ##########################################################################
-our $VERSION = "0.49";
+our $VERSION = "0.50";
 use strict;
 use warnings;
 #use JSON qw( ); # Older systems may not have JSON, invoke later, if required.
@@ -127,7 +127,7 @@ if (-t STDIN and not @ARGV){
 my ($universe, $SQL_OUTPUT_FH, $output_sqlite_dbfilename); # Output file handle to feed to SQLITE
 my @more_input_specified = @ARGV;
 @ARGV=(); # Zap it -we will specify each file to feed into <>
-if ($more_input_specified[0] =~/\-+he?l?p?/i){
+if ($more_input_specified[0] =~/\-+he?l?p?/i and not -e $more_input_specified[0]){
    print  $USAGE,"\n\n";
    exit 1;
 }
