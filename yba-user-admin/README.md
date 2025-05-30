@@ -81,15 +81,17 @@ A typical sequence would be:
 
 4. External program sends
   ```
-     {"ADDUSERS":[
-        {"email":"u1@rrr","role":"Admin","password","P@ssword123"},
-        {"email":"u2@eee" ...}
-    ]}
+     {"ADDUSERS":{
+        "u1@rrr":"role", "u2@eee":role2 ...
+     },
+     "DELETEUSERS":["u3@email",...],
+     "PASSWORD":"someComplexPassword"
+     }
+
   ```
 
-5.  *yba-user-admin* responds with: `["OK":"5 Users added"]` 
+5.  *yba-user-admin* responds with: `{"success":true,"Added":5,"Deleted":1}` 
 
-6.  ... Similar for **DELETEUSERS**
   
 ## JSON Stream "LISTUSERS" test
 
