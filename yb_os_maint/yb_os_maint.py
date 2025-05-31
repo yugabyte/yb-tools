@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.25"
+Version = "2.26"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -131,6 +131,8 @@ v 2.23 - 2.24
     Enable prometheus HTTP auth (--promuser XX --prompass YY) which can be in the ENV or .rc file.
 v 2.25
     Universe health check : New: verify each tserver's masters list matches Universe's.
+v 2.26
+    Node stop : Check if already stopped. Added Universe.NodeObjectList to Universe_class.
 '''
 
 import argparse
@@ -267,6 +269,34 @@ class Universe_class:
         self.PLACEMENT_TASK_FIELD    = json['universeDetails'].get(PLACEMENT_TASK_FIELD)
         self.SKIP_DEAD_NODE_CHECK    = False
         self.SKIP_HEALTH_CHECK       = False
+        self.nodeObjectList          = [] # JIT List of YB_Data_Node objects
+
+    def Populate_NodeObjectList(self):
+        """
+        Populate the nodeObjectList with YB_Data_Node objects for each node in the universe.
+        This is used to perform operations on nodes in a more object-oriented way.
+        """
+        if self.nodeObjectList != []: # Already populated
+            return self.nodeObjectList # Allow chaining
+        if self.nodeDetailsSet is None or len(self.nodeDetailsSet) == 0:
+            raise ValueError("No nodes found in universe {}".format(self.name))
+            return
+        AllNodeStatus = self.YBA_API.get_universe_info(self.UUID,'/status')
+        #{"universe_uuid":"..","..-n1":{"tserver_alive":false,"master_alive":false,"node_status":"Stopped"},"..n2":{"tserver_alive":True,"master_alive":false,"..
+        MasterLeader  = self.YBA_API.get_universe_info(self.UUID,'/leader')
+        #{"success":false,"httpMethod":"GET","requestUri":"/api/v1/customers/.../leader","error":"Leader master not found for universe .."}
+        #{"privateIP":"10.231.0.135"}
+
+        for node in self.nodeDetailsSet:
+            if 'nodeUuid' not in node:
+                log(f"Node {node['nodeName']} does not have a nodeUuid - skipping", isError=True)
+                continue
+            node_obj                = YB_Data_Node.construct_from_json(node,self,self.YBA_API, self.args)
+            node_obj.status         = AllNodeStatus.get(node['nodeName'], {"tserver_alive":False,"master_alive":False,"node_status":"Unknown"})
+            node_obj.isMasterLeader = MasterLeader.get('privateIP','99999') == node['cloudInfo'].get('private_ip', '88888')
+            self.nodeObjectList.append(node_obj)
+
+        return self.nodeObjectList # Allow chaining
 
 
     def get_node_json(self,hostname,ip=None):
@@ -352,7 +382,29 @@ class Universe_class:
 
         return len(under_replicated_tablets_list)
 
-    def get_dead_node_count(self):
+    def get_dead_node_count(self, log_it:bool=True, exclude_ip:str=None):
+        if self.SKIP_DEAD_NODE_CHECK:
+            return 0
+        
+        dead_count = 0
+
+        for n in self.Populate_NodeObjectList():
+            if exclude_ip is not None and n.ip == exclude_ip:
+                continue  # Skip this node if it matches the exclude IP
+            if n.status['node_status'] != 'Live':
+                log_it and log('  Node ' + n.nodeName + " (" + n.cloudInfo['private_ip'] +  ') is not alive', True)
+                dead_count += 1
+                continue
+            if n.isMaster and not n.status['master_alive']:
+                log_it and log('  Node ' + n.nodeName + ' master is not alive', True)
+                dead_count += 1
+                continue
+            if n.isTserver and not n.status['tserver_alive']:
+                log_it and log('  Node ' + n.nodeName + ' tserver is not alive', True)
+                dead_count += 1
+        return dead_count
+
+    def get_dead_node_count_OLD(self):
         if self.SKIP_DEAD_NODE_CHECK:
             return 0
         
@@ -1301,6 +1353,7 @@ class YB_Data_Node:
         self.args     = args
         self.universe = None
         self.node_info_printed = False 
+        self.RETRY_COUNT = 3 # How many times to retry a task before giving up
         try: # See if the 'yugabyte' user exists
            services = subprocess.check_output(['id','-u','yugabyte'])
            self.yugabyte_id = int(services.decode())
@@ -1342,9 +1395,17 @@ class YB_Data_Node:
         self.args     = args
         self.isMaster = json['isMaster']
         self.isTserver= json['isTserver']
-        self.node_info_printed = False 
+        self.node_info_printed = False
+        self.isMasterLeader = json.get('isMasterLeader', False) # YBA 2.18.5+ has this field
+        self.status   = {} # {"tserver_alive":False,"master_alive":False,"node_status":"Unknown"})
+        self.RETRY_COUNT = 3 # How many times to retry a task before giving up
         return self
 
+    def __eq__(self, other):
+            if isinstance(other, self.__class__):
+                return self.ip == other.ip
+            return False
+    
     def node_action_api_call(self, action:str): # Returns a "response" object 
         return requests.put(
             self.YBA_API.api_host + '/api/v1/customers/' + self.YBA_API.customer_uuid + '/universes/' 
@@ -1543,9 +1604,19 @@ class YB_Data_Node:
             log("Treating this like an UNKNOWN node. NO ACTION PERFORMED. " ,isError=True,logTime=True)
             return
         self.Print_node_info_line()
-        if self.universe.get_dead_node_count() > 0:
+        
+        for universeNode in self.universe.Populate_NodeObjectList():
+            if universeNode != self:
+               continue
+            if universeNode.status.get('node_status', 'UNKNOWN') == 'Stopped':
+                log("Node " + self.hostname + " is already stopped - nothing to do",logTime=True)
+                return
+
+        if self.universe.get_dead_node_count(False,self.ip) > 0: # Initial Count without logging
             log("Cannot stop node because one or more other nodes/services is down", isError=True)
+            self.universe.get_dead_node_count(True,self.ip) # Log the dead nodes
             raise Exception("Cannot stop node because one or more other nodes/services is down")
+        self.universe.SKIP_DEAD_NODE_CHECK = True # We already checked for this
         retry_successful(self.universe.health_check,verbose=True,params=[],
                          retry=3,sleep=120,fatal=True)
         # Add maintenence window
@@ -1583,6 +1654,11 @@ class YB_Data_Node:
         task = response.json()
         if  task.get('taskUUID') is None:
             log("NODE STOP  task error:{}".format(task))
+            self.RETRY_COUNT -= 1
+            if self.RETRY_COUNT > 0:
+                log('Retrying in 5 min, to create STOP NODE task - {} retries left'.format(self.RETRY_COUNT),logTime=True)
+                time.sleep(300) # Wait 5 minutes before retrying
+                return self.stop()
             raise Exception("Failed to create STOP NODE task")
         if 'error' in task:
             log('Could not shut down node : ' + task['error'], isError=True,logTime=True)
