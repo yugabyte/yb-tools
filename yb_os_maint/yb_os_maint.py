@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.26"
+Version = "2.27"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -131,8 +131,8 @@ v 2.23 - 2.24
     Enable prometheus HTTP auth (--promuser XX --prompass YY) which can be in the ENV or .rc file.
 v 2.25
     Universe health check : New: verify each tserver's masters list matches Universe's.
-v 2.26
-    Node stop : Check if already stopped. Added Universe.NodeObjectList to Universe_class.
+v 2.26 - 2.27
+    Node stop : Check if already stopped. Added Universe.NodeObjectList to Universe_class. +Log.flush()
 '''
 
 import argparse
@@ -212,6 +212,7 @@ def log(msg, isError=False, logTime=False,newline=False):
         print(output_msg)
     else:
         LOG_FILE.write(output_msg + '\n')
+        LOG_FILE.flush() # So that it can be "tail -f"'d
 
 def retry_successful(retriable_function_call, params=None, retry:int=10, verbose=False, sleep:float=.5, fatal=False,ReturnFuncVal=False):
     for i in range(retry):
