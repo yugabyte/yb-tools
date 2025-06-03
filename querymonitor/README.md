@@ -41,7 +41,7 @@ You can  create a flag file containing the required params like
 
 ```
 --API_TOKEN=<value>
---YBA_HOST =<value>
+--YBA_HOST=<value>
 --CUST_UUID=<value>
 --UNIV_UUID=<value>
 ```
