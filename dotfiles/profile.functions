@@ -206,6 +206,8 @@ function run_lnav() {
     local types=""
     local nodes=""
     local rebuild=""
+    local full_command=""
+    local files_only=""
     local debug=""
     local help=""
     
@@ -220,6 +222,8 @@ function run_lnav() {
             --types) types="$2"; shift 2;;
             --nodes) nodes="$2"; shift 2;;
             --rebuild) rebuild="--rebuild"; shift;;
+            --files_only) files_only="--files-only"; shift;;
+            --full_command) full_command="--full-command"; shift;;
             --debug) debug="--debug"; shift;;
             -h|--help) help="-h"; shift;;
             *) echo "Unknown option: $1"; return 1;;
@@ -236,6 +240,8 @@ function run_lnav() {
         ${types:+--types "$types"} \
         ${nodes:+--nodes "$nodes"} \
         $rebuild \
+        $files_only \
+        $full_command \
         $debug \
         $help
 }
@@ -368,4 +374,64 @@ if observed_terms:
         print(\"Ensure you are checking the logs of all N masters, where N is the replication factor.\")
 " | tee "$outfile"
   echo "Result saved to $outfile"
+}
+
+# Parse logs to get SST file information
+parse_sst_info() {
+  if [[ "$1" == "--help" || $# -lt 2 || ! "$1" =~ ^[0-9]+$ ]]; then
+    echo -e "Usage:\n  parse_sst_info <min_size_bytes> <log_file1> [log_file2 ...]"
+    echo -e "\nDescription:"
+    echo "  Parses YugabyteDB logs and prints SST file info:"
+    echo "  - SST file number"
+    echo "  - NumKeys"
+    echo "  - Size in GB"
+    echo "  - Latest key time"
+    echo "  - Delta (now - latest key) in days"
+    echo "  - Tablet UUID"
+    echo -e "\nExample:"
+    echo "  parse_sst_info 3000000000 yb-tserver*.log"
+    return 1
+  fi
+
+  local min_size_bytes="$1"
+  shift
+
+  echo -e "SST File\tNumKeys\tSize_GB\tLatest Key Time\t\tDelta (Days)\tTablet UUID"
+
+  grep 'Generated table' "$@" | \
+  tr -s " " | \
+  awk -v now="$(date +%s)" -v threshold="$min_size_bytes" '
+  {
+    tablet = "";
+    size_bytes = 0;
+    num_keys = 0;
+    sst_file = "";
+    latest_key_time = 0;
+    for (i = 1; i <= NF; i++) {
+      if ($i == "T") tablet = $(i+1);
+      if ($i == "keys,") num_keys = $(i-1);
+      if ($i == "table") {
+        sst_file = $(i+1);
+        gsub(/^#/, "", sst_file);
+        gsub(/:$/, "", sst_file);
+      }
+      if ($i == "bytes") size_bytes = $(i-1);
+      if ($i == "physical:") {
+        if (latest_key_time == 0) {
+          skip = 1;  # skip smallest
+        } else {
+          latest_key_time = $(i+1);
+          break;
+        }
+        latest_key_time = $(i+1);
+      }
+    }
+    if (size_bytes > threshold) {
+      size_gb = size_bytes / 1073741824;
+      end_fmt = strftime("%Y-%m-%d %H:%M:%S", substr(latest_key_time, 1, length(latest_key_time)-6));
+      end_epoch = substr(latest_key_time, 1, length(latest_key_time)-6);
+      delta_days = (now - end_epoch) / 86400;
+      printf "%s\t\t%s\t%.2f\t%s\t%.2f\t\t%s\n", sst_file, num_keys, size_gb, end_fmt, delta_days, tablet;
+    }
+  }' | sort -k4,4 -s
 }
