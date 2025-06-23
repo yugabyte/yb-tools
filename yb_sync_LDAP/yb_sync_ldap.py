@@ -35,7 +35,7 @@ from cassandra.policies import DCAwareRoundRobinPolicy
 from time import gmtime, strftime
 import subprocess
 
-VERSION = "0.50"
+VERSION = "0.51"
 
 
 
@@ -1132,6 +1132,7 @@ class YBLDAPSync:
             requests_log.propagate = True
         logging.debug("DEBUG logging enabled")
         if self.args.target_api == "EXTERNAL":
+            self.universe_name = None # Zap, if specified. Avoid errors creating universe object
             if self.args.externalcommand is None:
                 raise LDAPSyncException("ERROR: --externalcommand is required with --target_api==EXTERNAL")
             else:
