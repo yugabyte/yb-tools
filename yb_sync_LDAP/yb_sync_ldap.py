@@ -1130,9 +1130,12 @@ class YBLDAPSync:
             requests_log = logging.getLogger("requests.packages.urllib3")
             requests_log.setLevel(logging.DEBUG)
             requests_log.propagate = True
+            for mapping in self.args.mmap:
+                logging.debug("Member map regex: {} => {}".format(mapping[0], mapping[1]))
+
         logging.debug("DEBUG logging enabled")
         if self.args.target_api == "EXTERNAL":
-            self.universe_name = None # Zap, if specified. Avoid errors creating universe object
+            self.args.universe_name = None # Zap, if specified. Avoid errors creating universe object
             if self.args.externalcommand is None:
                 raise LDAPSyncException("ERROR: --externalcommand is required with --target_api==EXTERNAL")
             else:

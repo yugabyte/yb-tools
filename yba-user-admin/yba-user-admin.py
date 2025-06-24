@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # YBA User list/creation/Deletion
-version = "0.13"
+version = "0.14"
 """
 Command-line management of YBA users
 ====================================
@@ -13,9 +13,24 @@ This uses the YBA API to manage users, so you need the following:
 * API_TOKEN  : You can get/generate this  from the "user profile" in the UI
 * YBA_HOST   : THE URL used to access the YBA .. includes http:// or https://
 
-This requires @dataclass decorators. See https://docs.python.org/3/library/dataclasses.html 
+This requires @dataclass decorators. See https://docs.python.org/3/library/dataclasses.html
+
+The "--stdin" or "-s" option allows you to pass a JSON stream of commands to the program.
+The JSON stream can contain a list of commands, or a single command.
+The commands are:
+* LISTUSERS: List all users in the YBA
+* ADDUSERS: Add users to the YBA. This is a dict of email:role pairs, eg:
+    {"ADDUSERS": {" 
+* DELETEUSERS: Delete users from the YBA. This is a list of emails, eg:
+    {"DELETEUSERS": ["
+
+* ADDUSERS and DELETEUSERS can be combined in a single JSON object, eg:
+
+To TEST this, you can use the following command:
+    echo '["LISTUSERS"]'  | ./yba-user-admin.py -s  --log my-local.log --debug --yba_url http://localhost:7000 --auth_token 1234
+
 """
-from ast import Dict, parse
+from ast import Dict, arg, parse
 import requests
 import urllib3
 import json
@@ -98,7 +113,7 @@ class YBA_API():
         if self.raw_response.status_code == 200:
             logging.debug('DEBUG: API Request successful')
         else:
-            print(self.raw_response.json())
+            print(self.raw_response.text)
             self.raw_response.raise_for_status()
         return self.raw_response.text
     
@@ -111,7 +126,7 @@ class YBA_API():
         if self.raw_response.status_code == 200:
             logging.debug('DEBUG: API Request successful')
         else:
-            print(self.raw_response.json())
+            print(self.raw_response.text)
             self.raw_response.raise_for_status()
         return self.raw_response.text
 #=====================================================================================================
@@ -184,7 +199,7 @@ class User():
                     +'{"email":"'+ self.email+'","uuid":"'
                     +str(self.uuid)+'","role":"'+self.role.name + '","created":"'+self.creationDate +'"}')
             return
-        print("USER "+self.email+"("+str(self.uuid)+") Role:"+self.role.name + "  Created:"+self.creationDate  )
+        logging.info("USER "+self.email+"("+str(self.uuid)+") Role:"+self.role.name + "  Created:"+self.creationDate  )
 
 
     def Create_in_YBA(self):
@@ -201,17 +216,17 @@ class User():
             "timezone":  "America/New_York" # Fake it out 
         }
         response = y.Post(y.cust_url + "/users", data=payload)
-        logging.debug(response)
+        logging.info(response)
         self.uuid = y.raw_response.json()["uuid"]
         self.creationDate = y.raw_response.json()["creationDate"]
 
 
     def Delete_from_YBA(self):
         y = self.role.mgt.yba_api
-        logging.debug ("DEBUG: Deleting User "+ self.email +" in YBA")
+        logging.info ("Deleting User "+ self.email +" in YBA")
         
         response = y.Delete(y.cust_url + "/users/" + self.uuid)
-        logging.debug (pformat(response))
+        logging.info (pformat(response))
 
 #=====================================================================================================
 @dataclass
@@ -227,6 +242,7 @@ class STDIN_Json_Stream_Processor():
                 u.Print(json=True,leading_comma=( count > 0))
                 count +=1
             print ("]")
+            logging.info("Listed "+str(count)+" users")
             return
 
 
@@ -251,7 +267,7 @@ class STDIN_Json_Stream_Processor():
                     new_password = "*UnSpecified*123" 
                 usr=User(uuid=None,email=email,creationDate=datetime.today().isoformat(),role=YBArole,password=new_password)
                 usr.Create_in_YBA()
-                logging.debug("Added user "+email)
+                logging.info("Added user "+email)
                 #usr.Print(json=True)
                 adduser_count+=1
 
@@ -268,7 +284,7 @@ class STDIN_Json_Stream_Processor():
                         continue
                     deleteuser_count += 1
                     u.Delete_from_YBA()
-                    logging.debug("Deleted user "+email)
+                    logging.info("Deleted user "+email)
                     break
             if (deleteuser_count + adduser_count) == 0:
                 print('{"success":false,"added":'+ adduser_count + ',"deleted":'+deleteuser_count +'}' )
@@ -310,8 +326,8 @@ class STDIN_Json_Stream_Processor():
             # Remove any whitespace before the next JSON object
             stdin = stdin.lstrip()
 
-        logging.debug ("DEBUG:ACCUMULATED JSON FROM STDIN:=====")
-        logging.debug (pformat(json_found))
+        logging.info ("DEBUG:ACCUMULATED JSON FROM STDIN:=====")
+        logging.info (pformat(json_found))
 
 #=====================================================================================================
 #=====================================================================================================
@@ -343,6 +359,7 @@ def parse_arguments():
     parser.add_argument('--role',help="Name of role to apply to new user")
     parser.add_argument('-p','--password',help="Password for new user (>=8 ch, Upcase+num+special)")
     parser.add_argument("-s","--stdin",action='store_true',help="Read JSON stream from stdin")
+    parser.add_argument("-log","--logfile",metavar='log.file.path.and.name',help="Log to this file instead of stdout",default=os.getenv("LOGFILE",None))
     args = parser.parse_args()
     
     return args
@@ -351,8 +368,12 @@ def parse_arguments():
 #  M  A  I  N
 #=====================================================================================================
 args = parse_arguments()
+if args.logfile is None and args.stdin is True:
+    args.logfile = "yba-user-admin.log" # Default log file if not specified for STDIN
 logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', datefmt='%H:%M:%S',
-                    level= logging.DEBUG if args.debug else  logging.WARNING)
+                    level= logging.DEBUG if args.debug else  logging.INFO,
+                    filename=args.logfile if args.logfile else None, filemode='a' # append
+                    )
 logging.info(datetime.now(timezone.utc).astimezone().isoformat() + " YBA User admin : v "+version)
 logging.debug("Debugging Enabled")
 
@@ -363,7 +384,7 @@ if args.stdin:
     sys.exit(0)
 
 if args.make: # AKA create/make
-    print("Will create user:"+args.make + " in role:" + args.role )
+    logging.info("Will create user:"+args.make + " in role:" + args.role )
     if args.role is None:
         raise ValueError("ERROR: You must specify --role when adding a user")
     if args.password is None:
@@ -376,7 +397,7 @@ if args.make: # AKA create/make
     sys.exit(0)
 
 if args.remove: # AKA Remove/delete
-    print("Attempting to remove user:"+args.remove )
+    logging.info("Attempting to remove user:"+args.remove )
     userlist = y.Get_User_List()
     found = False
     for u in userlist:
@@ -388,7 +409,7 @@ if args.remove: # AKA Remove/delete
     
     if not found:
         raise ValueError("ERROR: Could not find user "+args.remove)
-    print("Removed "+ args.remove)
+    logging.info("Removed "+ args.remove)
     sys.exit(0)
 
 # No args, or args.ls
