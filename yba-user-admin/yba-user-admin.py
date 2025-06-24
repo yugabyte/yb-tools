@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # YBA User list/creation/Deletion
-version = "0.14"
+version = "0.15"
 """
 Command-line management of YBA users
 ====================================
@@ -26,8 +26,10 @@ The commands are:
 
 * ADDUSERS and DELETEUSERS can be combined in a single JSON object, eg:
 
-To TEST this, you can use the following command:
+To TEST this, you can use the following commands:
     echo '["LISTUSERS"]'  | ./yba-user-admin.py -s  --log my-local.log --debug --yba_url http://localhost:7000 --auth_token 1234
+
+    echo -e '"LISTUSERS"\n{"ADDUSERS": {"u2@rrr":"ReadOnly","u3@rrr":"ReadOnly"}}' | python3 ./yba-user-admin.py -s  --log junk.1 ..
 
 """
 from ast import Dict, arg, parse
@@ -233,8 +235,54 @@ class User():
 class STDIN_Json_Stream_Processor():
     yba:YBA_API
 
+
+    def redact_password(self,log_string:str, redaction_char='*', min_pass_length=4):
+        """
+        Redacts a password from a log string. (The "self" param is ignored here, as this is a static method)
+        Searches for "Password" (case-insensitive) followed by flexible delimiters
+        (any mix of non-word characters and spaces) and then the password
+        enclosed in quotes.
+
+        Args:
+            log_string (str): Input string.
+            redaction_char (str): Character for redaction.
+            min_pass_length (int): Minimum length of password to redact.
+
+        Returns:
+            str: Log string with password redacted.
+        """
+        # Regex Breakdown:
+        # (Password\s*)        : Group 1: "Password" (case-insensitive) + optional trailing whitespace.
+        # (?:[^\w\n\r]|\s)*?  : Non-capturing group for flexible delimiters. Matches any mix of
+        #                       non-word, non-newline chars OR whitespace, non-greedy.
+        # (['"])               : Group 2: Captures the opening quote (' or ").
+        # (.*?)                : Group 3: Non-greedy match for the password content.
+        # \2                   : Backreference to Group 2, matches the closing quote.
+        pattern = re.compile(
+            r"(Password\s*)(?:[^\w\n\r]|\s)*?(['\"])(.*?)\2",
+            re.IGNORECASE
+        )
+
+        def replacer(match):
+            # Extract captured groups
+            prefix_part = match.group(1)
+            quote_char = match.group(2)
+            password_content = match.group(3)
+
+            # Apply minimum password length check
+            if len(password_content) < min_pass_length:
+                return match.group(0) # Return original match if too short
+
+            # Create redacted password string
+            redacted_password_content = redaction_char * len(password_content)
+
+            # Reconstruct and return the string with the redacted password
+            return f"{prefix_part}{quote_char}{redacted_password_content}{quote_char}"
+
+        return pattern.sub(replacer, log_string)
+
     def Process_str_cmd(self,cmd:str):
-        logging.debug ("DEBUG:Processing string command:"+cmd)
+        logging.debug ("Processing string command:"+ self.redact_password(cmd) )
         if cmd == "LISTUSERS":
             print ("[")
             count = 0
@@ -247,7 +295,7 @@ class STDIN_Json_Stream_Processor():
 
 
     def Process_dict_part(self,cmd:dict):
-        logging.debug ("DEBUG:Processing dict command:"+str(cmd))
+        logging.debug ("Processing dict command:"+self.redact_password(str(cmd)))
         adduser_count = 0
         deleteuser_count = 0
 
@@ -302,11 +350,13 @@ class STDIN_Json_Stream_Processor():
         decoder = JSONDecoder()
 
         while len(stdin) > 0:
-            logging.debug ("DEBUG:input json string:"+ stdin)
+            logging.debug ("input json string:"+ self.redact_password(str(stdin)))
             # parsed_json, number of bytes used
             parsed_json, consumed = decoder.raw_decode(stdin)
             # Remove bytes that were consumed in this object ^ 
-            logging.debug ("DEBUG:json piece:"+ str(parsed_json) + " ["+ str(type(parsed_json)) + " " + str(consumed) + " bytes]")
+            logging.debug ("DEBUG:json piece:"+ str(parsed_json) + " ["
+                            + self.redact_password(str(type(parsed_json)))
+                            + " " + str(consumed) + " bytes]")
             stdin = stdin[consumed:]
             # Process what we just got ..
             if isinstance(parsed_json, str):
@@ -327,7 +377,7 @@ class STDIN_Json_Stream_Processor():
             stdin = stdin.lstrip()
 
         logging.info ("DEBUG:ACCUMULATED JSON FROM STDIN:=====")
-        logging.info (pformat(json_found))
+        logging.info (self.redact_password(pformat(json_found)))
 
 #=====================================================================================================
 #=====================================================================================================
