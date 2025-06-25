@@ -29,7 +29,7 @@ The commands are:
 To TEST this, you can use the following commands:
     echo '["LISTUSERS"]'  | ./yba-user-admin.py -s  --log my-local.log --debug --yba_url http://localhost:7000 --auth_token 1234
 
-    echo -e '"LISTUSERS"\n{"ADDUSERS": {"u2@rrr":"ReadOnly","u3@rrr":"ReadOnly"}}' | python3 ./yba-user-admin.py -s  --log junk.1 ..
+    echo -e '"LISTUSERS"\n{"ADDUSERS": {"u12@rrr":"ReadOnly","u13@rrr":"ReadOnly"},"PASSWORD":"Some_Pa*ss"}' | python3 ./yba-user-admin.py -s  --log junk.1 ..
 
 """
 from ast import Dict, arg, parse
@@ -236,50 +236,65 @@ class STDIN_Json_Stream_Processor():
     yba:YBA_API
 
 
-    def redact_password(self,log_string:str, redaction_char='*', min_pass_length=4):
+    def redact_password(self,log_string, redaction_char='*', min_pass_length=4):
         """
-        Redacts a password from a log string. (The "self" param is ignored here, as this is a static method)
-        Searches for "Password" (case-insensitive) followed by flexible delimiters
-        (any mix of non-word characters and spaces) and then the password
-        enclosed in quotes.
+        Redacts a password from a log string.
+        Parameter "self" is ignored, as this is a static method.
+        It identifies 'PASSWORD' (case-insensitive) keys, which may themselves be
+        quoted or unquoted. It then looks for a flexible set of delimiters
+        (any characters *not* a quote) followed by the password value strictly
+        enclosed in single or double quotes.
 
         Args:
             log_string (str): Input string.
-            redaction_char (str): Character for redaction.
-            min_pass_length (int): Minimum length of password to redact.
+            redaction_char (str): Character to use for redaction.
+            min_pass_length (int): Minimum length of the content *inside* the quotes
+                                    for it to be considered a password and redacted.
 
         Returns:
             str: Log string with password redacted.
         """
         # Regex Breakdown:
-        # (Password\s*)        : Group 1: "Password" (case-insensitive) + optional trailing whitespace.
-        # (?:[^\w\n\r]|\s)*?  : Non-capturing group for flexible delimiters. Matches any mix of
-        #                       non-word, non-newline chars OR whitespace, non-greedy.
-        # (['"])               : Group 2: Captures the opening quote (' or ").
-        # (.*?)                : Group 3: Non-greedy match for the password content.
-        # \2                   : Backreference to Group 2, matches the closing quote.
+        # (re.IGNORECASE | re.DOTALL | re.VERBOSE):
+        #   re.IGNORECASE: Makes "PASSWORD" case-insensitive.
+        #   re.DOTALL: Allows '.' to match any character including newlines.
+        #   re.VERBOSE: Allows comments and whitespace in the regex for readability.
+
         pattern = re.compile(
-            r"(Password\s*)(?:[^\w\n\r]|\s)*?(['\"])(.*?)\2",
-            re.IGNORECASE
+            r"""
+            (                               # Group 1: The full keyword part
+                (?:'|")?                      # Optional opening quote for the key itself
+                PASSWORD                      # The literal "PASSWORD" keyword
+                (?:'|")?                      # Optional closing quote for the key itself
+            )
+            (                               # Group 2: The flexible delimiter part.
+                [^'"]*?                       # Match 0 or more characters that are NOT a single or double quote, non-greedily.
+                                            # THIS IS THE CRITICAL CHANGE: It prevents consuming the password's opening quote.
+            )
+            (['"])                           # Group 3: Captures the opening quote of the *value*.
+            ( .*? )                          # Group 4: The password content (non-greedy match for any characters)
+            \3                               # Backreference to Group 3, matches the closing quote.
+            """,
+            re.IGNORECASE | re.DOTALL | re.VERBOSE
         )
 
         def replacer(match):
             # Extract captured groups
-            prefix_part = match.group(1)
-            quote_char = match.group(2)
-            password_content = match.group(3)
+            keyword_full = match.group(1)
+            delimiter_part = match.group(2)
+            quote_char = match.group(3)
+            password_content = match.group(4)
 
-            # Apply minimum password length check
             if len(password_content) < min_pass_length:
-                return match.group(0) # Return original match if too short
+                return match.group(0) # Return original full match if password is too short
 
-            # Create redacted password string
             redacted_password_content = redaction_char * len(password_content)
-
-            # Reconstruct and return the string with the redacted password
-            return f"{prefix_part}{quote_char}{redacted_password_content}{quote_char}"
+            
+            # Reconstruct the string: original key + original delimiter + quote + redacted password + quote
+            return f"{keyword_full}{delimiter_part}{quote_char}{redacted_password_content}{quote_char}"
 
         return pattern.sub(replacer, log_string)
+
 
     def Process_str_cmd(self,cmd:str):
         logging.debug ("Processing string command:"+ self.redact_password(cmd) )
@@ -298,7 +313,9 @@ class STDIN_Json_Stream_Processor():
         logging.debug ("Processing dict command:"+self.redact_password(str(cmd)))
         adduser_count = 0
         deleteuser_count = 0
-
+        # Expecting a command like:
+        # {"ADDUSERS": {"u12@rrr":"ReadOnly","u13@rrr":"ReadOnly"},"PASSWORD":"Some_Pa*ss"}
+        # or {"DELETEUSERS": ["u12@rrr","u13@rrr"]} 
         if cmd.get("ADDUSERS") is not None:
             if not isinstance(cmd["ADDUSERS"],dict):
                 raise ValueError("ERROR:ADDUSERS: Could not find user dict to add")
