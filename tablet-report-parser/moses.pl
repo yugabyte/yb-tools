@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-our $VERSION = "0.37";
+our $VERSION = "0.38";
 my $HELP_TEXT = << "__HELPTEXT__";
     It's a me, \x1b[1;33;100mmoses.pl\x1b[0m  Version $VERSION
                ========
@@ -171,7 +171,7 @@ sub Get_and_Parse_tablets_from_tservers{
          warn "-- Node $n->{nodeName} $n->{Tserver_UUID} is $n->{state} .. skipping\n";
          next;
       }
-      $n->{Tserver_UUID} ||= "*Unknown\@Idx-" . $n->{nodeIdx} . "*"; # Can happen for un-initialized system
+      $n->{Tserver_UUID} ||= "NO-UUID\@Idx-" . $n->{nodeIdx} . "*"; # Can happen for un-initialized system
       my $tabletCount = 0;
       print "SELECT '", TimeDelta("Processing tablets on $n->{nodeName} $n->{Tserver_UUID} ($n->{private_ip},Idx $n->{nodeIdx})... $prev_node_msg"),"';\n";
       my $html_raw = $YBA_API->Get("/proxy/$n->{private_ip}:$n->{tserverHttpPort}/tablets?raw","BASE_URL_UNIVERSE",1); # RAW
@@ -253,7 +253,7 @@ sub Initialize{
 
     GetOptions (\%opt, qw[DEBUG! HELP! VERSION!
                         API_TOKEN|TOKEN=s YBA_HOST=s UNIVERSE=s
-                        GZIP! DBFILE=s SQLITE=s GZIP! DROPTABLES!
+                        GZIP! DBFILE=s SQLITE=s DROPTABLES!
                         HTTPCONNECT=s CURL=s FOLLOWER_LAG_MINIMUM=i
                         CONFIG_FILE_PATH=s CONFIG_FILE_NAME=s CUSTOMER=s
                         WAIT_INDEX_BACKFILL|WAITINDEXBACKFILL|WAITBACKFILL|WAIT_BACKFILL!
@@ -370,7 +370,7 @@ sub Initialize{
   $db = DatabaseClass::->new(DROPTABLES=>$opt{DROPTABLES});
   
   # Put Univ and node info into DB
-  $db->Insert_nodes($universe->{NODES});
+  # Node info insert is AFTER we get entities, which populate the tserver UUIDs
   $db->CreateTable("gflags",qw|type key  value|);
   $opt{DEBUG} and print "SELECT '",TimeDelta("DEBUG:Extracting gflags..."),"';\n";
   $universe->Extract_gflags_into_DB($db);
@@ -389,7 +389,8 @@ sub Initialize{
   }
   # Analyze & save DUMP ENTITIES contained in  $YBA_API->{json_string} 
   Handle_ENTITIES_Data($entities);
-
+  
+  $db->Insert_nodes($universe->{NODES});
   $db->CreateTable("metrics",qw|metric_name node_uuid entity_name entity_uuid|,"value NUMERIC");
 
   Handle_xCluster_Data(); # Uses Globals :$db,$universe;
@@ -469,7 +470,6 @@ sub Handle_ENTITIES_Data{
          . "');");
   }
   
-  ##my %node_by_ip;
     for my $t (@{ $bj->{tablets} }){
      my $replicas = $t->{replicas} ; # AOH
      my $l        = $t->{leader} || "";
@@ -478,21 +478,13 @@ sub Handle_ENTITIES_Data{
            . join("','", $t->{tablet_id}, $t->{table_id}, $t->{state}, $r->{type}, $r->{server_uuid},$r->{addr},$l )
          . "');");
            my ($node_ip) = $r->{addr} =~/([\d\.]+)/ or next;
-           ##next if $node_by_ip{$node_ip}; # Already setup 
-           ##$node_by_ip{$node_ip} = $r->{server_uuid}; # Tserver UUID 
+           next if $universe->{NODE_BY_PRIVATE_IP}{$node_ip}{Tserver_UUID}; # Already setup 
+           $universe->{NODE_BY_PRIVATE_IP}{$node_ip}{Tserver_UUID} = $r->{server_uuid}; # Tserver UUID 
     }
   }
   $opt{DEBUG} and printf "--DEBUG: %d Keyspaces, %d tables, %d tablets\n", 
                        scalar(@{ $bj->{keyspaces} }),scalar(@{ $bj->{tables} }), scalar(@{ $bj->{tablets} });
     
-    # Fixup Node UUIDs : The ones in the Universe JSON are useless - so we update from tablets with TSERVER uuid 
-    ##for my $n (@{ $universe->{NODES} }){
-    ##   $n->{Tserver_UUID} = $node_by_ip{$n->{private_ip}}; # update in-mem info
-    ##}
-    ##$db->putsql( "UPDATE NODE "
-    ##           . "SET nodeUuid=(select server_uuid FROM ent_tablets "
-    ##          # . "WHERE  substr(addr,1,instr(addr,\":\")-1) = private_ip limit 1);\n");
-    ##           . "WHERE substr(addr,1,length(addr) - 5) = private_ip limit 1);\n");
     $db->putsql("END TRANSACTION; -- Entities");
 }
 
@@ -1043,7 +1035,7 @@ sub Insert_nodes{
   #$self->putsql("-- NOTE: nodeUUID value is later updated to be TSERVER_UUID");
   for my $n(@$nodes){
     $self->putsql("INSERT INTO NODE VALUES('" .
-                 join("','", map{$n->{$_}} grep {$_ ne "details"} sort keys %$n ). "');");
+                 join("','", map{defined($n->{$_}) ? $n->{$_} : ''} grep {$_ ne "details"} sort keys %$n ). "');");
   }
 }
 
@@ -1489,6 +1481,7 @@ sub _Extract_nodes{
     my ($self) = @_;
   
   $self->{NODES} = [];
+  $self->{NODE_BY_PRIVATE_IP} = {};
   my $count=0;
   for my $n (@{  $self->{universeDetails}{nodeDetailsSet} }){
        push @{ $self->{NODES} }, my $thisnode = {map({$_=>$n->{$_}||''} qw|nodeIdx nodeName nodeUuid azUuid isMaster
@@ -1498,6 +1491,7 @@ sub _Extract_nodes{
        $thisnode->{$_} =~tr/-//d for grep {/uuid/i} keys %$thisnode;
        $thisnode->{Tserver_UUID} = undef;
        $thisnode->{blacklisted}  = 0;
+       $self->{NODE_BY_PRIVATE_IP}{$thisnode->{private_ip}} = $thisnode;
        $count++;
     }
     return $self->{NODES};  
@@ -1513,7 +1507,8 @@ sub _Get_Master_Leader{
     return undef;
   }
   $opt{DEBUG} and print "--DEBUG:Master/Leader JSON:",$YBA_API->{json_string},". IP is $leader_IP .\n";
-  ( $self->{MASTER_LEADER_NODE} ) = grep {$_->{private_ip} eq $leader_IP } @{ $self->{NODES} } or die "ERROR : No Master/Leader NODE found for $leader_IP ";
+  #( $self->{MASTER_LEADER_NODE} ) = grep {$_->{private_ip} eq $leader_IP } @{ $self->{NODES} } or die "ERROR : No Master/Leader NODE found for $leader_IP ";
+  $self->{MASTER_LEADER_NODE} = $self->{NODE_BY_PRIVATE_IP}{$leader_IP} or die "ERROR: No Master/Leader NODE found for $leader_IP ";
   my $master_http_port = $self->{universeDetails}{communicationPorts}{masterHttpPort} or die "ERROR: Master HTTP port not found in univ JSON";
 }
 
