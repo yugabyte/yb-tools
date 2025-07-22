@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.27"
+Version = "2.28"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -133,6 +133,8 @@ v 2.25
     Universe health check : New: verify each tserver's masters list matches Universe's.
 v 2.26 - 2.27
     Node stop : Check if already stopped. Added Universe.NodeObjectList to Universe_class. +Log.flush()
+v 2.28
+    YBA health check: skip alert check.
 '''
 
 import argparse
@@ -963,7 +965,6 @@ class YBA_Node:
             log(e.output,isError=True)
             raise # re-raise for caller's benefit 
         log(status,logTime=True)
-        self.YBA_API.active_alerts(None) # No universe specified .. so report on all of them
 
     def resume(self):
         if self.args.region:
@@ -1006,8 +1007,6 @@ class YBA_Node:
         if self.ybaVersion >= '2.18.0':
             try:
                 status=subprocess.check_output(['yba-ctl','stop'],  stderr=subprocess.STDOUT) # No output
-                #  time.sleep(2)
-                #  self.health() - Disabled. Fails with Connection aborted, ConnectionResetError
                 return(True)
             except subprocess.CalledProcessError as e:
                 log('  yba-ctl stop failed - skipping. Err:{}'.format(str(e)),logTime=True)
@@ -1713,7 +1712,8 @@ class YB_Data_Node:
             raise Exception("Failed to reprovision DB Node")
 
 #-------------------------------------------------------------------------------------------
-
+#----------------- O u t e r   B l o c k                ------------------------------------
+#-------------------------------------------------------------------------------------------
 def Get_Environment_info():
     """
     Retrieves environment information, allowing PROMUSER and PROMPASS to be optional.
