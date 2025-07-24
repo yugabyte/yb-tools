@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # YBA User list/creation/Deletion
-version = "0.13"
+version = "0.15"
 """
 Command-line management of YBA users
 ====================================
@@ -13,9 +13,26 @@ This uses the YBA API to manage users, so you need the following:
 * API_TOKEN  : You can get/generate this  from the "user profile" in the UI
 * YBA_HOST   : THE URL used to access the YBA .. includes http:// or https://
 
-This requires @dataclass decorators. See https://docs.python.org/3/library/dataclasses.html 
+This requires @dataclass decorators. See https://docs.python.org/3/library/dataclasses.html
+
+The "--stdin" or "-s" option allows you to pass a JSON stream of commands to the program.
+The JSON stream can contain a list of commands, or a single command.
+The commands are:
+* LISTUSERS: List all users in the YBA
+* ADDUSERS: Add users to the YBA. This is a dict of email:role pairs, eg:
+    {"ADDUSERS": {" 
+* DELETEUSERS: Delete users from the YBA. This is a list of emails, eg:
+    {"DELETEUSERS": ["
+
+* ADDUSERS and DELETEUSERS can be combined in a single JSON object, eg:
+
+To TEST this, you can use the following commands:
+    echo '["LISTUSERS"]'  | ./yba-user-admin.py -s  --log my-local.log --debug --yba_url http://localhost:7000 --auth_token 1234
+
+    echo -e '"LISTUSERS"\n{"ADDUSERS": {"u12@rrr":"ReadOnly","u13@rrr":"ReadOnly"},"PASSWORD":"Some_Pa*ss"}' | python3 ./yba-user-admin.py -s  --log junk.1 ..
+
 """
-from ast import Dict, parse
+from ast import Dict, arg, parse
 import requests
 import urllib3
 import json
@@ -98,7 +115,7 @@ class YBA_API():
         if self.raw_response.status_code == 200:
             logging.debug('DEBUG: API Request successful')
         else:
-            print(self.raw_response.json())
+            print(self.raw_response.text)
             self.raw_response.raise_for_status()
         return self.raw_response.text
     
@@ -111,7 +128,7 @@ class YBA_API():
         if self.raw_response.status_code == 200:
             logging.debug('DEBUG: API Request successful')
         else:
-            print(self.raw_response.json())
+            print(self.raw_response.text)
             self.raw_response.raise_for_status()
         return self.raw_response.text
 #=====================================================================================================
@@ -184,7 +201,7 @@ class User():
                     +'{"email":"'+ self.email+'","uuid":"'
                     +str(self.uuid)+'","role":"'+self.role.name + '","created":"'+self.creationDate +'"}')
             return
-        print("USER "+self.email+"("+str(self.uuid)+") Role:"+self.role.name + "  Created:"+self.creationDate  )
+        logging.info("USER "+self.email+"("+str(self.uuid)+") Role:"+self.role.name + "  Created:"+self.creationDate  )
 
 
     def Create_in_YBA(self):
@@ -201,25 +218,86 @@ class User():
             "timezone":  "America/New_York" # Fake it out 
         }
         response = y.Post(y.cust_url + "/users", data=payload)
-        logging.debug(response)
+        logging.info(response)
         self.uuid = y.raw_response.json()["uuid"]
         self.creationDate = y.raw_response.json()["creationDate"]
 
 
     def Delete_from_YBA(self):
         y = self.role.mgt.yba_api
-        logging.debug ("DEBUG: Deleting User "+ self.email +" in YBA")
+        logging.info ("Deleting User "+ self.email +" in YBA")
         
         response = y.Delete(y.cust_url + "/users/" + self.uuid)
-        logging.debug (pformat(response))
+        logging.info (pformat(response))
 
 #=====================================================================================================
 @dataclass
 class STDIN_Json_Stream_Processor():
     yba:YBA_API
 
+
+    def redact_password(self,log_string, redaction_char='*', min_pass_length=4):
+        """
+        Redacts a password from a log string.
+        Parameter "self" is ignored, as this is a static method.
+        It identifies 'PASSWORD' (case-insensitive) keys, which may themselves be
+        quoted or unquoted. It then looks for a flexible set of delimiters
+        (any characters *not* a quote) followed by the password value strictly
+        enclosed in single or double quotes.
+
+        Args:
+            log_string (str): Input string.
+            redaction_char (str): Character to use for redaction.
+            min_pass_length (int): Minimum length of the content *inside* the quotes
+                                    for it to be considered a password and redacted.
+
+        Returns:
+            str: Log string with password redacted.
+        """
+        # Regex Breakdown:
+        # (re.IGNORECASE | re.DOTALL | re.VERBOSE):
+        #   re.IGNORECASE: Makes "PASSWORD" case-insensitive.
+        #   re.DOTALL: Allows '.' to match any character including newlines.
+        #   re.VERBOSE: Allows comments and whitespace in the regex for readability.
+
+        pattern = re.compile(
+            r"""
+            (                               # Group 1: The full keyword part
+                (?:'|")?                      # Optional opening quote for the key itself
+                PASSWORD                      # The literal "PASSWORD" keyword
+                (?:'|")?                      # Optional closing quote for the key itself
+            )
+            (                               # Group 2: The flexible delimiter part.
+                [^'"]*?                       # Match 0 or more characters that are NOT a single or double quote, non-greedily.
+                                            # THIS IS THE CRITICAL CHANGE: It prevents consuming the password's opening quote.
+            )
+            (['"])                           # Group 3: Captures the opening quote of the *value*.
+            ( .*? )                          # Group 4: The password content (non-greedy match for any characters)
+            \3                               # Backreference to Group 3, matches the closing quote.
+            """,
+            re.IGNORECASE | re.DOTALL | re.VERBOSE
+        )
+
+        def replacer(match):
+            # Extract captured groups
+            keyword_full = match.group(1)
+            delimiter_part = match.group(2)
+            quote_char = match.group(3)
+            password_content = match.group(4)
+
+            if len(password_content) < min_pass_length:
+                return match.group(0) # Return original full match if password is too short
+
+            redacted_password_content = redaction_char * len(password_content)
+            
+            # Reconstruct the string: original key + original delimiter + quote + redacted password + quote
+            return f"{keyword_full}{delimiter_part}{quote_char}{redacted_password_content}{quote_char}"
+
+        return pattern.sub(replacer, log_string)
+
+
     def Process_str_cmd(self,cmd:str):
-        logging.debug ("DEBUG:Processing string command:"+cmd)
+        logging.debug ("Processing string command:"+ self.redact_password(cmd) )
         if cmd == "LISTUSERS":
             print ("[")
             count = 0
@@ -227,14 +305,17 @@ class STDIN_Json_Stream_Processor():
                 u.Print(json=True,leading_comma=( count > 0))
                 count +=1
             print ("]")
+            logging.info("Listed "+str(count)+" users")
             return
 
 
     def Process_dict_part(self,cmd:dict):
-        logging.debug ("DEBUG:Processing dict command:"+str(cmd))
+        logging.debug ("Processing dict command:"+self.redact_password(str(cmd)))
         adduser_count = 0
         deleteuser_count = 0
-
+        # Expecting a command like:
+        # {"ADDUSERS": {"u12@rrr":"ReadOnly","u13@rrr":"ReadOnly"},"PASSWORD":"Some_Pa*ss"}
+        # or {"DELETEUSERS": ["u12@rrr","u13@rrr"]} 
         if cmd.get("ADDUSERS") is not None:
             if not isinstance(cmd["ADDUSERS"],dict):
                 raise ValueError("ERROR:ADDUSERS: Could not find user dict to add")
@@ -251,7 +332,7 @@ class STDIN_Json_Stream_Processor():
                     new_password = "*UnSpecified*123" 
                 usr=User(uuid=None,email=email,creationDate=datetime.today().isoformat(),role=YBArole,password=new_password)
                 usr.Create_in_YBA()
-                logging.debug("Added user "+email)
+                logging.info("Added user "+email)
                 #usr.Print(json=True)
                 adduser_count+=1
 
@@ -268,7 +349,7 @@ class STDIN_Json_Stream_Processor():
                         continue
                     deleteuser_count += 1
                     u.Delete_from_YBA()
-                    logging.debug("Deleted user "+email)
+                    logging.info("Deleted user "+email)
                     break
             if (deleteuser_count + adduser_count) == 0:
                 print('{"success":false,"added":'+ adduser_count + ',"deleted":'+deleteuser_count +'}' )
@@ -286,11 +367,13 @@ class STDIN_Json_Stream_Processor():
         decoder = JSONDecoder()
 
         while len(stdin) > 0:
-            logging.debug ("DEBUG:input json string:"+ stdin)
+            logging.debug ("input json string:"+ self.redact_password(str(stdin)))
             # parsed_json, number of bytes used
             parsed_json, consumed = decoder.raw_decode(stdin)
             # Remove bytes that were consumed in this object ^ 
-            logging.debug ("DEBUG:json piece:"+ str(parsed_json) + " ["+ str(type(parsed_json)) + " " + str(consumed) + " bytes]")
+            logging.debug ("DEBUG:json piece:"+ str(parsed_json) + " ["
+                            + self.redact_password(str(type(parsed_json)))
+                            + " " + str(consumed) + " bytes]")
             stdin = stdin[consumed:]
             # Process what we just got ..
             if isinstance(parsed_json, str):
@@ -310,8 +393,8 @@ class STDIN_Json_Stream_Processor():
             # Remove any whitespace before the next JSON object
             stdin = stdin.lstrip()
 
-        logging.debug ("DEBUG:ACCUMULATED JSON FROM STDIN:=====")
-        logging.debug (pformat(json_found))
+        logging.info ("DEBUG:ACCUMULATED JSON FROM STDIN:=====")
+        logging.info (self.redact_password(pformat(json_found)))
 
 #=====================================================================================================
 #=====================================================================================================
@@ -343,6 +426,7 @@ def parse_arguments():
     parser.add_argument('--role',help="Name of role to apply to new user")
     parser.add_argument('-p','--password',help="Password for new user (>=8 ch, Upcase+num+special)")
     parser.add_argument("-s","--stdin",action='store_true',help="Read JSON stream from stdin")
+    parser.add_argument("-log","--logfile",metavar='log.file.path.and.name',help="Log to this file instead of stdout",default=os.getenv("LOGFILE",None))
     args = parser.parse_args()
     
     return args
@@ -351,8 +435,12 @@ def parse_arguments():
 #  M  A  I  N
 #=====================================================================================================
 args = parse_arguments()
+if args.logfile is None and args.stdin is True:
+    args.logfile = "yba-user-admin.log" # Default log file if not specified for STDIN
 logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s', datefmt='%H:%M:%S',
-                    level= logging.DEBUG if args.debug else  logging.WARNING)
+                    level= logging.DEBUG if args.debug else  logging.INFO,
+                    filename=args.logfile if args.logfile else None, filemode='a' # append
+                    )
 logging.info(datetime.now(timezone.utc).astimezone().isoformat() + " YBA User admin : v "+version)
 logging.debug("Debugging Enabled")
 
@@ -363,7 +451,7 @@ if args.stdin:
     sys.exit(0)
 
 if args.make: # AKA create/make
-    print("Will create user:"+args.make + " in role:" + args.role )
+    logging.info("Will create user:"+args.make + " in role:" + args.role )
     if args.role is None:
         raise ValueError("ERROR: You must specify --role when adding a user")
     if args.password is None:
@@ -376,7 +464,7 @@ if args.make: # AKA create/make
     sys.exit(0)
 
 if args.remove: # AKA Remove/delete
-    print("Attempting to remove user:"+args.remove )
+    logging.info("Attempting to remove user:"+args.remove )
     userlist = y.Get_User_List()
     found = False
     for u in userlist:
@@ -388,7 +476,7 @@ if args.remove: # AKA Remove/delete
     
     if not found:
         raise ValueError("ERROR: Could not find user "+args.remove)
-    print("Removed "+ args.remove)
+    logging.info("Removed "+ args.remove)
     sys.exit(0)
 
 # No args, or args.ls
