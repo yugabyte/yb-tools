@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.28"
+Version = "2.29"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -135,6 +135,8 @@ v 2.26 - 2.27
     Node stop : Check if already stopped. Added Universe.NodeObjectList to Universe_class. +Log.flush()
 v 2.28
     YBA health check: skip alert check.
+v 2.29
+    Fix bug in logging for node dead_count checks (was broken for non Live nodes). Remove old unused code.
 '''
 
 import argparse
@@ -395,47 +397,18 @@ class Universe_class:
             if exclude_ip is not None and n.ip == exclude_ip:
                 continue  # Skip this node if it matches the exclude IP
             if n.status['node_status'] != 'Live':
-                log_it and log('  Node ' + n.nodeName + " (" + n.cloudInfo['private_ip'] +  ') is not alive', True)
+                log_it and log('  Node ' + n.hostname + " (" + n.ip +  ') is not alive (status=' + n.status['node_status'] + ')', True)
                 dead_count += 1
                 continue
             if n.isMaster and not n.status['master_alive']:
-                log_it and log('  Node ' + n.nodeName + ' master is not alive', True)
+                log_it and log('  Node ' + n.hostname + ' master is not alive', True)
                 dead_count += 1
                 continue
             if n.isTserver and not n.status['tserver_alive']:
-                log_it and log('  Node ' + n.nodeName + ' tserver is not alive', True)
+                log_it and log('  Node ' + n.hostname + ' tserver is not alive', True)
                 dead_count += 1
         return dead_count
 
-    def get_dead_node_count_OLD(self):
-        if self.SKIP_DEAD_NODE_CHECK:
-            return 0
-        
-        nlist = self.YBA_API.get_universe_info(self.UUID,'/status')
-        dead_nodes    = 0
-        dead_masters  = 0
-        dead_tservers = 0
-        # this one comes back as a dict instead of proper JSON, also last key is uuid, which we need to ignore
-        for n in nlist:
-            if n != 'universe_uuid':
-                if nlist[n]['node_status'] != 'Live':
-                    njson = self.get_node_json(n)
-                    ip    = ""
-                    if njson is not None:
-                        ip = njson['cloudInfo']['private_ip'] 
-                    log('  Node ' + n + " (" + ip +  ') is not alive', True)
-                    dead_nodes += 1
-
-                for nodes in self.nodeDetailsSet:
-                    if nodes['nodeName'] == n:
-                        if nodes['isMaster'] and not nlist[n]['master_alive']:
-                            log('  Node ' + n + ' master is not alive', True)
-                            dead_masters += 1
-
-                        if nodes['isTserver'] and not nlist[n]['tserver_alive']:
-                            log('  Node ' + n + ' tserver is not alive', True)
-                            dead_tservers += 1
-        return max(dead_nodes, dead_masters, dead_tservers)
 
     def get_health_info_from_master(self,master_ip_and_port):
         try:  # try both http and https endpoints
