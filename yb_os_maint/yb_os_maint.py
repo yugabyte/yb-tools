@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.30"
+Version = "2.31"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -137,12 +137,13 @@ v 2.28
     YBA health check: skip alert check.
 v 2.29
     Fix bug in logging for node dead_count checks (was broken for non Live nodes). Remove old unused code.
-v 2.30
-    Universe health check: New: verify master list in API matches running masters list.
+v 2.30 - 2.31
+    Universe health check: New: verify master list in API matches running masters list. Fix --verify also.
 '''
 
 import argparse
 from logging import fatal
+from math import e
 import re
 from re import T
 from uuid import UUID
@@ -541,15 +542,15 @@ class Universe_class:
             for node_type in ['Master','Tserver']:
                 running, message = n.Compare_node_service_status_to_YBA(node_type)
                 message = "" if message is None else message
-                if getattr(n,'is' + node_type): # Calls the isMaster or isTserver method
+                if getattr(n,'is' + node_type): # Calls the isMaster or isTserver method on YB_Data_node "n"
                     if running:
                         pass # all is well
                     else:
-                        log('  '+ node_type + ' ' + n.hostname + ' is not running, but expected by YBA- ' + message, True)
+                        log('  {} {}({}) is not running, but expected by YBA- {} '.format(node_type,n.hostname,n.ip, message), True)
                         errcount += 1
                 else:
                     if running:
-                        log('  '+ node_type + ' ' + n.hostname + ' is running, but not expected by YBA- ' + message, True)
+                        log('   {} {}({}) is running, but not expected by YBA- {}'.format(node_type,n.hostname,n.ip, message), True)
                         errcount += 1
 
 
@@ -1516,27 +1517,35 @@ class YB_Data_Node:
         errs = 0
 
         if self.node_json['state'] == 'Live':
+            passed, message = self.Compare_node_service_status_to_YBA('Master')
             if self.node_json['isMaster']:
                 log('   YBA shows node as having a Master - checking for process')
-                passed, message = self.Compare_node_service_status_to_YBA('Master')
                 if passed:
                     log('     Check passed: master process found on node')
                 else:
                     log(message, True)
                     errs += 1
             else:
-                log('   YBA shows node as NOT having a Master - skipping check')
+                if passed:
+                    log('   ERROR: master process found on node, but YBA does not show node as being a Master', True)
+                    errs += 1
+                else:
+                    log('   YBA shows node as NOT having a Master - and no master is running')
 
+            passed, message = self.Compare_node_service_status_to_YBA('tServer')
             if self.node_json['isTserver']:
                 log('   YBA shows node as having a tServer - checking for process')
-                passed, message = self.Compare_node_service_status_to_YBA('tServer')
                 if passed:
                     log('     Check passed: tServer process found on node')
                 else:
                     log(message, True)
                     errs += 1
             else:
-                log('   YBA shows node as NOT having a  tServer - skipping check')
+                if passed:
+                    log('   ERROR: tserver process found on node, but YBA does not show node as being a tServer', True)
+                    errs += 1
+                else:
+                    log('   YBA shows node as NOT having a tServer - and no tServer is running')
         elif self.node_json['state'] == 'Stopped':
             passed, message = self.Compare_node_service_status_to_YBA('Master')
             if passed:
