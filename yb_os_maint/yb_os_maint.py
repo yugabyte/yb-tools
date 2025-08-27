@@ -4,7 +4,7 @@
 ## Application Control for use with UNIX Currency Automation ##
 ###############################################################
 
-Version = "2.29"
+Version = "2.30"
 
 ''' ---------------------- Change log ----------------------
 V1.0 - Initial version :  08/09/2022 Original Author: Mike LaSpina - Yugabyte
@@ -137,6 +137,8 @@ v 2.28
     YBA health check: skip alert check.
 v 2.29
     Fix bug in logging for node dead_count checks (was broken for non Live nodes). Remove old unused code.
+v 2.30
+    Universe health check: New: verify master list in API matches running masters list.
 '''
 
 import argparse
@@ -533,6 +535,23 @@ class Universe_class:
                 hc_errs += 1
         if hc_errs == 0:
             log('  No under replicated or leaderless tablets found')
+
+        # Check for missing / extra masters and tservers
+        for n in self.nodeObjectList:
+            for node_type in ['Master','Tserver']:
+                running, message = n.Compare_node_service_status_to_YBA(node_type)
+                message = "" if message is None else message
+                if getattr(n,'is' + node_type): # Calls the isMaster or isTserver method
+                    if running:
+                        pass # all is well
+                    else:
+                        log('  '+ node_type + ' ' + n.hostname + ' is not running, but expected by YBA- ' + message, True)
+                        errcount += 1
+                else:
+                    if running:
+                        log('  '+ node_type + ' ' + n.hostname + ' is running, but not expected by YBA- ' + message, True)
+                        errcount += 1
+
 
         ## Check tablet balance
         log('- Checking tablet health')
@@ -1455,7 +1474,7 @@ class YB_Data_Node:
             retry_successful(self.YBA_API.maintenance_window,params=[self, 'finish'],verbose=True,fatal=True)
         self.YBA_API.delete_expired_maintenance_windows()
 
-    def _compare_node_service_status_to_YBA (self,node_type):
+    def Compare_node_service_status_to_YBA (self,node_type):
         uri = None
         can_reach = True
         if node_type.lower() == 'master':
@@ -1499,7 +1518,7 @@ class YB_Data_Node:
         if self.node_json['state'] == 'Live':
             if self.node_json['isMaster']:
                 log('   YBA shows node as having a Master - checking for process')
-                passed, message = self._compare_node_service_status_to_YBA('Master')
+                passed, message = self.Compare_node_service_status_to_YBA('Master')
                 if passed:
                     log('     Check passed: master process found on node')
                 else:
@@ -1510,7 +1529,7 @@ class YB_Data_Node:
 
             if self.node_json['isTserver']:
                 log('   YBA shows node as having a tServer - checking for process')
-                passed, message = self._compare_node_service_status_to_YBA('tServer')
+                passed, message = self.Compare_node_service_status_to_YBA('tServer')
                 if passed:
                     log('     Check passed: tServer process found on node')
                 else:
@@ -1519,14 +1538,14 @@ class YB_Data_Node:
             else:
                 log('   YBA shows node as NOT having a  tServer - skipping check')
         elif self.node_json['state'] == 'Stopped':
-            passed, message = self._compare_node_service_status_to_YBA('Master')
+            passed, message = self.Compare_node_service_status_to_YBA('Master')
             if passed:
                 log('     Check passed: No master process found on node')
             else:
                 log(message, True)
                 errs += 1
 
-            passed, message = self._compare_node_service_status_to_YBA('Tserver')
+            passed, message = self.Compare_node_service_status_to_YBA('Tserver')
             if passed:
                 log('     Check passed: No tServer process found on node')
             else:
