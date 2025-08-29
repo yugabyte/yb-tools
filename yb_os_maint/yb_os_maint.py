@@ -1517,45 +1517,45 @@ class YB_Data_Node:
         errs = 0
 
         if self.node_json['state'] == 'Live':
-            passed, message = self.Compare_node_service_status_to_YBA('Master')
+            is_running, message = self.Compare_node_service_status_to_YBA('Master')
             if self.node_json['isMaster']:
                 log('   YBA shows node as having a Master - checking for process')
-                if passed:
+                if is_running:
                     log('     Check passed: master process found on node')
                 else:
                     log(message, True)
                     errs += 1
             else:
-                if passed:
+                if is_running:
                     log('   ERROR: master process found on node, but YBA does not show node as being a Master', True)
                     errs += 1
                 else:
                     log('   YBA shows node as NOT having a Master - and no master is running')
 
-            passed, message = self.Compare_node_service_status_to_YBA('tServer')
+            is_running, message = self.Compare_node_service_status_to_YBA('tServer')
             if self.node_json['isTserver']:
                 log('   YBA shows node as having a tServer - checking for process')
-                if passed:
+                if is_running:
                     log('     Check passed: tServer process found on node')
                 else:
                     log(message, True)
                     errs += 1
             else:
-                if passed:
+                if is_running:
                     log('   ERROR: tserver process found on node, but YBA does not show node as being a tServer', True)
                     errs += 1
                 else:
                     log('   YBA shows node as NOT having a tServer - and no tServer is running')
         elif self.node_json['state'] == 'Stopped':
-            passed, message = self.Compare_node_service_status_to_YBA('Master')
-            if passed:
+            is_running, message = self.Compare_node_service_status_to_YBA('Master')
+            if is_running:
                 log('     Check passed: No master process found on node')
             else:
                 log(message, True)
                 errs += 1
 
-            passed, message = self.Compare_node_service_status_to_YBA('Tserver')
-            if passed:
+            is_running, message = self.Compare_node_service_status_to_YBA('Tserver')
+            if is_running:
                 log('     Check passed: No tServer process found on node')
             else:
                 log(message, True)
