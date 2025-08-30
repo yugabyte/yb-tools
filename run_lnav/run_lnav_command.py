@@ -53,7 +53,7 @@ parser.add_argument(
     help=colorama.Fore.YELLOW + "Specify duration in minutes to hide lines before the context time. Default is 10 minutes if context time is specified" + colorama.Style.RESET_ALL
 )
 parser.add_argument(
-    '--types', metavar='LIST',
+    '--types', metavar='LIST', default='ts,ms,pg',
     help=colorama.Fore.YELLOW + """Comma separated list of log types to include. 
 Available types: 
     pg (PostgreSQL), 
@@ -63,6 +63,12 @@ Available types:
 Eg: --types pg,ts 
 Default is ts,ms,pg""" + colorama.Style.RESET_ALL
 )
+
+parser.add_argument(
+    "--subtypes", metavar="LIST", default="INFO",
+    help=colorama.Fore.YELLOW + "Comma separated list of log subtypes to include. Eg: --subtypes INFO,WARN,ERROR,FATAL" + colorama.Style.RESET_ALL
+)
+
 parser.add_argument(
     "--nodes", metavar="LIST",
     help=colorama.Fore.YELLOW + "Comma separated list of nodes to include. Eg: --nodes n1,n2" + colorama.Style.RESET_ALL
@@ -71,9 +77,20 @@ parser.add_argument(
     "--rebuild", action="store_true",
     help=colorama.Fore.YELLOW + "Rebuild the log files metadata" + colorama.Style.RESET_ALL
 )
+
+parser.add_argument(
+    "--full_command", action="store_true",
+    help=colorama.Fore.YELLOW + "Print the full command to run" + colorama.Style.RESET_ALL
+)
+
 parser.add_argument(
     "--debug", action="store_true",
     help=colorama.Fore.YELLOW + "Print debug messages" + colorama.Style.RESET_ALL
+)
+
+parser.add_argument(
+    "--files_only", action="store_true",
+    help=colorama.Fore.YELLOW + "Print only the filtered file paths, separated by spaces, and exit" + colorama.Style.RESET_ALL
 )
 
 # Function to display the rotating spinner
@@ -139,7 +156,7 @@ def getLogFilesFromCurrentDir():
     logDirectory = os.getcwd()
     for root, dirs, files in os.walk(logDirectory):
         for file in files:
-            if file.__contains__("log") or file.__contains__("postgres") or file.__contains__("controller") and file[0] != ".":
+            if file.__contains__("log") and file[0] != ".":
                 logFiles.append(os.path.join(root, file))
     return logFiles
 
@@ -216,35 +233,58 @@ def getFileMetadata(logFile):
     else:
         logType = "unknown"
         
+    # Get the subtype if available
+    if "INFO" in logFile:
+        subType = "INFO"
+    elif "WARN" in logFile:
+        subType = "WARN"
+    elif "ERROR" in logFile:
+        subType = "ERROR"
+    elif "FATAL" in logFile:
+        subType = "FATAL"
+    elif "postgres" in logFile:
+        subType = "postgres"
+    else:
+        subType = "unknown"
+        
         
     # Get the node name
     # /Users/pgyogesh/logs/log_analyzer_tests/yb-support-bundle-ybu-p01-bpay-20240412151237.872-logs/yb-prod-ybu-p01-bpay-n8/master/logs/yb-master.danpvvy00002.yugabyte.log.INFO.20230521-030902.3601
-    nodeNameRegex = r"/(yb-[^/]*n\d+)/"
+    nodeNameRegex = r"/(yb-[^/]*n\d+|yb-(master|tserver)-\d+_[^/]+)/"
     nodeName = re.search(nodeNameRegex, logFile)
     if nodeName:
         nodeName = nodeName.group().replace("/","")
     else:
         nodeName = "unknown"
     
-    logger.debug(f"Metadata for file: {logFile} - {logStartsAt} - {logEndsAt} - {logType} - {nodeName}")
-    return {"logStartsAt": logStartsAt, "logEndsAt": logEndsAt, "logType": logType, "nodeName": nodeName}
+    logger.debug(f"Metadata for file: {logFile} - {logStartsAt} - {logEndsAt} - {logType} - {nodeName} - {subType}")
+    return {"logStartsAt": logStartsAt, "logEndsAt": logEndsAt, "logType": logType, "nodeName": nodeName , "subType": subType}
 
-def filterLogFilesByType(logFileList, logFileMetadata, types):
+def filterLogFilesByType(logFileList, logFileMetadata, types, subtypes):
     filteredLogFiles = []
     removedLogFiles = []
     type_map = {"pg": "postgres", "ts": "yb-tserver", "ms": "yb-master", "ybc": "yb-controller"}
-    
-    # Get the log types to include
-    selectedTypes = [type_map[t] for t in types.split(",") if t in type_map]
+    # Support both list and string for types
+    if isinstance(types, list):
+        type_keys = types
+    else:
+        type_keys = types.split(",")
+    selectedTypes = [type_map[t] for t in type_keys if t in type_map]
+    # Support both list and string for subtypes
+    if isinstance(subtypes, list):
+        subtype_keys = subtypes
+    else:
+        subtype_keys = subtypes.split(",")
     for logFile in logFileList:
-        if logFileMetadata[logFile]["logType"] in selectedTypes:
+        if (logFileMetadata[logFile]["logType"] in selectedTypes and
+            logFileMetadata[logFile]["subType"] in subtype_keys):
             filteredLogFiles.append(logFile)
         else:
             removedLogFiles.append(logFile)
     # Filter hidden files
     filteredLogFiles = [logFile for logFile in filteredLogFiles if not logFile.startswith('.')]
-    logger.debug(f"Included files by type: {filteredLogFiles}")
-    logger.debug(f"Removed files by type: {removedLogFiles}")
+    logger.debug(f"Included files by type and subtype: {filteredLogFiles}")
+    logger.debug(f"Removed files by type and subtype: {removedLogFiles}")
     return filteredLogFiles, removedLogFiles
 
 def filterLogFilesByTime(logFileList, logFileMetadata, start_time, end_time):
@@ -282,10 +322,14 @@ if __name__ == "__main__":
     if args.debug:
         logger.debug('Debug mode enabled')
     
-    choosenTypes = args.types.split(",") if args.types else ["pg", "ts", "ms", "ybc"]
+    choosenTypes = args.types.split(",")
+    choosenSubtypes = args.subtypes.split(",")
     
     start_time, end_time = getStartAndEndTimes()
     logFilesMetadataFile = 'log_files_metadata.json'
+    if args.files_only and not os.path.isfile(logFilesMetadataFile):
+        print("log_files_metadata.json not found. Please build metadata first.", file=sys.stderr)
+        sys.exit(1)
     if not os.path.isfile(logFilesMetadataFile):
         # Search for log_files_metadata.json in the child directories
         for root, dirs, files in os.walk(os.getcwd()):
@@ -294,9 +338,13 @@ if __name__ == "__main__":
                 if user_input.lower() == 'y':
                     logFilesMetadataFile = os.path.join(root, logFilesMetadataFile)
                     break
-    done = False
-    spinner_thread = threading.Thread(target=spinner)
-    spinner_thread.start()
+    # Only start spinner if not files_only
+    if not args.files_only:
+        done = False
+        spinner_thread = threading.Thread(target=spinner)
+        spinner_thread.start()
+    else:
+        done = True
     if args.rebuild or not os.path.isfile(logFilesMetadataFile):
         logFileList = getLogFilesFromCurrentDir()
         logFilesMetadata = {}
@@ -312,8 +360,10 @@ if __name__ == "__main__":
         logFilesMetadata = json.load(f)
     # Get the list of log files to process based on arguments
     logFilesToProcess = list(logFilesMetadata.keys())
-    done = True
-    spinner_thread.join()
+    # Only join spinner thread if it was started
+    if 'spinner_thread' in locals():
+        done = True
+        spinner_thread.join()
     
     # Filter by nodes
     logger.debug(f"Filtering by nodes: {args.nodes}")
@@ -322,9 +372,9 @@ if __name__ == "__main__":
         logFilesToProcess = [file for file in logFilesToProcess if file not in removedFiles]
     
     # Filter by log types
-    logger.debug(f"Filtering by types: {args.types}")
+    logger.debug(f"Filtering by types: {args.types} with subtypes: {args.subtypes}")
     if args.types:
-        filteredFiles, removedFiles = filterLogFilesByType(logFilesToProcess, logFilesMetadata, args.types)
+        filteredFiles, removedFiles = filterLogFilesByType(logFilesToProcess, logFilesMetadata, choosenTypes, choosenSubtypes)
         logFilesToProcess = [file for file in logFilesToProcess if file not in removedFiles]
     
     # Filter by start and end time
@@ -334,7 +384,12 @@ if __name__ == "__main__":
         logger.debug(f"Filtering by time: {start_time} - {end_time}")
         filteredFiles, removedFiles = filterLogFilesByTime(logFilesToProcess, logFilesMetadata, start_time, end_time)
         logFilesToProcess = [file for file in logFilesToProcess if file not in removedFiles]
-    
+
+    # Move --files_only check here, before any print statements
+    if args.files_only:
+        print(' '.join(logFilesToProcess))
+        sys.exit(0)
+
     logFilesRemoved = [file for file in logFilesMetadata.keys() if file not in logFilesToProcess]
     
     # Create a table for removed files by time with start and end times and their type
@@ -349,10 +404,10 @@ if __name__ == "__main__":
     
     table = []
     for file in logFilesToProcess:
-        table.append([file[-100:], logFilesMetadata[file]["logStartsAt"], logFilesMetadata[file]["logEndsAt"], logFilesMetadata[file]["logType"], logFilesMetadata[file]["nodeName"]])
+        table.append([file[-100:], logFilesMetadata[file]["logStartsAt"], logFilesMetadata[file]["logEndsAt"], logFilesMetadata[file]["logType"], logFilesMetadata[file]["subType"], logFilesMetadata[file]["nodeName"]])
     table.sort(key=lambda x: (x[4], x[1]))  # Sort by Node Name, then Start Time
-    print(tabulate.tabulate(table, headers=["File", "Start Time", "End Time", "Type", "Node Name"], tablefmt="simple_grid"))
-    
+    print(tabulate.tabulate(table, headers=["File", "Start Time", "End Time", "Type", "Subtype", "Node Name"], tablefmt="simple_grid"))
+
     
     # Print Summary, print ==summary of what is included==
     print("==========Summary of Included Files===========")
@@ -407,7 +462,11 @@ if __name__ == "__main__":
             mainCommand += f" -c ':goto {context_time.strftime('%Y-%m-%d %H:%M:%S')}'"
         Command.append(mainCommand)
         Command.extend(logFilesToProcess)
-        print(colorama.Fore.GREEN + ' '.join(Command)[:1000] + "...[truncated]")
+        # Add the command to run
+        if args.full_command:
+            print(colorama.Fore.GREEN + ' '.join(Command))
+        else:
+            print(colorama.Fore.GREEN + ' '.join(Command)[:1000] + "...[truncated]")
         try:
             print('')
             input("Press Enter to run the command or Ctrl+C to exit")

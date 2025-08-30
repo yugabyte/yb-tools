@@ -1,4 +1,4 @@
-cat .bash_functions
+# cat .bash_functions
 # change ticket
 ct() {
     if [[ $# -eq 0 ]] ; then
@@ -84,6 +84,15 @@ function get_master_leader_change_time() {
 
 # Get the tablet leader change time
 function get_tablet_leader_change_time() {
+# ------------------------------------------------------------------------------
+# get_tablet_leader_change_time <tablet-id>
+#
+# This function retrieves the leader change time for a specific tablet ID from
+# the tserver logs. It searches for log entries indicating a change in the
+# active role of the tablet from FOLLOWER to LEADER.
+# The output is saved in a file named tablet_leader_change_time in the current
+# directory. The output is sorted by time for better readability.
+# ------------------------------------------------------------------------------
     # Add help message
     if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]; then
         echo "Run this function in the directory which contains the node directories"
@@ -108,6 +117,23 @@ function get_tablet_leader_change_time() {
 
 # Get count of pattern per minute
 get_count_per_minute() {
+# ------------------------------------------------------------------------------
+# get_count_per_minute
+#
+# This function processes the standard output of a command (e.g., grep) and counts
+# the occurrences of a specific pattern per minute. It uses awk to parse the input
+# and extract the timestamp and count. The output is sorted and displayed in a
+# user-friendly format.
+#
+# Usage:
+#   grep -r 'pattern' . | get_count_per_minute
+#
+# Features:
+# - Parses the input to extract timestamps and counts.
+# - Outputs the count of occurrences per minute.
+# - Sorts the output for better readability.
+# - Provides a help message for usage instructions.
+# ------------------------------------------------------------------------------
     # Add help message
     if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]; then
         echo "USAGE: Use this function to get the count of a pattern per minute against the standard output"
@@ -130,6 +156,22 @@ get_count_per_minute() {
 
 # Get the node information
 get_node_info() {
+# ------------------------------------------------------------------------------
+# get_node_info
+#
+# This function retrieves node information from the log files of a YugabyteDB cluster.
+# It extracts the following details:
+# - Nodename
+# - Type (master or tserver)
+# - Hostname
+# - RPC IP
+# - Webserver IP
+# - UUID
+#
+# The output is saved in a file named node_info.txt in the current directory.
+# The function assumes that the log files are located in directories named with a prefix 'yb'.
+# The output is formatted in a table for better readability.
+# ------------------------------------------------------------------------------
     if [[ $1 == "-h" ]] || [[ $1 == "--help" ]]; then
         echo "Run this function in the directory which contains the node directories"
     fi
@@ -164,6 +206,8 @@ function run_lnav() {
     local types=""
     local nodes=""
     local rebuild=""
+    local full_command=""
+    local files_only=""
     local debug=""
     local help=""
     
@@ -178,6 +222,8 @@ function run_lnav() {
             --types) types="$2"; shift 2;;
             --nodes) nodes="$2"; shift 2;;
             --rebuild) rebuild="--rebuild"; shift;;
+            --files_only) files_only="--files-only"; shift;;
+            --full_command) full_command="--full-command"; shift;;
             --debug) debug="--debug"; shift;;
             -h|--help) help="-h"; shift;;
             *) echo "Unknown option: $1"; return 1;;
@@ -194,6 +240,198 @@ function run_lnav() {
         ${types:+--types "$types"} \
         ${nodes:+--nodes "$nodes"} \
         $rebuild \
+        $files_only \
+        $full_command \
         $debug \
         $help
+}
+
+# Get tablet consensus state change
+get_tablet_consensus_state_change() {
+  # ------------------------------------------------------------------------------
+  # get_tablet_consensus_state_change <tablet_uuid>
+  #
+  # Parses YugabyteDB master logs for consensus state changes for a specific tablet.
+  # Finds all files in the current directory (recursively) with 'yb-master' in their name.
+  #
+  # Features:
+  # - Filters log lines for the given tablet UUID.
+  # - Extracts:
+  #     - Timestamp (MM-DD HH:MM:SS from log prefix)
+  #     - Consensus term
+  #     - Leader UUID (used to sort peers)
+  #     - Config JSON (peer uuid + host, leader peer listed first)
+  # - Displays results in a table using Python's `tabulate` module.
+  # - Outputs valid JSON for config_json column.
+  #
+  # Intelligent Processing:
+  # - Deduplicates entries per term, keeping only the latest by full timestamp as multiple peers can report the state change.
+  # - Detects and reports missing terms in the consensus history (e.g., skipped term 7).
+  # - Handles malformed lines gracefully without breaking.
+  #
+  # Notes:
+  # - Requires Python 3 and `tabulate` (`pip install tabulate`)
+  # - Output is sorted in descending timestamp order for easy inspection.
+  # - Helpful for debugging leader elections, instability.
+  # ------------------------------------------------------------------------------
+  local tablet_uuid="$1"
+
+  if [[ -z "$tablet_uuid" ]]; then
+    echo "Usage: get_tablet_consensus_state_change <tablet_uuid>"
+    return 1
+  fi
+
+  # Find all files with 'yb-master' in their name in the current directory (recursively)
+  local files=($(find . -type f -name "*yb-master*INFO*" 2>/dev/null))
+
+  if [[ ${#files[@]} -eq 0 ]]; then
+    echo "No files with 'yb-master' in their name found in the current directory."
+    return 1
+  fi
+
+  local datetime
+  datetime=$(date +"%Y-%m-%d_%H%M%S")
+  local outfile="tablet_consensus_state_change_${tablet_uuid}_${datetime}.log"
+
+  zgrep "Tablet: $tablet_uuid reported consensus state change" "${files[@]}" | \
+  python3 -c "
+import sys
+import re
+import json
+from datetime import datetime
+from tabulate import tabulate
+
+lines = sys.stdin.readlines()
+entries = []
+
+for line in lines:
+    try:
+        # Extract full timestamp (MMDD + HH:MM:SS.microseconds)
+        ts_match = re.search(r'I(\d{4}) (\d{2}:\d{2}:\d{2}\.\d+)', line)
+        if not ts_match:
+            continue
+        mmdd = ts_match.group(1)
+        time_part = ts_match.group(2)
+        month, day = int(mmdd[:2]), int(mmdd[2:])
+        now = datetime.now()
+        year = now.year  # assume logs are from the current year
+        full_ts_str = f'{year}-{month:02d}-{day:02d} {time_part}'
+        full_ts = datetime.strptime(full_ts_str, '%Y-%m-%d %H:%M:%S.%f')
+
+        # Extract consensus term
+        current_term = re.search(r'current_term: (\d+)', line).group(1)
+
+        # Extract leader UUID
+        leader_uuid = re.search(r'leader_uuid: \"([^\"]+)\"', line).group(1)
+
+        # Extract peer UUIDs and hosts
+        peer_pattern = re.compile(
+            r'permanent_uuid: \"([^\"]+)\".*?host: \"([^\"]+)\"',
+            re.DOTALL)
+        peers = []
+        for uuid, host in peer_pattern.findall(line):
+            peers.append({\"uuid\": uuid, \"host\": host})
+
+        # Move leader to the beginning of the peer list
+        peers.sort(key=lambda p: 0 if p['uuid'] == leader_uuid else 1)
+
+        entries.append({
+            \"timestamp\": full_ts,                                # for deduplication and sorting
+            \"display_ts\": full_ts.strftime('%m-%d %H:%M:%S'),    # user-friendly timestamp
+            \"term\": current_term,
+            \"config_json\": peers
+        })
+
+    except Exception:
+        continue  # skip lines that can't be parsed
+
+# Dedupe: keep only the latest report per term
+latest_by_term = {}
+for e in entries:
+    term = e['term']
+    if term not in latest_by_term or e['timestamp'] > latest_by_term[term]['timestamp']:
+        latest_by_term[term] = e
+
+# Sort deduplicated entries in descending timestamp order
+deduped = list(latest_by_term.values())
+deduped.sort(key=lambda x: x['timestamp'], reverse=True)
+
+# Print the main table
+print(tabulate(
+    [(e['display_ts'], e['term'], json.dumps(e['config_json'], ensure_ascii=False)) for e in deduped],
+    headers=[\"Time\", \"Term\", \"config_json (first is leader)\"],
+    tablefmt=\"github\"
+))
+
+# Detect and print missing terms
+observed_terms = sorted(int(e['term']) for e in deduped)
+if observed_terms:
+    expected_terms = set(range(min(observed_terms), max(observed_terms) + 1))
+    missing_terms = sorted(expected_terms - set(observed_terms))
+    if missing_terms:
+        print(f\"\\n⚠️  Missing term(s): {', '.join(str(t) for t in missing_terms)}\\n\")
+        print(\"Note: Missing terms could be due to master logs not being available when leader election for these terms happened.\")
+        print(\"Ensure you are checking the logs of all N masters, where N is the replication factor.\")
+" | tee "$outfile"
+  echo "Result saved to $outfile"
+}
+
+# Parse logs to get SST file information
+parse_sst_info() {
+  if [[ "$1" == "--help" || $# -lt 2 || ! "$1" =~ ^[0-9]+$ ]]; then
+    echo -e "Usage:\n  parse_sst_info <min_size_bytes> <log_file1> [log_file2 ...]"
+    echo -e "\nDescription:"
+    echo "  Parses YugabyteDB logs and prints SST file info:"
+    echo "  - SST file number"
+    echo "  - NumKeys"
+    echo "  - Size in GB"
+    echo "  - Latest key time"
+    echo "  - Delta (now - latest key) in days"
+    echo "  - Tablet UUID"
+    echo -e "\nExample:"
+    echo "  parse_sst_info 3000000000 yb-tserver*.log"
+    return 1
+  fi
+
+  local min_size_bytes="$1"
+  shift
+
+  echo -e "SST File\tNumKeys\tSize_GB\tLatest Key Time\t\tDelta (Days)\tTablet UUID"
+
+  grep 'Generated table' "$@" | \
+  tr -s " " | \
+  awk -v now="$(date +%s)" -v threshold="$min_size_bytes" '
+  {
+    tablet = "";
+    size_bytes = 0;
+    num_keys = 0;
+    sst_file = "";
+    latest_key_time = 0;
+    for (i = 1; i <= NF; i++) {
+      if ($i == "T") tablet = $(i+1);
+      if ($i == "keys,") num_keys = $(i-1);
+      if ($i == "table") {
+        sst_file = $(i+1);
+        gsub(/^#/, "", sst_file);
+        gsub(/:$/, "", sst_file);
+      }
+      if ($i == "bytes") size_bytes = $(i-1);
+      if ($i == "physical:") {
+        if (latest_key_time == 0) {
+          skip = 1;  # skip smallest
+        } else {
+          latest_key_time = $(i+1);
+          break;
+        }
+        latest_key_time = $(i+1);
+      }
+    }
+    if (size_bytes > threshold) {
+      size_gb = size_bytes / 1073741824;
+      end_fmt = strftime("%Y-%m-%d %H:%M:%S", substr(latest_key_time, 1, length(latest_key_time)-6));
+      end_epoch = substr(latest_key_time, 1, length(latest_key_time)-6);
+      delta_days = (now - end_epoch) / 86400;
+      printf "%s\t\t%s\t%.2f\t%s\t%.2f\t\t%s\n", sst_file, num_keys, size_gb, end_fmt, delta_days, tablet;
+    }
+  }' | sort -k4,4 -s
 }
