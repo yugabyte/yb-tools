@@ -248,6 +248,121 @@ func TestUploadFilePart(t *testing.T) {
 
 }
 
+func TestFinalizePackageWithRecipients(t *testing.T) {
+	validResponse := `{
+		"response": "SUCCESS",
+		"message": "https://secure-upload.yugabyte.com/receive/?thread=A4Z1-MBLN&packageCode=HvzZGxCLR8h0B3jJDR5WRn20b9Bw42pMUg3wfNSa4Vs",
+		"recipients": [
+			{"recipientId": "r1", "email": "support@yugabyte.com", "fullName": "YB Support"},
+			{"recipientId": "r2", "email": "agent@yugabyte.com"}
+		]
+	}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/finalize") {
+			t.Errorf("Expected finalize path, got %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(validResponse))
+	}))
+	defer server.Close()
+
+	u := getUploader(server.URL)
+	p := getPackage(u)
+	p.Checksum = "abc123"
+
+	err := p.FinalizePackage()
+	if err != nil {
+		t.Fatalf("Expected no error, got %s", err)
+	}
+
+	if len(p.Recipients) != 2 {
+		t.Errorf("Expected 2 recipients, got %d", len(p.Recipients))
+	}
+	if p.Recipients[0].Email != "support@yugabyte.com" {
+		t.Errorf("Expected first recipient email 'support@yugabyte.com', got '%s'", p.Recipients[0].Email)
+	}
+	if p.Recipients[1].RecipientID != "r2" {
+		t.Errorf("Expected second recipient ID 'r2', got '%s'", p.Recipients[1].RecipientID)
+	}
+	if p.URL == "" {
+		t.Error("Expected URL to be set after finalize")
+	}
+}
+
+func TestFinalizePackageNoRecipientsFails(t *testing.T) {
+	noRecipientsResponse := `{
+		"response": "SUCCESS",
+		"message": "https://secure-upload.yugabyte.com/receive/?thread=A4Z1-MBLN&packageCode=HvzZGxCLR8h0B3jJDR5WRn20b9Bw42pMUg3wfNSa4Vs",
+		"recipients": []
+	}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(noRecipientsResponse))
+	}))
+	defer server.Close()
+
+	u := getUploader(server.URL)
+	p := getPackage(u)
+	p.Checksum = "abc123"
+
+	err := p.FinalizePackage()
+	if err == nil {
+		t.Fatal("Expected error when finalize returns no recipients, but got nil")
+	}
+	if !strings.Contains(err.Error(), "no recipients") {
+		t.Errorf("Expected error about no recipients, got: %s", err.Error())
+	}
+}
+
+func TestFinalizePackageNoRecipientsFieldFails(t *testing.T) {
+	missingRecipientsResponse := `{
+		"response": "SUCCESS",
+		"message": "https://secure-upload.yugabyte.com/receive/?thread=A4Z1-MBLN&packageCode=HvzZGxCLR8h0B3jJDR5WRn20b9Bw42pMUg3wfNSa4Vs"
+	}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(missingRecipientsResponse))
+	}))
+	defer server.Close()
+
+	u := getUploader(server.URL)
+	p := getPackage(u)
+	p.Checksum = "abc123"
+
+	err := p.FinalizePackage()
+	if err == nil {
+		t.Fatal("Expected error when finalize omits recipients field, but got nil")
+	}
+	if !strings.Contains(err.Error(), "no recipients") {
+		t.Errorf("Expected error about no recipients, got: %s", err.Error())
+	}
+}
+
+func TestFinalizePackageServerFailure(t *testing.T) {
+	failResponse := `{"response": "FAIL", "message": "An error occurred"}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(failResponse))
+	}))
+	defer server.Close()
+
+	u := getUploader(server.URL)
+	p := getPackage(u)
+	p.Checksum = "abc123"
+
+	err := p.FinalizePackage()
+	if err == nil {
+		t.Fatal("Expected error on FAIL response, but got nil")
+	}
+	if !strings.Contains(err.Error(), "Failed to finalize") {
+		t.Errorf("Expected 'Failed to finalize' error, got: %s", err.Error())
+	}
+}
+
 func TestSubmitHostedDropzone(t *testing.T) {
 
 	endpointQuery := "action=submitHostedDropzone"

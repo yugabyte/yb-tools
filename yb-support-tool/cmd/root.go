@@ -166,8 +166,12 @@ func Upload(email string, caseNum int, files []string) error {
 		return fmt.Errorf("Unable to finalize package: %s", err)
 	}
 
+	fmt.Printf("Package finalized with %d recipient(s)\n", len(p.Recipients))
 	if verbose {
 		fmt.Printf("Package available at: %s\n", p.URL)
+		for _, r := range p.Recipients {
+			fmt.Printf("  Recipient: %s (%s)\n", r.Email, r.RecipientID)
+		}
 	}
 
 	// Step 7 - Invoke the Hosted Dropzone Submission Endpoint

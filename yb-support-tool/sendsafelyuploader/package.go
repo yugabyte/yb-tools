@@ -26,6 +26,7 @@ type Package struct {
 	Info        PackageInfo
 	URL         string
 	Checksum    string
+	Recipients  []Recipient
 	Files       []*File
 	ChunkSize   int64
 	Concurrency int
@@ -317,18 +318,18 @@ func (p *Package) MarkFileComplete(file *File) error {
 }
 
 // FinalizePackage marks the package complete and returns a link to the package,
-// or the error if package finalization did not succeed. Sets Package.URL on success
+// or the error if package finalization did not succeed. Sets Package.URL and
+// Package.Recipients on success. Returns an error if the Dropzone did not
+// apply any recipients (fail closed to avoid orphaned packages).
 func (p *Package) FinalizePackage() error {
 
 	endpoint := fmt.Sprintf("/drop-zone/v2.0/package/%s/finalize", p.Info.PackageCode)
 
 	type Rb struct {
-		Checksum string
+		Checksum string `json:"checksum"`
 	}
 
-	var rb Rb
-
-	rb.Checksum = p.Checksum
+	rb := Rb{Checksum: p.Checksum}
 
 	rbJson, err := json.Marshal(rb)
 	if err != nil {
@@ -351,6 +352,12 @@ func (p *Package) FinalizePackage() error {
 	}
 
 	p.URL = resp.Message + "#keyCode=" + p.Uploader.ClientSecret
+	p.Recipients = resp.Recipients
+
+	if len(p.Recipients) == 0 {
+		return fmt.Errorf("Dropzone finalize succeeded but no recipients were applied to package '%s'; the Dropzone may not have recipients configured", p.Info.PackageID)
+	}
+
 	return nil
 }
 

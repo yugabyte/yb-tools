@@ -13,8 +13,16 @@ type SSResponse struct {
 	Message  string `json:"message"`
 }
 
+type Recipient struct {
+	RecipientID string `json:"recipientId"`
+	Email       string `json:"email"`
+	FullName    string `json:"fullName,omitempty"`
+	RoleName    string `json:"roleName,omitempty"`
+}
+
 type FinalizeInfo struct {
-	NeedsLink bool `json:"needsLink"`
+	NeedsLink  bool        `json:"needsLink"`
+	Recipients []Recipient `json:"recipients"`
 
 	SSResponse
 }
