@@ -14,9 +14,25 @@ type SSResponse struct {
 }
 
 type FinalizeInfo struct {
-	NeedsLink bool `json:"needsLink"`
+	NeedsLink  bool        `json:"needsLink"`
+	Recipients []Recipient `json:"recipients"`
 
 	SSResponse
+}
+
+type PublicKey struct {
+	ID  string `json:"id"`
+	Key string `json:"key"`
+}
+
+type PublicKeysResponse struct {
+	PublicKeys []PublicKey `json:"publicKeys"`
+	SSResponse
+}
+
+type Recipient struct {
+	RecipientID string `json:"recipientId"`
+	Email       string `json:"email"`
 }
 
 type HostedDropzoneInfo struct {

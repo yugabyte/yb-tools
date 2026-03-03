@@ -159,8 +159,14 @@ func Upload(email string, caseNum int, files []string) error {
 
 	}
 
-	fmt.Printf("File uploads complete\nFinalizing Package...\n")
+	fmt.Printf("File uploads complete\n")
 
+	fmt.Println("Uploading keycodes...")
+	if err := p.UploadKeycodes(); err != nil {
+		return fmt.Errorf("Unable to upload keycodes: %s", err)
+	}
+
+	fmt.Println("Finalizing Package...")
 	err = p.FinalizePackage()
 	if err != nil {
 		return fmt.Errorf("Unable to finalize package: %s", err)
