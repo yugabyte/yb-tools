@@ -26,7 +26,7 @@ The input to this program is a support bundle directory.
 The output is a SQLite database containing various reports.
 
 USAGE:
-   python3 {prog} <support-bundle-directory>
+   python3 {prog} <support-bundle-directory/YBA/TabletReport>
 
 This will create a database file named <directory>.sqlite
 
