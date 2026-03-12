@@ -12,6 +12,7 @@ import itertools
 import threading
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.RawTextHelpFormatter,
@@ -76,7 +77,11 @@ parser.add_argument(
     help=colorama.Fore.YELLOW + "Print debug messages" + colorama.Style.RESET_ALL
 )
 
-# Function to display the rotating spinner
+_NODE_NAME_RE = re.compile(r"/(yb-[^/]*n\d+)/")
+_GLOG_PREFIXES = frozenset('IWEF')
+_CURRENT_YEAR = datetime.datetime.now().year
+
+
 def spinner():
     for c in itertools.cycle(['|', '/', '-', '\\']):
         if done:
@@ -102,7 +107,6 @@ def parse_duration(duration):
         raise ValueError("Invalid duration format. Use 'm' for minutes, 'h' for hours, and 'd' for days")
 
 def getStartAndEndTimes():
-    # Validate arguments
     if args.start_time and args.context_time:
         raise ValueError("Cannot specify both start time and context time")
     if args.end_time and args.duration:
@@ -112,7 +116,6 @@ def getStartAndEndTimes():
     if args.context_time and args.duration:
         raise ValueError("Cannot specify both context time and duration")
 
-    # Calculate start and end times
     if args.start_time and args.end_time:
         start_time = datetime.datetime.strptime(args.start_time, '%m%d %H:%M')
         end_time = datetime.datetime.strptime(args.end_time, '%m%d %H:%M')
@@ -139,72 +142,96 @@ def getLogFilesFromCurrentDir():
     logDirectory = os.getcwd()
     for root, dirs, files in os.walk(logDirectory):
         for file in files:
-            if file.__contains__("log") or file.__contains__("postgres") or file.__contains__("controller") and file[0] != ".":
+            if "log" in file or "postgres" in file or "controller" in file and file[0] != ".":
                 logFiles.append(os.path.join(root, file))
     return logFiles
 
 def getTimeFromLog(line):
     try:
-        # Check for glog format (e.g., I0923 14:23:45.123456 12345 file.cc:123] log message)
-        if line[0] in ['I', 'W', 'E', 'F']:
-            timeFromLogLine = line.split(' ')[0][1:] + ' ' + line.split(' ')[1][:8]
+        if line and line[0] in _GLOG_PREFIXES:
+            parts = line.split(' ', 2)
+            timeFromLogLine = parts[0][1:] + ' ' + parts[1][:8]
             timestamp = datetime.datetime.strptime(timeFromLogLine, '%m%d %H:%M:%S')
-            timestamp = timestamp.replace(year=datetime.datetime.now().year)
-        # Check for PostgreSQL log format (e.g., 2023-09-23 14:23:45.123 UTC [12345] LOG:  log message)
+            timestamp = timestamp.replace(year=_CURRENT_YEAR)
         else:
-            timeFromLogLine = ' '.join(line.split(' ')[:2])
-            timeFromLogLine = timeFromLogLine.split('.')[0]
+            parts = line.split(' ', 2)
+            timeFromLogLine = parts[0] + ' ' + parts[1].split('.')[0]
             timestamp = datetime.datetime.strptime(timeFromLogLine, '%Y-%m-%d %H:%M:%S')
         return timestamp
     except Exception as e:
         raise ValueError(f"Error parsing timestamp from log line: {line} - {e}")
 
+
+def _read_tail(filepath, num_lines=10, chunk_size=65536):
+    """Read last num_lines from a regular file using seek instead of reading the whole file."""
+    try:
+        with open(filepath, 'rb') as f:
+            f.seek(0, 2)
+            size = f.tell()
+            if size == 0:
+                return []
+            read_size = min(chunk_size, size)
+            f.seek(-read_size, 2)
+            data = f.read()
+        return data.decode('utf-8', errors='replace').splitlines()[-num_lines:]
+    except Exception:
+        return []
+
+
 def getFileMetadata(logFile):
     logStartsAt, logEndsAt = None, None
-    if logFile.endswith('.gz'):
-        try:
-            logs = gzip.open(logFile, 'rt')
-        except:
-            print("Error opening file: " + logFile)
-            return None
-    else:
-        try:
-            logs = open(logFile, 'r')
-        except:
-            print("Error opening file: " + logFile)
-            return None
+    is_gz = logFile.endswith('.gz')
+
     try:
-        # Read first 10 lines to get the start time
-        for i in range(10):
-            line = logs.readline()
-            try:
-                logStartsAt = getTimeFromLog(line)
-                break
-            except ValueError:
-                continue
-        # Read last 10 lines to get the end time
-        last_lines = deque(logs, maxlen=10)
-        for line in reversed(last_lines):
-            try:
-                logEndsAt = getTimeFromLog(line)
-                break
-            except ValueError:
-                continue
+        if is_gz:
+            with gzip.open(logFile, 'rt', errors='replace') as f:
+                for _ in range(10):
+                    line = f.readline()
+                    if not line:
+                        break
+                    try:
+                        logStartsAt = getTimeFromLog(line)
+                        break
+                    except ValueError:
+                        continue
+                last_lines = deque(f, maxlen=10)
+                for line in reversed(last_lines):
+                    try:
+                        logEndsAt = getTimeFromLog(line)
+                        break
+                    except ValueError:
+                        continue
+        else:
+            with open(logFile, 'r', errors='replace') as f:
+                for _ in range(10):
+                    line = f.readline()
+                    if not line:
+                        break
+                    try:
+                        logStartsAt = getTimeFromLog(line)
+                        break
+                    except ValueError:
+                        continue
+            for line in reversed(_read_tail(logFile)):
+                try:
+                    logEndsAt = getTimeFromLog(line)
+                    break
+                except ValueError:
+                    continue
     except Exception as e:
         print(f"Error processing file: {logFile} - {e}")
         return None
-    
+
     if not logStartsAt:
         logStartsAt = datetime.datetime.strptime('0101 00:00', '%m%d %H:%M')
     if not logEndsAt:
         logEndsAt = datetime.datetime.strptime('1231 23:59', '%m%d %H:%M')
     try:
-        logStartsAt = logStartsAt.replace(year=datetime.datetime.now().year)
-        logEndsAt = logEndsAt.replace(year=datetime.datetime.now().year)
+        logStartsAt = logStartsAt.replace(year=_CURRENT_YEAR)
+        logEndsAt = logEndsAt.replace(year=_CURRENT_YEAR)
     except Exception as e:
         print("Error getting metadata for file: " + logFile + " " + str(e))
-    
-    # Get the log type
+
     if "postgres" in logFile:
         logType = "postgres"
     elif "controller" in logFile:
@@ -215,55 +242,46 @@ def getFileMetadata(logFile):
         logType = "yb-master"
     else:
         logType = "unknown"
-        
-        
-    # Get the node name
-    # /Users/pgyogesh/logs/log_analyzer_tests/yb-support-bundle-ybu-p01-bpay-20240412151237.872-logs/yb-prod-ybu-p01-bpay-n8/master/logs/yb-master.danpvvy00002.yugabyte.log.INFO.20230521-030902.3601
-    nodeNameRegex = r"/(yb-[^/]*n\d+)/"
-    nodeName = re.search(nodeNameRegex, logFile)
-    if nodeName:
-        nodeName = nodeName.group().replace("/","")
-    else:
-        nodeName = "unknown"
-    
-    logger.debug(f"Metadata for file: {logFile} - {logStartsAt} - {logEndsAt} - {logType} - {nodeName}")
+
+    match = _NODE_NAME_RE.search(logFile)
+    nodeName = match.group(1) if match else "unknown"
+
+    logging.getLogger(__name__).debug(
+        f"Metadata for file: {logFile} - {logStartsAt} - {logEndsAt} - {logType} - {nodeName}"
+    )
     return {"logStartsAt": logStartsAt, "logEndsAt": logEndsAt, "logType": logType, "nodeName": nodeName}
 
 def filterLogFilesByType(logFileList, logFileMetadata, types):
     filteredLogFiles = []
     removedLogFiles = []
     type_map = {"pg": "postgres", "ts": "yb-tserver", "ms": "yb-master", "ybc": "yb-controller"}
-    
-    # Get the log types to include
-    selectedTypes = [type_map[t] for t in types.split(",") if t in type_map]
+
+    selectedTypes = frozenset(type_map[t] for t in types.split(",") if t in type_map)
     for logFile in logFileList:
         if logFileMetadata[logFile]["logType"] in selectedTypes:
             filteredLogFiles.append(logFile)
         else:
             removedLogFiles.append(logFile)
-    # Filter hidden files
     filteredLogFiles = [logFile for logFile in filteredLogFiles if not logFile.startswith('.')]
-    logger.debug(f"Included files by type: {filteredLogFiles}")
-    logger.debug(f"Removed files by type: {removedLogFiles}")
+    logging.getLogger(__name__).debug(f"Included files by type: {filteredLogFiles}")
+    logging.getLogger(__name__).debug(f"Removed files by type: {removedLogFiles}")
     return filteredLogFiles, removedLogFiles
 
 def filterLogFilesByTime(logFileList, logFileMetadata, start_time, end_time):
     filtered_files = []
     removed_files = []
     for logFile in logFileList:
-        # Get the start and end time of the log file in datetime format
         log_start = datetime.datetime.strptime(logFileMetadata[logFile]["logStartsAt"], '%Y-%m-%d %H:%M:%S')
         log_end = datetime.datetime.strptime(logFileMetadata[logFile]["logEndsAt"], '%Y-%m-%d %H:%M:%S')
         if log_start >= end_time or log_end <= start_time:
             removed_files.append(logFile)
         else:
             filtered_files.append(logFile)
-    logger.debug(f"Included files by time: {filtered_files}")
-    logger.debug(f"Removed files by time: {removed_files}")
+    logging.getLogger(__name__).debug(f"Included files by time: {filtered_files}")
+    logging.getLogger(__name__).debug(f"Removed files by time: {removed_files}")
     return filtered_files, removed_files
-    
+
 def filterLogFilesByNode(logFileList, logFileMetadata, nodes):
-    # Filter files containing the selected nodes
     filtered_files = []
     removed_files = []
     nodes = nodes.split(",")
@@ -281,13 +299,12 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO, format=log_format)
     if args.debug:
         logger.debug('Debug mode enabled')
-    
+
     choosenTypes = args.types.split(",") if args.types else ["pg", "ts", "ms", "ybc"]
-    
+
     start_time, end_time = getStartAndEndTimes()
     logFilesMetadataFile = 'log_files_metadata.json'
     if not os.path.isfile(logFilesMetadataFile):
-        # Search for log_files_metadata.json in the child directories
         for root, dirs, files in os.walk(os.getcwd()):
             if logFilesMetadataFile in files:
                 user_input = input(f"Found log_files_metadata.json in {root}. Do you want to use this file? (y/n): ")
@@ -300,100 +317,90 @@ if __name__ == "__main__":
     if args.rebuild or not os.path.isfile(logFilesMetadataFile):
         logFileList = getLogFilesFromCurrentDir()
         logFilesMetadata = {}
-        for logFile in logFileList:
-            metadata = getFileMetadata(logFile)
-            if metadata:
-                # Add metadata to the dictionary
-                logFilesMetadata[logFile] = metadata
-        # Save the metadata to a file
+        with ThreadPoolExecutor(max_workers=min(32, (os.cpu_count() or 4) + 4)) as executor:
+            futures = {executor.submit(getFileMetadata, f): f for f in logFileList}
+            for future in as_completed(futures):
+                logFile = futures[future]
+                try:
+                    metadata = future.result()
+                    if metadata:
+                        logFilesMetadata[logFile] = metadata
+                except Exception as e:
+                    print(f"Error processing {logFile}: {e}")
         with open(logFilesMetadataFile, 'w') as f:
             json.dump(logFilesMetadata, f, default=str)
     with open(logFilesMetadataFile, 'r') as f:
         logFilesMetadata = json.load(f)
-    # Get the list of log files to process based on arguments
     logFilesToProcess = list(logFilesMetadata.keys())
     done = True
     spinner_thread.join()
-    
-    # Filter by nodes
+
     logger.debug(f"Filtering by nodes: {args.nodes}")
     if args.nodes:
-        filteredFiles, removedFiles = filterLogFilesByNode(logFilesToProcess, logFilesMetadata, args.nodes)
-        logFilesToProcess = [file for file in logFilesToProcess if file not in removedFiles]
-    
-    # Filter by log types
+        logFilesToProcess, _ = filterLogFilesByNode(logFilesToProcess, logFilesMetadata, args.nodes)
+
     logger.debug(f"Filtering by types: {args.types}")
     if args.types:
-        filteredFiles, removedFiles = filterLogFilesByType(logFilesToProcess, logFilesMetadata, args.types)
-        logFilesToProcess = [file for file in logFilesToProcess if file not in removedFiles]
-    
-    # Filter by start and end time
+        logFilesToProcess, _ = filterLogFilesByType(logFilesToProcess, logFilesMetadata, args.types)
+
     if start_time:
         start_time = start_time.replace(year=datetime.datetime.now().year)
         end_time = end_time.replace(year=datetime.datetime.now().year)
         logger.debug(f"Filtering by time: {start_time} - {end_time}")
-        filteredFiles, removedFiles = filterLogFilesByTime(logFilesToProcess, logFilesMetadata, start_time, end_time)
-        logFilesToProcess = [file for file in logFilesToProcess if file not in removedFiles]
-    
-    logFilesRemoved = [file for file in logFilesMetadata.keys() if file not in logFilesToProcess]
-    
-    # Create a table for removed files by time with start and end times and their type
+        logFilesToProcess, _ = filterLogFilesByTime(logFilesToProcess, logFilesMetadata, start_time, end_time)
+
+    logFilesRemoved = set(logFilesMetadata.keys()) - set(logFilesToProcess)
+
     table = []
     if args.debug:
-        print('====================Skipped Files====================')    
+        print('====================Skipped Files====================')
         for file in logFilesRemoved:
             table.append([file[-100:], logFilesMetadata[file]["logStartsAt"], logFilesMetadata[file]["logEndsAt"], logFilesMetadata[file]["logType"], logFilesMetadata[file]["nodeName"]])
         print(tabulate.tabulate(table, headers=["File", "Start Time", "End Time", "Type", "Node Name"], tablefmt="simple_grid"))
-        print('====================Included Files====================')   
-    # Create a table for files included in the analysis
-    
+        print('====================Included Files====================')
+
     table = []
     for file in logFilesToProcess:
         table.append([file[-100:], logFilesMetadata[file]["logStartsAt"], logFilesMetadata[file]["logEndsAt"], logFilesMetadata[file]["logType"], logFilesMetadata[file]["nodeName"]])
-    table.sort(key=lambda x: (x[4], x[1]))  # Sort by Node Name, then Start Time
+    table.sort(key=lambda x: (x[4], x[1]))
     print(tabulate.tabulate(table, headers=["File", "Start Time", "End Time", "Type", "Node Name"], tablefmt="simple_grid"))
-    
-    
-    # Print Summary, print ==summary of what is included==
+
     print("==========Summary of Included Files===========")
     print(f"Total Files: {len(logFilesMetadata)} - Included: {len(logFilesToProcess)}")
     print(f"Start Time: {start_time}")
     print(f"End Time: {end_time}")
-    logTypes = sorted(set([logFilesMetadata[file]["logType"] for file in logFilesToProcess]))
+    logTypes = sorted(set(logFilesMetadata[file]["logType"] for file in logFilesToProcess))
     print(f"Log Types: {', '.join(logTypes)}")
-    nodes = sorted(set([logFilesMetadata[file]["nodeName"] for file in logFilesToProcess]))
+    nodes = sorted(set(logFilesMetadata[file]["nodeName"] for file in logFilesToProcess))
     print(f"Nodes: {', '.join(nodes)}")
-    # Log missing for the following nodes
-    # Postgres logs
+
     colorama.init(autoreset=True)
     isLogMissing = False
-    if "pg" in choosenTypes:
-        missingNodes = [node for node in nodes if not any(node in file for file in logFilesToProcess if logFilesMetadata[file]["logType"] == "postgres")]
-        if missingNodes:
-            print(colorama.Fore.RED + f"Postgres logs missing for nodes: {', '.join(missingNodes)}")
-            isLogMissing = True
-    # TServer logs
-    if "ts" in choosenTypes:
-        missingNodes = [node for node in nodes if not any(node in file for file in logFilesToProcess if logFilesMetadata[file]["logType"] == "yb-tserver")]
-        if missingNodes:
-            print(colorama.Fore.RED + f"TServer logs missing for nodes: {', '.join(missingNodes)}")
-            isLogMissing = True
-    # Master logs
-    if "ms" in choosenTypes:
-        missingNodes = [node for node in nodes if not any(node in file for file in logFilesToProcess if logFilesMetadata[file]["logType"] == "yb-master")]
-        if missingNodes:
-            print(colorama.Fore.RED + f"Master logs missing for nodes: {', '.join(missingNodes)}")
-            isLogMissing = True
-    # Controller logs
-    if "ybc" in choosenTypes:
-        missingNodes = [node for node in nodes if not any(node in file for file in logFilesToProcess if logFilesMetadata[file]["logType"] == "yb-controller")]
-        if missingNodes:
-            print(colorama.Fore.RED + f"Controller logs missing for nodes: {', '.join(missingNodes)}")
-            isLogMissing = True
-    
+
+    type_to_nodes = {}
+    for f in logFilesToProcess:
+        lt = logFilesMetadata[f]["logType"]
+        nn = logFilesMetadata[f]["nodeName"]
+        type_to_nodes.setdefault(lt, set()).add(nn)
+
+    nodes_set = set(nodes)
+    type_checks = [
+        ("pg", "postgres", "Postgres"),
+        ("ts", "yb-tserver", "TServer"),
+        ("ms", "yb-master", "Master"),
+        ("ybc", "yb-controller", "Controller"),
+    ]
+    for type_key, log_type, label in type_checks:
+        if type_key in choosenTypes:
+            present_nodes = type_to_nodes.get(log_type, set())
+            missingNodes = sorted(nodes_set - present_nodes)
+            if missingNodes:
+                print(colorama.Fore.RED + f"{label} logs missing for nodes: {', '.join(missingNodes)}")
+                isLogMissing = True
+
     if isLogMissing:
         print(colorama.Fore.YELLOW + "WARNING: If missing logs are reported and if it is suspicious, please check the logs manually.")
-    
+
     Command = []
     print('====================Command====================')
     if len(logFilesToProcess) > 0:
