@@ -15,7 +15,7 @@ import re
 import socket
 from datetime import datetime
 
-VERSION = "0.50"
+VERSION = "0.52"
 
 USAGE = """\
 Tablet Report Parser (Python) {version}
@@ -215,7 +215,10 @@ class TableInfo:
 
         if self.uniq_tablets_estimate == 0:
             self.keys_per_tablet = end_key - start_key
-            self.uniq_tablets_estimate = 0xFFFF // (self.keys_per_tablet or 1)
+            if self.keys_per_tablet > 0:
+                self.uniq_tablets_estimate = 0xFFFF // self.keys_per_tablet
+            else:
+                self.uniq_tablets_estimate = -1
 
         if (tablet.get("lease_status") or "") == "HAS_LEASE":
             self.leader_tablets += 1
@@ -302,6 +305,9 @@ class TableInfo:
                 (t.tablename, t.namespace),
             ).fetchone()
             uniq_count = row[0] if row else 0
+
+            if t.uniq_tablets_estimate < 0:
+                t.uniq_tablets_estimate = uniq_count
 
             sst_h = MetricUnit.format_kilo(t.sst_tot_bytes)
             wal_h = MetricUnit.format_kilo(t.wal_tot_bytes)
@@ -467,7 +473,7 @@ def create_schema(conn, script_name):
         SELECT node_uuid, ip as node_ip, zone,
                count(*) as tablet_count,
                sum(CASE WHEN status='TABLET_DATA_COPYING' THEN 1 ELSE 0 END) as copying,
-               sum(CASE WHEN tablet.state = 'TABLET_DATA_TOMBSTONED' THEN 1 ELSE 0 END) as tombstoned,
+               sum(CASE WHEN tablet.status = 'TABLET_DATA_TOMBSTONED' THEN 1 ELSE 0 END) as tombstoned,
                sum(CASE WHEN node_uuid = leader THEN 1 ELSE 0 END) as leaders,
                count(DISTINCT table_name) as table_count
             FROM tablet, cluster
@@ -478,7 +484,7 @@ def create_schema(conn, script_name):
             '*(All '|| (select count(*) from cluster where type='TSERVER') || ' nodes)*', 'ALL',
            (Select count(*) from tablet),
            (Select count(*) from tablet WHERE status='TABLET_DATA_COPYING'),
-           (SELECT count(*) from tablet where state = 'TABLET_DATA_TOMBSTONED'),
+           (SELECT count(*) from tablet where status = 'TABLET_DATA_TOMBSTONED'),
            (SELECT count(*) from tablet where node_uuid = leader),
            (SELECT count(DISTINCT table_name) as table_count from tablet)
            ORDER BY 1""")
@@ -528,14 +534,13 @@ def create_schema(conn, script_name):
 
     c.execute("""CREATE VIEW large_wal AS
         SELECT table_name, count(*) as tablets,
-            sum(CASE WHEN wal_size >=128000000 then 1 else 0 END) as "GE128MB",
-            sum(CASE WHEN wal_size >=96000000  AND  0+rtrim(wal_size,' MB') < 128000000 then 1 else 0 END) as "GE96MB",
-            sum(CASE WHEN wal_size >=65000000  AND  0+rtrim(wal_size,' MB') < 96000000 then 1 else 0 END) as "GE65MB",
-            sum(CASE WHEN wal_size < 65000000 then 1 else 0 END) as "LT65MB"
+            sum(CASE WHEN wal_size >= 134217728 THEN 1 ELSE 0 END) as "GE128MB",
+            sum(CASE WHEN wal_size >= 100663296 AND wal_size < 134217728 THEN 1 ELSE 0 END) as "GE96MB",
+            sum(CASE WHEN wal_size >= 68157440  AND wal_size < 100663296 THEN 1 ELSE 0 END) as "GE65MB",
+            sum(CASE WHEN wal_size < 68157440 THEN 1 ELSE 0 END) as "LT65MB"
         FROM tablet
-        WHERE wal_size like '%MB'
-        GROUP by table_name
-        ORDER by GE128MB desc, GE96MB desc""")
+        GROUP BY table_name
+        ORDER BY GE128MB desc, GE96MB desc""")
 
     c.execute("""CREATE VIEW unbalanced_tables AS
         SELECT t.namespace , t.table_name, total_tablet_count,
@@ -555,6 +560,7 @@ def create_schema(conn, script_name):
              max(sst_size + wal_size) as max_tablet_size,
              min(sst_size+wal_size) as min_tablet_size
           FROM tablet t
+          WHERE sst_size + wal_size > 0
           GROUP BY namespace, table_name
           HAVING heat_level > 2.5
           ORDER BY heat_level desc) t""")
@@ -823,13 +829,16 @@ def process_tablet_report(filepath, conn, universe):
             if m:
                 host_uuid = m.group(3)
             elif universe:
+                best_match = None
                 for node in universe.nodes:
                     if node["nodeName"] and node["nodeName"] in filepath:
-                        host_uuid = node["nodeUuid"]
-                        TableInfo.register_region_zone(
-                            node["region"], node["az"], host_uuid
-                        )
-                        break
+                        if best_match is None or len(node["nodeName"]) > len(best_match["nodeName"]):
+                            best_match = node
+                if best_match:
+                    host_uuid = best_match["nodeUuid"]
+                    TableInfo.register_region_zone(
+                        best_match["region"], best_match["az"], host_uuid
+                    )
             if not host_uuid:
                 eprint(
                     f"  WARNING: Could not determine tserver for {filepath}, "
@@ -886,10 +895,9 @@ def process_tablet_report(filepath, conn, universe):
                             vals["cidx"], vals["leader"], vals["lease_status"],
                         ),
                     )
+                    TableInfo.find_or_new(vals).collect(vals, host_uuid)
                 except sqlite3.IntegrityError:
                     pass
-
-                TableInfo.find_or_new(vals).collect(vals, host_uuid)
 
     conn.commit()
 
@@ -943,6 +951,8 @@ def scan_bundle(path):
             if name.startswith(".") or name in ("master", "tserver"):
                 continue
             full = os.path.join(d, name)
+            if os.path.islink(full):
+                continue
             if os.path.isdir(full):
                 _scan(full)
             elif os.path.isfile(full):
