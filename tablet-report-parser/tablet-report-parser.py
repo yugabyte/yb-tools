@@ -14,6 +14,7 @@ import struct
 import re
 import socket
 from datetime import datetime
+from urllib.parse import quote
 
 VERSION = "0.52"
 
@@ -1065,11 +1066,15 @@ def main():
 
     conn.close()
 
+    db_path = os.path.abspath(db_name)
+    ui_url = f"http://lincoln:5001/tablet-report?db={quote(db_path, safe='')}"
+
     eprint(
         f"\n  To get a report, run:\n"
         f'  sqlite3 -header -column {db_name} '
         '"SELECT * from <REPORT-NAME>"'
     )
+    eprint(f"\n  Open UI: {ui_url}")
 
 
 if __name__ == "__main__":
