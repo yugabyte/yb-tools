@@ -1,0 +1,53 @@
+{
+    "tserver_log": {
+      "description": "testing grok processor",
+      "processors": [
+        {
+          "grok": {
+            "field": "message",
+            "patterns": [
+              "(?<loglevel>[IWEF])(?<timestamp>%{MONTHNUM}%{MONTHDAY} %{TIME})%{SPACE}%{NUMBER:threadid} %{NOTSPACE:filename}:%{NUMBER:fileline}%{NOTSPACE} %{GREEDYDATA:msg}"
+            ]
+          }
+        },
+        {
+          "date": {
+            "field": "timestamp",
+            "formats": [
+              "MMdd HH:mm:ss.SSSSSS"
+            ],
+            "target_field": "@timestamp"
+          }
+        },
+        {
+          "grok": {
+            "field": "log.file.path",
+            "patterns": [
+              "^%{GREEDYDATA}/case/%{WORD:case_id}/%{GREEDYDATA}"
+            ],
+            "on_failure": [
+              {
+                "append": {
+                  "field": "case_id",
+                  "value": [
+                    "0"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "remove": {
+            "field": [
+              "timestamp",
+              "log",
+              "agent",
+              "ecs",
+              "host"
+            ]
+          }
+        }
+      ]
+    }
+  }
