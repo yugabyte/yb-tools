@@ -799,6 +799,7 @@ sub _Extract_nodes{
                      tserverRpcPort masterHttpPort masterRpcPort nodeExporterPort|),
                                 map({$_=>$n->{cloudInfo}{$_}} qw|private_ip public_ip az region |) };
        $thisnode->{$_} =~tr/-//d for grep {/uuid/i} keys %$thisnode;
+       $thisnode->{nodeUuid} ||= $thisnode->{nodeName}; # K8s: nodeUuid absent, use nodeName
        $thisnode->{Tserver_UUID} = undef;
        $thisnode->{blacklisted}  = 0;
        $count++;
@@ -1255,11 +1256,20 @@ __CREATE_TABLES__
 		$self->{TSERVER}{ $r->{addr} } = $r->{server_uuid}; # Use this to fix Cluster tserver UUID
 		}
 	}
+    my $unmatched_count = 0;
     for my $ip_and_port (keys %{ $self->{TSERVER} }){
         my ($ip,$port) = $ip_and_port =~m/^([^:]+):(.+)/;
         my ($tserver) =  grep { $ip eq $_->{private_ip} and $port eq $_->{tserverRpcPort} } @{ $universe->{NODES} };
-        die "ERROR: Entities replica IP $ip_and_port not found in Universe" unless $tserver;
-		$tserver->{nodeUuid} = $self->{TSERVER}{$ip_and_port}; # Update it from NODE uuid to TSERVER uuid.
+        if ($tserver) {
+            $tserver->{nodeUuid} = $self->{TSERVER}{$ip_and_port}; # Update it from NODE uuid to TSERVER uuid.
+        } else {
+            $unmatched_count++;
+        }
+    }
+    if ($unmatched_count) {
+        my $total = scalar keys %{ $self->{TSERVER} };
+        print STDERR "WARNING: $unmatched_count of $total entities replica IPs not found in Universe",
+                     " (Kubernetes cluster with DNS-based private_ip?). Using node UUIDs.\n";
     }
     $universe->Populate_Cluster_Table(); # We have the right tserver UUIDs in
 	main::Set_Transaction(0);
