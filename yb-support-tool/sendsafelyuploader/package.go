@@ -316,6 +316,81 @@ func (p *Package) MarkFileComplete(file *File) error {
 	return nil
 }
 
+func (p *Package) GetPublicKeys() (*PublicKeysResponse, error) {
+	endpoint := fmt.Sprintf("/drop-zone/v2.0/package/%s/public-keys/", p.Info.PackageCode)
+
+	body, err := p.Uploader.sendRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp PublicKeysResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, err
+	}
+	if resp.Response != "SUCCESS" {
+		return nil, fmt.Errorf("failed to get public keys: %s", resp.Message)
+	}
+	return &resp, nil
+}
+
+func (p *Package) UploadKeycode(publicKeyID, encryptedKeycode string) error {
+	endpoint := fmt.Sprintf("/drop-zone/v2.0/package/%s/link/%s/", p.Info.PackageCode, publicKeyID)
+
+	reqBody := map[string]string{
+		"keycode": encryptedKeycode,
+	}
+
+	var reqBuf bytes.Buffer
+	enc := json.NewEncoder(&reqBuf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(reqBody); err != nil {
+		return err
+	}
+
+	body, err := p.Uploader.sendRequest(http.MethodPut, endpoint, reqBuf.Bytes(), withReqJSONHeader())
+	if err != nil {
+		return err
+	}
+
+	var resp SSResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return err
+	}
+	if resp.Response != "SUCCESS" {
+		return fmt.Errorf("%s", resp.Message)
+	}
+	return nil
+}
+
+func (p *Package) UploadKeycodes() error {
+	pubKeys, err := p.GetPublicKeys()
+	if err != nil {
+		return fmt.Errorf("failed to get public keys: %w", err)
+	}
+
+	var lastErr error
+	for _, pk := range pubKeys.PublicKeys {
+		encrypted, err := EncryptKeycode(p.Uploader.ClientSecret, pk.Key)
+		if err != nil {
+			lastErr = fmt.Errorf("failed to encrypt keycode for key '%s': %w", pk.ID, err)
+			fmt.Fprintf(os.Stderr, "Warning: %v\n", lastErr)
+			continue
+		}
+
+		if err := p.UploadKeycode(pk.ID, encrypted); err != nil {
+			lastErr = fmt.Errorf("failed to upload keycode for key '%s': %w", pk.ID, err)
+			fmt.Fprintf(os.Stderr, "Warning: %v\n", lastErr)
+			continue
+		}
+	}
+
+	if lastErr != nil {
+		return lastErr
+	}
+	return nil
+}
+
 // FinalizePackage marks the package complete and returns a link to the package,
 // or the error if package finalization did not succeed. Sets Package.URL on success
 func (p *Package) FinalizePackage() error {

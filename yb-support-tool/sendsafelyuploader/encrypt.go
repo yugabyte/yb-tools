@@ -11,6 +11,7 @@ import (
 	"io"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp/armor"
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -62,4 +63,33 @@ func encrypt(passphrase []byte, message io.Reader) (*bytes.Buffer, error) {
 func (p *Package) Encrypt(unencryptedFilePart io.Reader) (*bytes.Buffer, error) {
 	passphrase := p.Info.ServerSecret + p.Uploader.ClientSecret
 	return encrypt([]byte(passphrase), unencryptedFilePart)
+}
+
+func EncryptKeycode(keyCode string, publicKeyArmored string) (string, error) {
+	keyRing, err := openpgp.ReadArmoredKeyRing(bytes.NewBufferString(publicKeyArmored))
+	if err != nil {
+		return "", fmt.Errorf("failed to read public key: %w", err)
+	}
+
+	var encryptConfig packet.Config
+	encryptConfig.DefaultCipher = packet.CipherAES256
+	encryptConfig.DefaultHash = crypto.SHA256
+
+	buf := new(bytes.Buffer)
+	armorWriter, err := armor.Encode(buf, "PGP MESSAGE", nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create armor encoder: %w", err)
+	}
+
+	w, err := openpgp.Encrypt(armorWriter, keyRing, nil, nil, &encryptConfig)
+	if err != nil {
+		return "", fmt.Errorf("failed to create PGP encryptor: %w", err)
+	}
+	if _, err := io.WriteString(w, keyCode); err != nil {
+		return "", fmt.Errorf("failed to write keycode: %w", err)
+	}
+	w.Close()
+	armorWriter.Close()
+
+	return buf.String(), nil
 }
